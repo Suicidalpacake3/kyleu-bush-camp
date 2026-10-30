@@ -445,7 +445,7 @@ section { position: relative; }
 [data-reveal="right"] { transform: translateX(40px); }
 [data-reveal="zoom"] { transform: scale(.92); }
 [data-reveal].in { opacity: 1; transform: none; }
-.split-words .w { display: inline-block; overflow: hidden; vertical-align: top; }
+.split-words .w { display: inline-block; overflow: hidden; vertical-align: top; padding: 0 .22em .1em 0; margin: 0 -.22em -.1em 0; }   /* room for italic letters that lean past their box */
 .split-words .w > span { display: inline-block; transform: translateY(105%); transition: transform .9s var(--ease); transition-delay: calc(var(--i) * 55ms + .15s); }
 .split-words.in .w > span { transform: none; }
 .draw-line path { stroke-dasharray: 1200; stroke-dashoffset: 1200; transition: stroke-dashoffset 2.4s var(--ease); }
