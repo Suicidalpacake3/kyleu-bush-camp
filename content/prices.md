@@ -1,9 +1,9 @@
-# Kyleu Bush Camp — Prices
+# Kyleu Bush Camp: Prices
 
 > **How to update a price:** change only the number after the colon, then save.
 > The whole website (rates page, booking calculator, stand cards) updates by itself.
 >
-> - Keep the words before the colon exactly as they are — the booking calculator looks for them.
+> - Keep the words before the colon exactly as they are, because the booking calculator looks for them.
 > - Write prices as plain numbers, e.g. `245` or `R245`. Anything after the number (like "per person per night") is shown on the site as the description.
 > - Want to add a brand-new fee? Add a new line under any heading, in the same format. It appears on the Rates page automatically.
 > - Lines that start with `>` (like this one) are notes for you and are not shown on the website.
@@ -12,14 +12,14 @@ Rates year: 2026
 
 ## Ablution stands (Fenced & Unfenced)
 - Weekend per person per night: R245 · Fri & Sat nights and long weekends (minimum 2 nights)
-- Weekday per person per night: R160 · Sun – Thu nights
-- Pensioner weekday per person per night: R115 · Mon – Thu nights
+- Weekday per person per night: R160 · Sun to Thu nights
+- Pensioner weekday per person per night: R115 · Mon to Thu nights
 - Children under 12: R0 · Free
 
 ## Self-sufficient stands (Unfenced, on the spruit)
 - Weekend per person per night: R180 · Fri & Sat nights and long weekends (minimum 2 nights)
-- Weekday per person per night: R100 · Sun – Thu nights
-- Pensioner weekday per person per night: R100 · Mon – Thu nights
+- Weekday per person per night: R100 · Sun to Thu nights
+- Pensioner weekday per person per night: R100 · Mon to Thu nights
 - Children under 12: R0 · Free
 - Porta potty hire per night: R100 · Includes cleaning
 
@@ -40,15 +40,15 @@ Rates year: 2026
 - Vehicle sticker: R20
 
 ## Dinokeng Game Reserve fees (paid to Dinokeng, not to Kyleu)
-> These are charged by the reserve at the gate or online — not included in your Kyleu booking. Effective 15 May 2025.
+> These are charged by the reserve at the gate or online, not included in your Kyleu booking. Effective 15 May 2025.
 - Conservation fee adult per night: R75
 - Conservation fee child 2-12 per night: R50
-- Conservation fee pensioner per night: R75 · RSA pensioners, Mon – Thu
+- Conservation fee pensioner per night: R75 · RSA pensioners, Mon to Thu
 - Conservation fee foreign adult per night: R150
 - Conservation fee foreign child per night: R100
 - Conservation fee cap per person per stay: R300 · Overnight conservation fees are capped per person per stay
 - Self-drive permit per vehicle per stay: R250 · Once-off for the duration of your stay
-- Self-drive permit pensioner per vehicle: R150 · RSA pensioners, Mon – Thu
+- Self-drive permit pensioner per vehicle: R150 · RSA pensioners, Mon to Thu
 - Day visitor conservation fee adult: R75 · Valid for the day of purchase
 - Day visitor self-drive per vehicle: R250
 

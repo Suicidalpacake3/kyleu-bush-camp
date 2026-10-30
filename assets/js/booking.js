@@ -2,7 +2,7 @@
    Kyleu booking engine (MOCK-UP)
    - Stands come from content/stands.md, prices from content/prices.md
    - Availability is SIMULATED (see fakeBooked) until the real booking
-     system is connected — see docs/BOOKINGS-AND-PAYMENTS.md
+     system is connected, see docs/BOOKINGS-AND-PAYMENTS.md
    - Nothing is sent anywhere; the confirmation is a demo.
    ========================================================= */
 (function () {
@@ -60,7 +60,7 @@
     if (wkN) lines.push({ t: wkN + ' weekend night' + (wkN > 1 ? 's' : '') + ' × ' + people + ' × ' + K.money(R.weekend), v: wkN * people * R.weekend });
     if (wdN) {
       var wdTotal = wdN * g.adults * R.weekday + g.pens * (pensWd * R.pens + (wdN - pensWd) * R.weekday);
-      lines.push({ t: wdN + ' weekday night' + (wdN > 1 ? 's' : '') + ' × ' + people + (g.pens && pensWd ? ' (pensioner rate Mon–Thu)' : ' × ' + K.money(R.weekday)), v: wdTotal });
+      lines.push({ t: wdN + ' weekday night' + (wdN > 1 ? 's' : '') + ' × ' + people + (g.pens && pensWd ? ' (pensioner rate Mon-Thu)' : ' × ' + K.money(R.weekday)), v: wdTotal });
     }
     if (g.kids) lines.push({ t: g.kids + ' child' + (g.kids > 1 ? 'ren' : '') + ' under 12', v: 0, free: true });
     var stay = acc;
@@ -123,7 +123,7 @@
       (st.photos.length ? '<span class="sc-photo-count"><svg><use href="#i-camera"/></svg>' + st.photos.length + '</span>' : '') +
       '</div><div class="sc-body"><div class="sc-title"><h3>' + K.esc(st.name) + '</h3></div><div class="sc-feel">' + K.esc(st.feel) + '</div>' +
       '<div class="sc-meta"><span><svg><use href="#i-users"/></svg>Up to ' + st.guests + '</span><span><svg><use href="#i-tent"/></svg>' + K.esc(st.setups) + '</span><span><svg><use href="#' + (st.area === 'self-sufficient' ? 'i-bolt-off' : 'i-shower') + '"/></svg>' + facilityText(st) + '</span></div>' +
-      (!fits ? '<div class="rule-note" style="margin:0;padding:8px 12px;font-size:.8rem"><svg><use href="#i-info"/></svg>Fits up to ' + st.guests + ' guests — WhatsApp us for bigger groups</div>' : '') +
+      (!fits ? '<div class="rule-note" style="margin:0;padding:8px 12px;font-size:.8rem"><svg><use href="#i-info"/></svg>Fits up to ' + st.guests + ' guests. WhatsApp us for bigger groups</div>' : '') +
       '<div class="sc-foot"><div class="sc-price"><b>' + K.money(q.stay) + '</b><small>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + ' · ' + (state.adults + state.pens) + ' adult' + (state.adults + state.pens > 1 ? 's' : '') + (state.kids ? ' + ' + state.kids + ' kid' + (state.kids > 1 ? 's' : '') : '') + '</small></div>' +
       '<button class="btn btn-sm' + (free ? '' : ' btn-ghost') + '" type="button" data-open="' + st.id + '">' + (free ? 'View &amp; book' : 'Other dates') + '</button></div></div></article>';
   }
@@ -204,7 +204,7 @@
     var ph = photosOf(st);
     var hl = st.highlights.map(function (h) { var no = /^no /i.test(h); return '<li class="' + (no ? 'no' : '') + '"><svg><use href="#' + (no ? 'i-x' : 'i-check') + '"/></svg>' + K.esc(h) + '</li>'; }).join('');
     var base = st.area === 'self-sufficient'
-      ? ['No ablution, water or electricity', 'No braai facilities — loose boma for fires', 'Unfenced — wild animals roam freely']
+      ? ['No ablution, water or electricity', 'No braai facilities (loose boma for fires)', 'Unfenced: wild animals roam freely']
       : ['Shower, toilet, basin & scullery', 'Hot water (gas geyser) & solar LED lights', 'No electricity at the stand', '1 free bag of firewood per night'];
     base = base.map(function (h) { var no = /^no |unfenced/i.test(h); return '<li class="' + (no ? 'no' : '') + '"><svg><use href="#' + (no ? 'i-info' : 'i-check') + '"/></svg>' + h + '</li>'; }).join('');
     $('.sheet-scroll', sheet).innerHTML =
@@ -252,7 +252,7 @@
           if (fakeBooked(current, dt)) { K.toast('That night is already booked'); return; }
           sel.ci = dt; sel.co = null;
         } else {
-          if (!isFree(current, sel.ci, dt)) { K.toast('Some nights in that range are booked — try other dates'); return; }
+          if (!isFree(current, sel.ci, dt)) { K.toast('Some nights in that range are booked. Try other dates'); return; }
           sel.co = dt;
         }
         renderCal(); updateSheetPrice();
@@ -264,7 +264,7 @@
     var bd = $('[data-bd]', sheet), bb = $('.book-box', sheet);
     if (!sel.co) {
       bd.innerHTML = '<div class="row sub"><span>Now pick your check-out date</span></div>';
-      $('.tot', bb).innerHTML = '<b>—</b><small>Select check-out</small>';
+      $('.tot', bb).innerHTML = '<b>-</b><small>Select check-out</small>';
       $('[data-reserve]', bb).disabled = true; return;
     }
     var free = isFree(current, sel.ci, sel.co), q = quote(current, sel.ci, sel.co);
@@ -309,7 +309,7 @@
       '<div class="breakdown">' + q.lines.map(function (l) { return '<div class="row"><span>' + l.t + '</span><span>' + (l.free ? 'FREE' : K.money(l.v)) + '</span></div>'; }).join('') +
       q.exLines.map(function (l) { return '<div class="row"><span>' + l.t + '</span><span>' + K.money(l.v) + '</span></div>'; }).join('') +
       '<div class="row total"><span>Total</span><span>' + K.money(q.total) + '</span></div>' +
-      (q.payFull ? '<div class="row sub"><span>Arriving within 7 days — full payment due now</span></div>' : '<div class="row sub"><span>' + q.depPct + '% deposit to secure</span><span>' + K.money(q.deposit) + '</span></div><div class="row sub"><span>Balance due by ' + nice(q.balanceDue, { day: 'numeric', month: 'short' }) + '</span><span>' + K.money(q.total - q.deposit) + '</span></div>') +
+      (q.payFull ? '<div class="row sub"><span>Arriving within 7 days: full payment due now</span></div>' : '<div class="row sub"><span>' + q.depPct + '% deposit to secure</span><span>' + K.money(q.deposit) + '</span></div><div class="row sub"><span>Balance due by ' + nice(q.balanceDue, { day: 'numeric', month: 'short' }) + '</span><span>' + K.money(q.total - q.deposit) + '</span></div>') +
       '</div><div class="note-card" style="padding:14px 16px;font-size:.84rem"><b>Paid to Dinokeng separately (estimate):</b><br>Conservation fees ' + K.money(dk.conservation) + ' + self-drive ' + K.money(dk.selfDrive) + ' = <b>' + K.money(dk.total) + '</b><br><a href="https://dinokeng.plnktn.io/south" target="_blank" rel="noopener">Pay online before you arrive</a></div></div>';
     // pay option amounts
     var amt = { deposit: q.deposit, full: q.total, eft: q.payFull ? q.total : q.deposit, invoice: q.payFull ? q.total : q.deposit };
@@ -370,7 +370,7 @@
     box.innerHTML = '<div class="success"><div class="success-badge"><svg class="ring" viewBox="0 0 110 110" fill="none" stroke="#3f7d3a" stroke-width="6" stroke-linecap="round"><circle cx="55" cy="55" r="50"/><path d="M34 57l14 14 28-30"/></svg></div>' +
       '<span class="hand">See you in the bush, ' + K.esc(f('first') || 'friend') + '!</span>' +
       '<h2 style="margin-top:6px">' + (paid ? 'Your reservation is confirmed' : 'Your reservation request is in') + '</h2>' +
-      '<p class="muted">' + K.esc(booking.stand.name) + ' · ' + nice(booking.ci, { weekday: 'long', day: 'numeric', month: 'long' }) + ' – ' + nice(booking.co, { weekday: 'long', day: 'numeric', month: 'long' }) + '</p>' +
+      '<p class="muted">' + K.esc(booking.stand.name) + ' · ' + nice(booking.ci, { weekday: 'long', day: 'numeric', month: 'long' }) + ' to ' + nice(booking.co, { weekday: 'long', day: 'numeric', month: 'long' }) + '</p>' +
       '<div class="ref">' + ref + '</div>' +
       '<p class="muted" style="font-size:.9rem">' + (paid ? K.money(paid) + ' received. ' : '') + 'A confirmation has been sent to <b>' + K.esc(f('email')) + '</b>.</p>' +
       '<ol class="next-steps">' +
@@ -385,7 +385,7 @@
   }
   function downloadICS() {
     var b = booking, d = function (x) { return iso(x).replace(/-/g, ''); };
-    var ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Kyleu Bush Camp//Booking//EN', 'BEGIN:VEVENT', 'UID:' + b.ref + '@kyleu.co.za', 'DTSTAMP:' + new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z', 'DTSTART;VALUE=DATE:' + d(b.ci), 'DTEND;VALUE=DATE:' + d(b.co), 'SUMMARY:Camping at Kyleu Bush Camp — ' + b.stand.name, 'LOCATION:Kyleu Bush Camp\\, Kaallaagte Road\\, Dinokeng Game Reserve', 'GEO:-25.371717;28.357836', 'DESCRIPTION:Booking ref ' + b.ref + '. Enter via Dinokeng Tau Gate. Questions: 060 458 4478 / info@kyleu.co.za', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+    var ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Kyleu Bush Camp//Booking//EN', 'BEGIN:VEVENT', 'UID:' + b.ref + '@kyleu.co.za', 'DTSTAMP:' + new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z', 'DTSTART;VALUE=DATE:' + d(b.ci), 'DTEND;VALUE=DATE:' + d(b.co), 'SUMMARY:Camping at Kyleu Bush Camp: ' + b.stand.name, 'LOCATION:Kyleu Bush Camp\\, Kaallaagte Road\\, Dinokeng Game Reserve', 'GEO:-25.371717;28.357836', 'DESCRIPTION:Booking ref ' + b.ref + '. Enter via Dinokeng Tau Gate. Questions: 060 458 4478 / info@kyleu.co.za', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
     var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' })); a.download = 'Kyleu-' + b.ref + '.ics'; a.click();
   }
   function confetti() {

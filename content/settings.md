@@ -1,4 +1,4 @@
-# Kyleu Bush Camp — Site settings
+# Kyleu Bush Camp: Site settings
 
 > Contact details and links used all over the website. Change the text after the colon and save.
 

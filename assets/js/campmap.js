@@ -1,5 +1,5 @@
 /* =========================================================
-   Kyleu camp map — a generated, interactive map of the camp
+   Kyleu camp map, a generated, interactive map of the camp
    - Draws terrain, roads, fence, spruit, trees and buildings as SVG
    - Stands come from content/stands.md ("Map position: left %, top %")
    - Hover a stand → preview bubble; click → booking
@@ -177,7 +177,7 @@
       saddle: 'M9.5 9.6C12 8.2 21 7.8 25.5 8.8L24.5 11C20 10.4 13 10.6 9.5 11.4Z', saddleFill: '#2f241b' }
   };
   function animalSVG(kind, id) {
-    var s = SHAPES[kind], g = '<g class="cm-animal cm-' + kind + '" data-a="' + id + '"><title>' + s.name + ' — wild animals roam the unfenced camp</title><g class="cm-flip"><g class="cm-bob" transform="translate(' + (-s.w / 2) + ' ' + (-s.h) + ')">';
+    var s = SHAPES[kind], g = '<g class="cm-animal cm-' + kind + '" data-a="' + id + '"><title>' + s.name + ' (wild animals roam the unfenced camp)</title><g class="cm-flip"><g class="cm-bob" transform="translate(' + (-s.w / 2) + ' ' + (-s.h) + ')">';
     g += '<ellipse cx="' + s.w / 2 + '" cy="' + (s.h - .5) + '" rx="' + s.w * .42 + '" ry="2.4" fill="rgba(30,18,8,.28)"/>';
     g += '<path d="' + s.d + '" fill="' + s.fill + '" stroke="#2a1b12" stroke-width=".7" stroke-linejoin="round"/>';
     if (s.spots) s.spots.forEach(function (p) { g += '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="' + p[2] + '" fill="' + s.spotFill + '"/>'; });
@@ -230,7 +230,7 @@
   // opts: { stands, info(st) → {free, price, sub}, onOpen(st), area() → '' | areaKey }
   K.campMap = function (host, opts) {
     host.classList.add('campmap');
-    host.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Illustrated map of Kyleu Bush Camp: the fenced camp with Inside 1–7 on the left, open unfenced stands 1–10 on the right and self-sufficient stands S1–S6 along the Kaallaagte spruit">' + terrain(opts.stands) +
+    host.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Illustrated map of Kyleu Bush Camp: the fenced camp with Inside 1-7 on the left, open unfenced stands 1-10 on the right and self-sufficient stands S1-S6 along the Kaallaagte spruit">' + terrain(opts.stands) +
       '<g class="cm-wildlife">' + animalSVG('jackal', 0) + animalSVG('jackal', 1) + animalSVG('hyena', 2) + animalSVG('hyena', 3) + '</g></svg><div class="map-bubble" hidden></div>';
     var svg = host.querySelector('svg'), bubble = host.querySelector('.map-bubble'), pins = [], current = null, hideT, lastPointer = 'mouse';
     startWildlife(svg, host);
@@ -286,7 +286,7 @@
         var r = svg.getBoundingClientRect(), x = ((e.clientX - r.left) / r.width * 100).toFixed(1), y = ((e.clientY - r.top) / r.height * 100).toFixed(1);
         var txt = 'Map position: ' + x + ', ' + y;
         try { navigator.clipboard.writeText(txt); } catch (err) {}
-        if (K.toast) K.toast(txt + '  (copied — paste it into stands.md)');
+        if (K.toast) K.toast(txt + '  (copied, paste it into stands.md)');
       });
     }
 
@@ -296,7 +296,7 @@
         var inf = opts.info(p.st);
         p.el.classList.toggle('avail', inf.free === true); p.el.classList.toggle('booked', inf.free === false);
         p.el.classList.toggle('dim', !!area && p.st.area !== area);
-        p.el.setAttribute('aria-label', p.st.name + (inf.free === true ? ' — available' : inf.free === false ? ' — booked' : '') + '. ' + inf.price);
+        p.el.setAttribute('aria-label', p.st.name + (inf.free === true ? ', available' : inf.free === false ? ', booked' : '') + '. ' + inf.price);
       });
       if (current) { var pin = pins.filter(function (p) { return p.st === current; })[0]; if (pin) showBubble(current, pin.el); }
     }

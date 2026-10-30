@@ -83,7 +83,7 @@
     sections(md).forEach(function (sec) {
       if (!sec.title) return;
       var items = bullets(sec.lines).map(function (it) {
-        var m = it.value.match(/^R?\s*([\d\s.,]+)\s*(?:[·\-–—|]\s*)?(.*)$/i);
+        var m = it.value.match(/^R?\s*([\d\s.,]+)\s*(?:[·|-]\s*)?(.*)$/i);
         var amount = m ? parseFloat(m[1].replace(/[\s,]/g, '')) : NaN;
         return { label: it.label, amount: amount, note: m ? m[2].trim() : it.value, raw: it.value };
       });

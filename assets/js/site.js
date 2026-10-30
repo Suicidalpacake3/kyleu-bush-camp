@@ -1,5 +1,5 @@
 /* =========================================================
-   Kyleu Bush Camp — site interactions
+   Kyleu Bush Camp, site interactions
    ========================================================= */
 (function () {
   'use strict';
@@ -122,6 +122,9 @@
     /* ---------- hero slideshow ---------- */
     var slides = $$('.hero-slide');
     if (slides.length) {
+      // pick the phone or desktop version of each header photo
+      var small = window.matchMedia('(max-width: 700px)').matches;
+      slides.forEach(function (sl) { var u = (small && sl.dataset.bgM) || sl.dataset.bg; if (u) sl.style.backgroundImage = "url('" + u + "')"; });
       var dots = $('.hero-dots'), cap = $('.hero-caption'), cur = 0, timer;
       slides.forEach(function (s, i) {
         if (!dots) return;
@@ -204,7 +207,7 @@
         if (k === 'rise') el.textContent = fmt(s.rise);
         if (k === 'set') el.textContent = fmt(s.set);
         if (k === 'now') el.textContent = nowSA;
-        if (k === 'phase') el.textContent = now < s.rise ? 'Before sunrise — listen for the dawn chorus' : now < new Date(s.set.getTime() - 3600e3) ? 'Daytime in the bush' : now < s.set ? 'Golden hour — light the braai!' : 'Night time — stars and lion calls';
+        if (k === 'phase') el.textContent = now < s.rise ? 'Before sunrise: listen for the dawn chorus' : now < new Date(s.set.getTime() - 3600e3) ? 'Daytime in the bush' : now < s.set ? 'Golden hour: light the braai!' : 'Night time: stars and lion calls';
       });
     }
 
