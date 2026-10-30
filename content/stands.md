@@ -19,7 +19,7 @@
 - Setups: 1-2 trailers or tents
 - Feel: Intimate yet spacious
 - Highlights: Near the fence for animal viewing, Private ablution with gas geyser, Braai area, Walk to the pool
-- Map position: 8.7, 58.9
+- Map position: 9.2, 61.2
 - Description: Intimate yet spacious, surrounded by bushveld and positioned right near the fence for animal viewing. Stroll through the fenced camp at your leisure and get in touch with nature. The pool is a short walk away.
 
 ## Inside 2
@@ -31,7 +31,7 @@
 - Setups: 1-2 trailers or tents
 - Feel: Intimate with a spruit view
 - Highlights: Beautiful view of the spruit, Near the fence for animal viewing, Private ablution with gas geyser, Braai area
-- Map position: 9.1, 70.5
+- Map position: 6.6, 81.0
 - Description: An intimate stand with a beautiful view of the spruit, surrounded by bushveld and close to the fence for animal viewing. A favourite for couples and small families who want to watch the veld wake up with a coffee in hand.
 
 ## Inside 3
@@ -43,7 +43,7 @@
 - Setups: 1-2 trailers or tents
 - Feel: Intimate yet spacious
 - Highlights: Near the fence for animal viewing, Private ablution with gas geyser, Braai area, Sunset views
-- Map position: 20.4, 64.8
+- Map position: 17.9, 75.6
 - Description: Intimate yet spacious, surrounded by bushveld and positioned near the fence for animal viewing. Wide open skies make this a great stand for sunsets.
 
 ## Inside 4
@@ -55,7 +55,7 @@
 - Setups: 4-5 trailers or tents
 - Feel: Extremely spacious, great for groups
 - Highlights: Room for 4-5 setups, Near the fence for animal viewing, Private ablution with gas geyser, Braai area
-- Map position: 30.8, 67.1
+- Map position: 33.5, 80.5
 - Description: Our most spacious fenced stand, with room for 4-5 trailers or tents and up to 12 guests. Surrounded by bushveld and near the fence for animal viewing, it's ideal for families travelling together.
 
 ## Inside 5
@@ -67,7 +67,7 @@
 - Setups: 2-3 trailers or tents
 - Feel: Intimate yet spacious
 - Highlights: Private ablution with gas geyser, Braai area, Close to the pool, Shady trees
-- Map position: 19.9, 47.1
+- Map position: 18.9, 58.7
 - Description: Intimate yet spacious and surrounded by bushveld, with space for 2-3 setups. Tucked inside the fenced camp, close to the pool and lapa.
 
 ## Inside 6
@@ -79,7 +79,7 @@
 - Setups: 4-5 trailers or tents
 - Feel: Spacious, great for groups
 - Highlights: Room for 4-5 setups, Private ablution with gas geyser, Braai area, Close to the pool
-- Map position: 26.4, 48.8
+- Map position: 27.3, 49.8
 - Description: A generous stand surrounded by bushveld with room for 4-5 trailers or tents and up to 12 guests. Perfect for a group weekend in the fenced camp.
 
 ## Inside 7
@@ -91,7 +91,7 @@
 - Setups: 3-4 trailers or tents
 - Feel: Spacious
 - Highlights: Near the fence for animal viewing, Private ablution with gas geyser, Braai area, Room for 3-4 setups
-- Map position: 37.2, 50.0
+- Map position: 34.8, 48.2
 - Description: Spacious, surrounded by bushveld and positioned near the fence for animal viewing, with room for 3-4 trailers or tents.
 
 ## Stand 1
@@ -103,7 +103,7 @@
 - Setups: 3-4 trailers
 - Feel: Spacious
 - Highlights: Big 5 roam freely, Private ablution with gas geyser, Braai area, Room for 3-4 setups
-- Map position: 42.4, 12.5
+- Map position: 44.7, 11.8
 - Description: A spacious stand surrounded by bushveld where the Big 5 and other animals are free to roam. Private ablution with hot water, and nothing between you and the wild.
 
 ## Stand 2
@@ -115,7 +115,7 @@
 - Setups: 4-5 trailers
 - Feel: Very large, great for groups
 - Highlights: Big 5 roam freely, Room for large groups, Private ablution with gas geyser, Braai area
-- Map position: 51.4, 24.8
+- Map position: 54.5, 26.3
 - Description: A very large stand that comfortably hosts big groups (4-5 trailers and up to 10 guests) in open bushveld where the Big 5 roam freely.
 
 ## Stand 3
@@ -127,7 +127,7 @@
 - Setups: 3-4 trailers
 - Feel: Spacious
 - Highlights: Big 5 roam freely, Private ablution with gas geyser, Braai area, Room for 3-4 setups
-- Map position: 60.8, 15.2
+- Map position: 60.1, 19.5
 - Description: Spacious and surrounded by bushveld where the Big 5 and other animals are free to roam, with room for 3-4 trailers.
 
 ## Stand 4
@@ -139,7 +139,7 @@
 - Setups: 1-2 trailers
 - Feel: Intimate
 - Highlights: Big 5 roam freely, Private ablution with gas geyser, Braai area, Secluded
-- Map position: 66.3, 34.6
+- Map position: 67.8, 38.3
 - Description: A more intimate stand tucked into the bushveld, ideal for a couple or small family who want the full wild experience.
 
 ## Stand 5
@@ -151,7 +151,7 @@
 - Setups: 2-3 trailers
 - Feel: Spacious
 - Highlights: Big 5 roam freely, Private ablution with gas geyser, Braai area, Great sunsets
-- Map position: 75.5, 23.2
+- Map position: 78.1, 24.2
 - Description: Spacious and surrounded by bushveld where the Big 5 roam freely. Room for 2-3 trailers and famous for its fiery sunsets.
 
 ## Stand 6
@@ -163,7 +163,7 @@
 - Setups: 4-5 trailers
 - Feel: Very large, great for groups
 - Highlights: Big 5 roam freely, Room for large groups, Private ablution with gas geyser, Braai area
-- Map position: 84.7, 27.1
+- Map position: 86.6, 32.7
 - Description: A very large stand for big groups (4-5 trailers and up to 10 guests), surrounded by open bushveld.
 
 ## Stand 7
@@ -175,7 +175,7 @@
 - Setups: 1-2 trailers
 - Feel: Deep in the bush
 - Highlights: Deep in the bush, Big 5 roam freely, Private ablution with gas geyser, Braai area
-- Map position: 92.5, 47.0
+- Map position: 94.7, 47.8
 - Description: Spacious and deep in the bush, the place to be if you want to hear hyena and jackal calling at night. Room for 1-2 trailers.
 
 ## Stand 8
@@ -187,7 +187,7 @@
 - Setups: 2-3 trailers
 - Feel: Spacious
 - Highlights: Big 5 roam freely, Private ablution with gas geyser, Braai area, Open clearing
-- Map position: 79.4, 45.9
+- Map position: 79.4, 47.5
 - Description: A spacious open clearing in the bushveld where the Big 5 and other animals roam freely, with room for 2-3 trailers.
 
 ## Stand 9
@@ -199,7 +199,7 @@
 - Setups: 2-3 trailers
 - Feel: Spacious
 - Highlights: Big 5 roam freely, Private ablution with gas geyser, Braai area, Big shady trees
-- Map position: 63.1, 49.3
+- Map position: 61.3, 49.8
 - Description: Spacious and surrounded by bushveld, with big shady trees and room for 2-3 trailers.
 
 ## Stand 10
@@ -211,7 +211,7 @@
 - Setups: 2-3 trailers
 - Feel: Spacious
 - Highlights: Big 5 roam freely, Private ablution with gas geyser, Braai area, Room for 2-3 setups
-- Map position: 53.0, 46.4
+- Map position: 50.5, 47.8
 - Description: Spacious and surrounded by bushveld where the Big 5 roam freely, with room for 2-3 trailers.
 
 ## Self-Sufficient 1
@@ -223,7 +223,7 @@
 - Setups: 1-2 trailers
 - Feel: Intimate and private
 - Highlights: On the spruit, Extremely tranquil, No facilities (bring everything), Porta potty available
-- Map position: 77.0, 83.9
+- Map position: 77.6, 87.4
 - Description: Intimate and private, right on the Kaallaagte spruit. No facilities at all: just you, the trees and the animals that love this quiet corner of the reserve.
 
 ## Self-Sufficient 2
@@ -235,7 +235,7 @@
 - Setups: 4-5 trailers
 - Feel: Large, great for groups
 - Highlights: On the spruit, Room for large groups, No facilities (bring everything), Porta potty available
-- Map position: 65.0, 90.2
+- Map position: 69.1, 90.9
 - Description: Our largest spot on the spruit, with room for 4-5 trailers and up to 12 guests. Completely self-sufficient and wonderfully quiet.
 
 ## Self-Sufficient 3
@@ -247,7 +247,7 @@
 - Setups: 1-2 trailers
 - Feel: Intimate yet spacious
 - Highlights: On the spruit, Extremely tranquil, No facilities (bring everything), Porta potty available
-- Map position: 56.0, 90.2
+- Map position: 59.3, 89.6
 - Description: Intimate yet spacious, on the spruit with lots of trees and greenery. Bring everything you need. The bush provides the rest.
 
 ## Self-Sufficient 4
@@ -259,7 +259,7 @@
 - Setups: 1-2 trailers
 - Feel: Intimate and private
 - Highlights: On the spruit, Extremely tranquil, No facilities (bring everything), Porta potty available
-- Map position: 46.5, 89.3
+- Map position: 45.5, 88.5
 - Description: Intimate and private on the spruit, an extremely tranquil spot the animals just love.
 
 ## Self-Sufficient 5
@@ -271,7 +271,7 @@
 - Setups: 1-2 trailers
 - Feel: Intimate and private
 - Highlights: On the spruit, Extremely tranquil, No facilities (bring everything), Porta potty available
-- Map position: 91.5, 78.6
+- Map position: 88.9, 77.8
 - Description: Intimate and private on the spruit, for the avid bush camper who wants nothing but the sounds of the veld.
 
 ## Self-Sufficient 6
@@ -283,5 +283,5 @@
 - Setups: 1-2 trailers
 - Feel: Intimate and private
 - Highlights: Brand-new stand, On the spruit, No facilities (bring everything), Porta potty available
-- Map position: 84.0, 76.8
+- Map position: 79.7, 72.1
 - Description: Our newest stand on the spruit: intimate, private and completely self-sufficient. Photos coming soon!

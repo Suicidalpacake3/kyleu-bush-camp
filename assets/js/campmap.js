@@ -10,7 +10,7 @@
 (function () {
   'use strict';
   var K = window.Kyleu = window.Kyleu || {};
-  var W = 1000, H = 560;
+  var W = 1000, H = 452.4;   // the site layout picture's proportions (1386 x 627)
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   function rng(seed) { return function () { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; }; }
@@ -40,35 +40,21 @@
     return c;
   }
 
-  /* ---------- the camp's fixed geography ---------- */
-  var FENCE = [[40, 48], [372, 80], [425, 446], [12, 455]];
-  var SPRUIT = [[300, 572], [420, 548], [520, 540], [660, 542], [760, 520], [860, 506], [940, 490], [1010, 482]];
-  var ROADS = [
-    [[200, -10], [205, 64]],                                                    // from Kaallaagte Road
-    [[205, 64], [208, 112], [210, 165]],                                         // entrance road past reception
-    [[210, 165], [150, 190], [105, 240], [87, 330]],
-    [[87, 330], [91, 395], [150, 425], [204, 400], [204, 363]],
-    [[150, 425], [250, 420], [308, 376]],
-    [[210, 165], [205, 215], [199, 264]],
-    [[205, 215], [250, 228], [264, 273]],
-    [[250, 228], [320, 245], [372, 280]],
-    [[210, 165], [270, 148], [330, 125], [390, 110], [424, 70]],
-    [[390, 110], [460, 135], [514, 139], [570, 110], [608, 85]],
-    [[570, 110], [620, 150], [663, 194], [710, 170], [755, 130]],
-    [[710, 170], [780, 185], [847, 152]],
-    [[780, 185], [800, 220], [794, 257]],
-    [[847, 152], [890, 200], [925, 263]],
-    [[460, 135], [490, 210], [530, 260], [580, 290], [631, 276], [700, 265], [794, 257]],
-    [[580, 290], [570, 380], [560, 460], [560, 505]],
-    [[560, 460], [510, 480], [465, 500]],
-    [[560, 460], [610, 480], [650, 505]],
-    [[700, 265], [740, 360], [770, 470]],
-    [[740, 360], [800, 400], [840, 430], [915, 440]]
-  ];
-  // game drive loop: reception → entrance road → east road → open camp loop → back
-  var DRIVE = [[176, 96], [207, 100], [209, 140], [210, 165], [270, 148], [330, 125], [390, 110], [460, 135], [514, 139], [570, 110], [620, 150], [663, 194], [710, 170], [780, 185], [800, 220], [794, 257], [700, 265], [631, 276], [580, 290], [530, 260], [490, 210], [460, 135], [390, 110], [330, 125], [270, 148], [210, 165], [209, 140], [207, 100], [176, 96]];
-  var ROAM = { x0: 440, x1: 975, y0: 40, y1: 450 };   // where wildlife may wander (unfenced)
-  var BUILDINGS = { house: [88, 76, 60, 30], cottage: [52, 100, 26, 18], pool: [142, 118, 44, 22], lapa: [94, 116, 38, 30] };
+  /* ---------- the camp's geography, traced from the aerial site layout ----------
+     All shapes come from assets/js/campmap-data.js (picture pixels, 1386 x 627).
+     The map keeps the picture's proportions, so stand positions in stands.md
+     (left %, top %) line up exactly with the site layout picture. */
+  var G = K.CAMP_GEO || { w: 1386, h: 627, roads: [], fence: [], perimeter: [], drive: [[185, 147], [258, -40]], house: [], pool: [267, 201, 17, 21], lapa: [252, 185, 22, 16], reception: [172, 160], spruit: [] };
+  var SC = W / G.w; H = Math.round(G.h * SC * 10) / 10;
+  function sc(p) { return [r1(p[0] * SC), r1(p[1] * SC)]; }
+  function scR(r) { return [r1(r[0] * SC), r1(r[1] * SC), r1(r[2] * SC), r1(r[3] * SC)]; }
+  var FENCE = G.fence.map(sc);
+  var ROADS = G.roads.map(function (L) { return L.map(sc); });
+  var DRIVE = G.drive.map(sc);
+  var SPRUIT = G.spruit.map(sc);
+  var HOUSES = G.house.map(scR), POOLR = scR(G.pool), LAPA = scR(G.lapa), RECEPTION = sc(G.reception);
+  var ROAM = { x0: 445, x1: 985, y0: 28, y1: 440 };      // unfenced area where wildlife may wander
+  function poly(L) { return 'M' + L.map(function (p) { return p[0] + ' ' + p[1]; }).join('L'); }
 
   function standXY(st) { return st.map ? [st.map.x / 100 * W, st.map.y / 100 * H] : null; }
 
@@ -83,89 +69,85 @@
       '<radialGradient id="cm-vig" cx="50%" cy="45%" r="75%"><stop offset="60%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#2a1b12" stop-opacity=".28"/></radialGradient>' +
       '<linearGradient id="cm-water" x1="0" x2="1"><stop offset="0" stop-color="#6fa7b5"/><stop offset="1" stop-color="#4f8c9e"/></linearGradient>' +
       '</defs>');
-    // ground
-    o.push('<rect width="' + W + '" height="' + H + '" fill="#cdb880"/>');
-    // grass patches
-    for (var i = 0; i < 46; i++) o.push('<ellipse cx="' + r1(R() * W) + '" cy="' + r1(R() * H) + '" rx="' + r1(30 + R() * 70) + '" ry="' + r1(18 + R() * 40) + '" fill="' + (R() > .5 ? '#c4b177' : '#d4c08c') + '" opacity=".7"/>');
-    // fenced camp ground (a little greener, it's watered)
-    var fp = FENCE.map(function (p) { return p.join(','); }).join(' ');
-    o.push('<polygon points="' + fp + '" fill="#c3bd84" opacity=".85"/>');
-    o.push('<ellipse cx="128" cy="112" rx="94" ry="54" fill="#9fb466" opacity=".9"/>');                  // lawn
-    o.push('<rect width="' + W + '" height="' + H + '" fill="#cdb880" filter="url(#cm-grain)" opacity=".9"/>');
-    // spruit (stream) with green banks
-    var sp = smooth(SPRUIT);
-    o.push('<path d="' + sp + '" fill="none" stroke="#8fa25a" stroke-width="46" stroke-linecap="round" opacity=".55"/>');
-    o.push('<path d="' + sp + '" fill="none" stroke="#7d9a52" stroke-width="26" stroke-linecap="round" opacity=".7"/>');
-    o.push('<path id="cm-spruit" d="' + sp + '" fill="none" stroke="url(#cm-water)" stroke-width="10" stroke-linecap="round"/>');
-    o.push('<path d="' + sp + '" fill="none" stroke="#bfe0e6" stroke-width="2" stroke-dasharray="8 14" stroke-linecap="round" opacity=".8"><animate attributeName="stroke-dashoffset" from="0" to="-44" dur="3s" repeatCount="indefinite"/></path>');
-    // roads (edge + surface + centre wear)
-    var roadPts = [];
-    ROADS.forEach(function (p) { roadPts = roadPts.concat(densify(p, 7)); });
-    var rd = ROADS.map(smooth).join(' ');
-    o.push('<path d="' + rd + '" fill="none" stroke="#a9875a" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" opacity=".55"/>');
-    o.push('<path d="' + rd + '" fill="none" stroke="#e3c793" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>');
-    o.push('<path d="' + rd + '" fill="none" stroke="#efd9ad" stroke-width="2" stroke-dasharray="3 7" stroke-linecap="round"/>');
-    // stand clearings
+    // bushveld ground
+    o.push('<rect width="' + W + '" height="' + H + '" fill="#a8a26a"/>');
+    for (var i = 0; i < 46; i++) o.push('<ellipse cx="' + r1(R() * W) + '" cy="' + r1(R() * H) + '" rx="' + r1(30 + R() * 70) + '" ry="' + r1(18 + R() * 40) + '" fill="' + (R() > .5 ? '#9c9860' : '#b4ac74') + '" opacity=".7"/>');
+    // lawn around the house and pool
+    var lx = POOLR[0] - 40, ly = POOLR[1] - 8;
+    o.push('<ellipse cx="' + r1(lx) + '" cy="' + r1(ly + 6) + '" rx="' + r1(52) + '" ry="' + r1(30) + '" fill="#8fae5e" opacity=".95"/>');
+    o.push('<rect width="' + W + '" height="' + H + '" fill="#a8a26a" filter="url(#cm-grain)" opacity=".9"/>');
+    // spruit (stream) along the bottom with green banks
+    if (SPRUIT.length) {
+      var sp = smooth(SPRUIT);
+      o.push('<path d="' + sp + '" fill="none" stroke="#7e9a52" stroke-width="40" stroke-linecap="round" opacity=".55"/>');
+      o.push('<path id="cm-spruit" d="' + sp + '" fill="none" stroke="url(#cm-water)" stroke-width="9" stroke-linecap="round"/>');
+      o.push('<path d="' + sp + '" fill="none" stroke="#bfe0e6" stroke-width="2" stroke-dasharray="8 14" stroke-linecap="round" opacity=".8"><animate attributeName="stroke-dashoffset" from="0" to="-44" dur="3s" repeatCount="indefinite"/></path>');
+    }
+    // stand clearings (worn red-earth patches at each campsite)
     var spots = [];
     stands.forEach(function (st) {
       var p = standXY(st); if (!p) return; spots.push(p);
-      o.push('<ellipse cx="' + r1(p[0]) + '" cy="' + r1(p[1] + 4) + '" rx="30" ry="21" fill="#e6cc9a" stroke="#c9a66e" stroke-width="1.5"/>');
-      if (st.area === 'self-sufficient') {
-        o.push('<circle cx="' + r1(p[0] + 17) + '" cy="' + r1(p[1] + 10) + '" r="4.5" fill="#5a3a22" stroke="#8a6a4a" stroke-width="1.5"/><circle cx="' + r1(p[0] + 17) + '" cy="' + r1(p[1] + 10) + '" r="1.8" fill="#f59a2f"/>');
-      } else {
-        // little private ablution block
-        o.push('<g transform="translate(' + r1(p[0] + 17) + ' ' + r1(p[1] - 15) + ')"><rect x="-1" y="2" width="15" height="11" fill="rgba(0,0,0,.18)"/><rect x="-3" y="0" width="15" height="11" rx="1" fill="#efe4cf" stroke="#9c7b55" stroke-width="1"/><rect x="-4" y="-2" width="17" height="4" rx="1" fill="#7a5a3c"/></g>');
-      }
+      o.push('<ellipse cx="' + r1(p[0]) + '" cy="' + r1(p[1]) + '" rx="17" ry="12" fill="#d39a6c" opacity=".85"/>');
     });
-    // buildings around the lawn
-    var b = BUILDINGS;
-    o.push('<g><rect x="' + (b.house[0] + 3) + '" y="' + (b.house[1] + 4) + '" width="' + b.house[2] + '" height="' + b.house[3] + '" fill="rgba(0,0,0,.2)"/><rect x="' + b.house[0] + '" y="' + b.house[1] + '" width="' + b.house[2] + '" height="' + b.house[3] + '" rx="2" fill="#9a7a5a"/><path d="M' + b.house[0] + ' ' + (b.house[1] + b.house[3] / 2) + 'h' + b.house[2] + '" stroke="#7e6046" stroke-width="2"/>' +
-      '<rect x="' + b.cottage[0] + '" y="' + b.cottage[1] + '" width="' + b.cottage[2] + '" height="' + b.cottage[3] + '" rx="2" fill="#a88a68"/>' +
-      '<rect x="' + (b.pool[0] - 4) + '" y="' + (b.pool[1] - 4) + '" width="' + (b.pool[2] + 8) + '" height="' + (b.pool[3] + 8) + '" rx="3" fill="#e9e1cf"/><rect x="' + b.pool[0] + '" y="' + b.pool[1] + '" width="' + b.pool[2] + '" height="' + b.pool[3] + '" rx="2" fill="#4fb3cf"/><path d="M' + (b.pool[0] + 6) + ' ' + (b.pool[1] + 9) + 'q6 -4 12 0t12 0" stroke="#bdeaf3" stroke-width="1.6" fill="none"/>' +
-      '<rect x="' + (b.lapa[0] + 3) + '" y="' + (b.lapa[1] + 3) + '" width="' + b.lapa[2] + '" height="' + b.lapa[3] + '" fill="rgba(0,0,0,.2)"/><rect x="' + b.lapa[0] + '" y="' + b.lapa[1] + '" width="' + b.lapa[2] + '" height="' + b.lapa[3] + '" rx="3" fill="#b88d55"/><path d="M' + b.lapa[0] + ' ' + b.lapa[1] + 'l' + b.lapa[2] + ' ' + b.lapa[3] + 'M' + (b.lapa[0] + b.lapa[2]) + ' ' + b.lapa[1] + 'l-' + b.lapa[2] + ' ' + b.lapa[3] + '" stroke="#9a7344" stroke-width="1.2"/></g>');
-    // trees (kept off roads, clearings, buildings and water)
+    // red dirt roads: the only roads on the map (traced from the picture, incl. the perimeter road)
+    var rd = ROADS.map(poly).join(' ') + ' ' + poly(G.perimeter.map(sc).concat([sc(G.perimeter[0])]));
+    o.push('<path d="' + rd + '" fill="none" stroke="#7a3c22" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round" opacity=".45"/>');
+    o.push('<path class="cm-road" d="' + rd + '" fill="none" stroke="#c4744a" stroke-width="5.6" stroke-linecap="round" stroke-linejoin="round"/>');
+    o.push('<path d="' + rd + '" fill="none" stroke="#dc9a6e" stroke-width="1.4" stroke-dasharray="2 5" stroke-linecap="round" opacity=".8"/>');
+    // ablution blocks / fire rings at each stand
+    stands.forEach(function (st) {
+      var p = standXY(st); if (!p) return;
+      if (st.area === 'self-sufficient') o.push('<circle cx="' + r1(p[0] + 9) + '" cy="' + r1(p[1] + 5) + '" r="3.2" fill="#5a3a22" stroke="#8a6a4a" stroke-width="1.2"/><circle cx="' + r1(p[0] + 9) + '" cy="' + r1(p[1] + 5) + '" r="1.3" fill="#f59a2f"/>');
+      else o.push('<g transform="translate(' + r1(p[0] + 8) + ' ' + r1(p[1] - 11) + ')"><rect x="-.5" y="1.5" width="11" height="8" fill="rgba(0,0,0,.2)"/><rect x="-2" y="0" width="11" height="8" rx="1" fill="#efe4cf" stroke="#9c7b55" stroke-width=".8"/><rect x="-3" y="-1.5" width="13" height="3" rx="1" fill="#7a5a3c"/></g>');
+    });
+    // buildings (as on the picture)
+    HOUSES.forEach(function (b) { o.push('<rect x="' + r1(b[0] + 2) + '" y="' + r1(b[1] + 3) + '" width="' + b[2] + '" height="' + b[3] + '" fill="rgba(0,0,0,.22)"/><rect x="' + b[0] + '" y="' + b[1] + '" width="' + b[2] + '" height="' + b[3] + '" rx="1.5" fill="#8f8f8a" stroke="#6d6d66" stroke-width=".8"/><path d="M' + b[0] + ' ' + r1(b[1] + b[3] / 2) + 'h' + b[2] + '" stroke="#6d6d66" stroke-width="1"/>'); });
+    var b = POOLR, l = LAPA;
+    o.push('<rect x="' + r1(l[0] + 2) + '" y="' + r1(l[1] + 2) + '" width="' + l[2] + '" height="' + l[3] + '" fill="rgba(0,0,0,.2)"/><rect x="' + l[0] + '" y="' + l[1] + '" width="' + l[2] + '" height="' + l[3] + '" rx="2" fill="#9a9a94" stroke="#77776f" stroke-width=".8"/>');
+    o.push('<rect x="' + r1(b[0] - 2.5) + '" y="' + r1(b[1] - 2.5) + '" width="' + r1(b[2] + 5) + '" height="' + r1(b[3] + 5) + '" rx="2" fill="#ece4d2"/><rect x="' + b[0] + '" y="' + b[1] + '" width="' + b[2] + '" height="' + b[3] + '" rx="1.5" fill="#4fb3cf"/><path d="M' + r1(b[0] + 2) + ' ' + r1(b[1] + 5) + 'q3 -2 6 0t6 0" stroke="#bdeaf3" stroke-width="1.1" fill="none"/>');
+    // trees: kept off the roads, clearings, buildings and water (fast grid lookup)
+    var CELL = 3, gw = Math.ceil(W / CELL) + 1, gh = Math.ceil(H / CELL) + 1, busy = new Uint8Array(gw * gh);
+    function mark(x, y, rad) { var r = Math.ceil(rad / CELL); var cx = Math.round(x / CELL), cy = Math.round(y / CELL); for (var dy = -r; dy <= r; dy++) for (var dx = -r; dx <= r; dx++) { var X = cx + dx, Y = cy + dy; if (X >= 0 && Y >= 0 && X < gw && Y < gh && dx * dx + dy * dy <= r * r) busy[Y * gw + X] = 1; } }
+    ROADS.concat([G.perimeter.map(sc).concat([sc(G.perimeter[0])])]).forEach(function (L) { densify(L, 2.5).forEach(function (p) { mark(p[0], p[1], 7); }); });
+    densify(SPRUIT.length ? SPRUIT : [[0, 0], [0, 0]], 4).forEach(function (p) { mark(p[0], p[1], 16); });
+    spots.forEach(function (p) { mark(p[0], p[1], 22); });
+    HOUSES.concat([POOLR, LAPA]).forEach(function (r) { mark(r[0] + r[2] / 2, r[1] + r[3] / 2, Math.max(r[2], r[3]) * .75 + 4); });
     var palette = ['#4f6b2c', '#5d7a34', '#3f5a26', '#6b8a3a', '#56722f'];
-    function spruitY(x) { for (var i = 0; i < SPRUIT.length - 1; i++) { var a = SPRUIT[i], c = SPRUIT[i + 1]; if (x >= a[0] && x <= c[0]) return a[1] + (c[1] - a[1]) * (x - a[0]) / (c[0] - a[0]); } return 9999; }
     var trees = [], tries = 0;
-    while (trees.length < 330 && tries < 6000) {
+    while (trees.length < 520 && tries < 9000) {
       tries++;
-      var x = R() * W, y = R() * H, rr = 4 + R() * 8;
-      var inFence = inPoly(x, y, FENCE);
-      if (inFence && R() < .45) continue;
-      if (x > 36 && x < 200 && y > 58 && y < 168) continue;                          // lawn & buildings
-      if (Math.abs(y - spruitY(x)) < 22) continue;
-      var near = false, k;
-      for (k = 0; k < roadPts.length; k += 1) { if (Math.abs(roadPts[k][0] - x) < 15 + rr && Math.abs(roadPts[k][1] - y) < 15 + rr && Math.hypot(roadPts[k][0] - x, roadPts[k][1] - y) < 11 + rr) { near = true; break; } }
-      if (near) continue;
-      for (k = 0; k < spots.length; k++) if (Math.hypot(spots[k][0] - x, spots[k][1] - y) < 40 + rr) { near = true; break; }
-      if (near) continue;
-      for (k = 0; k < trees.length; k++) if (Math.hypot(trees[k][0] - x, trees[k][1] - y) < (trees[k][2] + rr) * .8) { near = true; break; }
+      var x = R() * W, y = R() * H, rr = 3 + R() * 6.5;
+      var cxg = Math.round(x / CELL), cyg = Math.round(y / CELL), rg = Math.ceil(rr / CELL), hit = false;
+      for (var dy = -rg; dy <= rg && !hit; dy++) for (var dx = -rg; dx <= rg; dx++) { var X = cxg + dx, Y = cyg + dy; if (X >= 0 && Y >= 0 && X < gw && Y < gh && busy[Y * gw + X]) { hit = true; break; } }
+      if (hit) continue;
+      var near = false;
+      for (var k = Math.max(0, trees.length - 400); k < trees.length; k++) if (Math.abs(trees[k][0] - x) < 14 && Math.hypot(trees[k][0] - x, trees[k][1] - y) < (trees[k][2] + rr) * .85) { near = true; break; }
       if (near) continue;
       trees.push([x, y, rr]);
     }
-    trees.sort(function (a, b) { return a[1] - b[1]; });
+    trees.sort(function (a, b2) { return a[1] - b2[1]; });
     trees.forEach(function (t) {
       var c = palette[Math.floor(R() * palette.length)], acacia = R() < .25;
-      if (acacia) o.push('<ellipse cx="' + r1(t[0] + 3) + '" cy="' + r1(t[1] + 4) + '" rx="' + r1(t[2] * 1.6) + '" ry="' + r1(t[2] * .8) + '" fill="rgba(40,25,10,.22)"/><ellipse cx="' + r1(t[0]) + '" cy="' + r1(t[1]) + '" rx="' + r1(t[2] * 1.6) + '" ry="' + r1(t[2] * .75) + '" fill="' + c + '"/><ellipse cx="' + r1(t[0] - t[2] * .4) + '" cy="' + r1(t[1] - t[2] * .2) + '" rx="' + r1(t[2] * .8) + '" ry="' + r1(t[2] * .3) + '" fill="#8aa555" opacity=".55"/>');
-      else o.push('<circle cx="' + r1(t[0] + 3) + '" cy="' + r1(t[1] + 4) + '" r="' + r1(t[2]) + '" fill="rgba(40,25,10,.22)"/><circle cx="' + r1(t[0]) + '" cy="' + r1(t[1]) + '" r="' + r1(t[2]) + '" fill="' + c + '"/><circle cx="' + r1(t[0] - t[2] * .3) + '" cy="' + r1(t[1] - t[2] * .3) + '" r="' + r1(t[2] * .45) + '" fill="#8aa555" opacity=".5"/>');
+      if (acacia) o.push('<ellipse cx="' + r1(t[0] + 2) + '" cy="' + r1(t[1] + 3) + '" rx="' + r1(t[2] * 1.6) + '" ry="' + r1(t[2] * .8) + '" fill="rgba(40,25,10,.22)"/><ellipse cx="' + r1(t[0]) + '" cy="' + r1(t[1]) + '" rx="' + r1(t[2] * 1.6) + '" ry="' + r1(t[2] * .75) + '" fill="' + c + '"/><ellipse cx="' + r1(t[0] - t[2] * .4) + '" cy="' + r1(t[1] - t[2] * .2) + '" rx="' + r1(t[2] * .8) + '" ry="' + r1(t[2] * .3) + '" fill="#8aa555" opacity=".55"/>');
+      else o.push('<circle cx="' + r1(t[0] + 2) + '" cy="' + r1(t[1] + 3) + '" r="' + r1(t[2]) + '" fill="rgba(40,25,10,.22)"/><circle cx="' + r1(t[0]) + '" cy="' + r1(t[1]) + '" r="' + r1(t[2]) + '" fill="' + c + '"/><circle cx="' + r1(t[0] - t[2] * .3) + '" cy="' + r1(t[1] - t[2] * .3) + '" r="' + r1(t[2] * .45) + '" fill="#8aa555" opacity=".5"/>');
     });
-    // fence with posts
-    var fpath = 'M' + FENCE.map(function (p) { return p.join(' '); }).join(' L') + ' Z';
-    o.push('<path d="' + fpath + '" fill="none" stroke="#5a3d26" stroke-width="2.4" stroke-dasharray="10 5" stroke-linejoin="round"/>');
-    densify(FENCE.concat([FENCE[0]]), 26).forEach(function (p) { o.push('<circle cx="' + r1(p[0]) + '" cy="' + r1(p[1]) + '" r="2" fill="#4a3220"/>'); });
+    // fence: just outside the perimeter road, with posts
+    o.push('<path d="' + poly(FENCE) + 'Z" fill="none" stroke="#3b2a1a" stroke-width="1.8" stroke-dasharray="7 4" stroke-linejoin="round"/>');
+    densify(FENCE.concat([FENCE[0]]), 18).forEach(function (p) { o.push('<circle cx="' + r1(p[0]) + '" cy="' + r1(p[1]) + '" r="1.5" fill="#3b2a1a"/>'); });
     // labels
+    var gate = sc([258, 62]);
     o.push('<g class="cm-labels">' +
-      '<text x="212" y="22" class="cm-small" text-anchor="start">↑ Kaallaagte Rd · Tau Gate</text>' +
-      '<g transform="translate(205 64)"><rect x="-17" y="-7" width="34" height="14" rx="7" fill="#2a1b12"/><text y="4" class="cm-tag" text-anchor="middle">GATE</text></g>' +
-      '<text x="118" y="70" class="cm-small" text-anchor="middle">Reception</text>' +
-      '<text x="132" y="166" class="cm-small" text-anchor="middle">Pool &amp; lapa</text>' +
-      '<text x="210" y="485" class="cm-area" text-anchor="middle">FENCED CAMP</text>' +
-      '<text x="690" y="26" class="cm-area" text-anchor="middle">OPEN BUSH CAMP · UNFENCED</text>' +
-      '<text class="cm-water"><textPath href="#cm-spruit" xlink:href="#cm-spruit" startOffset="58%">Kaallaagte Spruit</textPath></text>' +
-      '<text x="985" y="400" class="cm-area cm-ss" text-anchor="end">SELF-SUFFICIENT</text>' +
+      '<text x="' + r1(gate[0] + 8) + '" y="13" class="cm-small" text-anchor="start">↑ Kaallaagte Rd · Tau Gate</text>' +
+      '<g transform="translate(' + gate[0] + ' ' + gate[1] + ')"><rect x="-15" y="-6" width="30" height="12" rx="6" fill="#2a1b12"/><text y="3.5" class="cm-tag" text-anchor="middle">GATE</text></g>' +
+      '<text x="' + sc([136, 0])[0] + '" y="' + sc([0, 190])[1] + '" class="cm-small" text-anchor="end">Reception</text>' +
+      '<text x="' + sc([262, 0])[0] + '" y="' + sc([0, 216])[1] + '" class="cm-small" text-anchor="end">Pool &amp; lapa</text>' +
+      '<text x="' + r1(sc([135, 262])[0]) + '" y="' + r1(sc([135, 262])[1]) + '" class="cm-area" text-anchor="middle">FENCED</text>' +
+      '<text x="' + r1(sc([1035, 75])[0]) + '" y="' + r1(sc([1035, 75])[1]) + '" class="cm-area" text-anchor="middle">OPEN BUSH CAMP · UNFENCED</text>' +
+      (SPRUIT.length ? '<text class="cm-water"><textPath href="#cm-spruit" xlink:href="#cm-spruit" startOffset="60%">Kaallaagte Spruit</textPath></text>' : '') +
+      '<text x="' + r1(sc([1230, 520])[0]) + '" y="' + r1(sc([1230, 520])[1]) + '" class="cm-area cm-ss" text-anchor="middle">SELF-SUFFICIENT</text>' +
       '</g>');
     // compass
-    o.push('<g transform="translate(958 46)"><circle r="20" fill="rgba(255,252,246,.85)" stroke="#5a3d26" stroke-width="1.2"/><path d="M0 -15 L5 2 L0 -1 L-5 2Z" fill="#b8461a"/><path d="M0 15 L5 -2 L0 1 L-5 -2Z" fill="#5a3d26" opacity=".5"/><text y="-21" text-anchor="middle" class="cm-tag" style="fill:#2a1b12">N</text></g>');
+    o.push('<g transform="translate(962 34)"><circle r="17" fill="rgba(255,252,246,.85)" stroke="#5a3d26" stroke-width="1.2"/><path d="M0 -13 L4.5 2 L0 -1 L-4.5 2Z" fill="#b8461a"/><path d="M0 13 L4.5 -2 L0 1 L-4.5 -2Z" fill="#5a3d26" opacity=".5"/></g>');
     o.push('<rect width="' + W + '" height="' + H + '" fill="url(#cm-vig)" pointer-events="none"/>');
     return (baseCache[key] = o.join(''));
   }
@@ -308,7 +290,7 @@
   };
 
   // shared pieces for the "day at Kyleu" scene (campscene.js)
-  K.campMapParts = { terrain: terrain, smooth: smooth, standXY: standXY, DRIVE: DRIVE };
+  K.campMapParts = { terrain: terrain, smooth: smooth, standXY: standXY, DRIVE: DRIVE, W: W, H: H, POOL: POOLR, RECEPTION: RECEPTION, ROAM: ROAM, FENCE: FENCE, GATE: sc([258, 62]) };
 
   /* ---------- small zoomed map for a single stand ---------- */
   K.campMapMini = function (stands, id) {

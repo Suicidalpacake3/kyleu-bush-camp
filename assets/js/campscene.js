@@ -13,7 +13,7 @@
   'use strict';
   var K = window.Kyleu = window.Kyleu || {};
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var W = 1000, H = 560, H0 = 5.5, H1 = 22.5, AS = .7;   // AS = animal size on this map
+  var W = 1000, H = 452.4, H0 = 5.5, H1 = 22.5, AS = .62;   // AS = animal size on this map
 
   function hash01(str) { var h = 2166136261; for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return ((h >>> 0) % 10000) / 10000; }
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
@@ -80,10 +80,11 @@
 
   /* ---------- the scheduled moments of the day ---------- */
   var EV_STANDS = { coffee: 'stand-9', arrive: 'inside-6', braai: 'inside-3', night: 'stand-7' };
-  var POOL = [164, 129];
+  var POOL = [0, 0];
 
   K.campScene = function (wrap, stands) {
-    var P = K.campMapParts;
+    var P = K.campMapParts; W = P.W; H = P.H;
+    var PR = P.POOL; POOL = [PR[0] + PR[2] / 2, PR[1] + PR[3] / 2];
     var mapbox = wrap.querySelector('.dm-mapbox'), panEl = wrap.querySelector('.dm-pan'), card = wrap.querySelector('.dm-card');
     var sticky = wrap.querySelector('.dm-sticky'), clock = wrap.querySelector('[data-dm-clock]'), bar = wrap.querySelector('.dm-progress'), ticks = wrap.querySelector('.dm-ticks');
     var pos = {}; stands.forEach(function (s) { var p = P.standXY(s); if (p) pos[s.id] = p; });
@@ -91,7 +92,7 @@
 
     var EVENTS = [
       { h: 5.95, end: 8.45, time: '06:00', title: 'Coffee with the wildebeest', text: 'Plunger on, chairs out, and the morning visitors arrive for breakfast too.', img: 'assets/img/photos/wildebeest-at-camp.jpg', at: function () { return at(EV_STANDS.coffee); } },
-      { h: 8.5, end: 12.4, time: '08:30', title: 'Out on a game drive', text: 'The Kyleu game drive vehicle leaves reception for a loop through the reserve.', img: 'assets/img/photos/game-drive-vehicle.jpg', live: 'Game drive in progress', below: true, at: function () { return [118, 110]; } },
+      { h: 8.5, end: 11.75, time: '08:30', title: 'Out on a game drive', text: 'The Kyleu game drive vehicle leaves reception and heads out the gate onto Kaallaagte Road into the reserve. Back in about two hours.', img: 'assets/img/photos/game-drive-vehicle.jpg', live: 'Game drive in progress', below: true, at: function () { return [P.RECEPTION[0], P.RECEPTION[1] + 14]; } },
       { h: 12.5, end: 14.9, time: '13:00', title: 'Pool time', text: 'When the bushveld heats up, campers head for the pool and the shady lapa. The animals rest in the shade.', img: 'assets/img/photos/pool-kids.jpg', below: true, at: function () { return POOL; } },
       { h: 15, end: 17.6, time: '15:00', title: 'New campers arrive', text: 'Afternoon check-ins: tents go up, awnings come out and the kettle goes on.', img: 'assets/img/photos/tent-and-trailer.jpg', at: function () { return at(EV_STANDS.arrive); } },
       { h: 17.75, end: 20.7, time: '17:45', title: 'Golden hour braai', text: 'Fires get lit across camp with your free bag of wood as the sky turns orange.', img: 'assets/img/photos/campfire-stand.jpg', at: function () { return at(EV_STANDS.braai); } },
@@ -106,7 +107,7 @@
       if (!forced && hash01(s.id + 'occ') > .66) return;
       var types = s.area === 'fenced' ? ['tent', 'caravan', 'tent', 'trailer'] : s.area === 'unfenced' ? ['rooftop', 'trailer', 'caravan', 'tent'] : ['rooftop', 'trailer'];
       var arrive = s.id === EV_STANDS.arrive ? 15 : (forced || hash01(s.id + 'arr') < .55) ? 0 : 13.6 + hash01(s.id + 'h') * 3.4;
-      var fire = s.area === 'self-sufficient' ? [p[0] + 17, p[1] + 10] : [p[0] + 14, p[1] + 13];
+      var fire = s.area === 'self-sufficient' ? [p[0] + 9, p[1] + 5] : [p[0] + 11, p[1] + 8];
       camps.push({ st: s, p: p, type: types[Math.floor(hash01(s.id + 'type') * types.length)], arrive: arrive, fire: fire, n: 2 + Math.floor(hash01(s.id + 'n') * 3) });
     });
 
@@ -120,9 +121,9 @@
     o.push('<defs><radialGradient id="cs-fireglow"><stop offset="0" stop-color="#ffd27a" stop-opacity=".95"/><stop offset=".35" stop-color="#ff8a2a" stop-opacity=".55"/><stop offset="1" stop-color="#ff6a00" stop-opacity="0"/></radialGradient><filter id="cs-eyeglow" x="-2" y="-2" width="5" height="5"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>');
     o.push('<path class="cs-route" d="' + P.smooth(P.DRIVE) + '" fill="none" stroke="none"/>');
     o.push('<g class="cs-setups">' + camps.map(function (c, i) {
-      return '<g class="cs-setup" data-i="' + i + '" transform="translate(' + r1(c.p[0] - 6) + ' ' + r1(c.p[1] + 2) + ')"><g class="cs-pop">' + setupSVG(c.type, hash01(c.st.id + 'col')) + '</g></g>';
+      return '<g class="cs-setup" data-i="' + i + '" transform="translate(' + r1(c.p[0] - 5) + ' ' + r1(c.p[1] + 1) + ') scale(.72)"><g class="cs-pop">' + setupSVG(c.type, hash01(c.st.id + 'col')) + '</g></g>';
     }).join('') + '</g>');
-    o.push('<g class="cs-swim">' + [0, 1, 2, 3, 4, 5].map(function (i) { return '<g class="cs-swimmer" data-i="' + i + '"><circle r="3.4" fill="none" stroke="#e8fbff" stroke-width=".8" opacity=".7"/><circle r="1.9" fill="' + SKIN[i % 4] + '"/></g>'; }).join('') + '</g>');
+    o.push('<g class="cs-swim">' + [0, 1, 2, 3].map(function (i) { return '<g class="cs-swimmer" data-i="' + i + '"><circle r="2.3" fill="none" stroke="#e8fbff" stroke-width=".6" opacity=".7"/><circle r="1.3" fill="' + SKIN[i % 4] + '"/></g>'; }).join('') + '</g>');
     var people = [];
     camps.forEach(function (c, ci) { for (var k = 0; k < c.n; k++) people.push({ camp: ci, seed: hash01(c.st.id + 'p' + k), k: k }); });
     o.push('<g class="cs-people">' + people.map(function (p, i) { return '<g data-p="' + i + '">' + personSVG(p.seed) + '</g>'; }).join('') + '</g>');
@@ -147,7 +148,7 @@
     // live state for everything that moves
     people.forEach(function (p, i) {
       var c = camps[p.camp]; p.el = svg.querySelector('[data-p="' + i + '"]');
-      p.x = c.p[0] - 10 + R() * 20; p.y = c.p[1] + R() * 10; p.tx = p.x; p.ty = p.y; p.pause = R() * 3;
+      p.x = c.p[0] - 8 + R() * 16; p.y = c.p[1] - 2 + R() * 8; p.tx = p.x; p.ty = p.y; p.pause = R() * 3;
       p.sitA = (p.k / c.n) * Math.PI * 2 + hash01(c.st.id) * 3;
     });
     var herds = HERDS.map(function (hd) { return { kind: hd.kind, x: hd.c[0], y: hd.c[1], tx: hd.c[0], ty: hd.c[1], pause: 0, vx: 1 }; });
@@ -158,15 +159,15 @@
     });
     var preds = PREDS.map(function (k, i) {
       var g = svg.querySelector('[data-r="' + i + '"]');
-      var a = { kind: k, el: g, flip: g.querySelector('.cs-flip'), bob: g.querySelector('.cs-bob'), b: BEASTS[k], eye: svg.querySelector('[data-e="' + i + '"]'), x: 460 + R() * 500, y: 60 + R() * 380, dir: 1, phase: R() * 6, pause: 0, speed: (k === 'jackal' ? 26 : 18) * (.85 + R() * .3) };
+      var a = { kind: k, el: g, flip: g.querySelector('.cs-flip'), bob: g.querySelector('.cs-bob'), b: BEASTS[k], eye: svg.querySelector('[data-e="' + i + '"]'), x: 470 + R() * 480, y: 40 + R() * 380, dir: 1, phase: R() * 6, pause: 0, speed: (k === 'jackal' ? 26 : 18) * (.85 + R() * .3) };
       a.tx = a.x; a.ty = a.y; return a;
     });
-    var swimmers = swimEls.map(function (el, i) { return { el: el, x: 144 + 4 + R() * 36, y: 120 + 3 + R() * 16, ph: R() * 6 }; });
+    var swimmers = swimEls.map(function (el, i) { return { el: el, x: PR[0] + 2 + R() * (PR[2] - 4), y: PR[1] + 2 + R() * (PR[3] - 4), ph: R() * 6 }; });
 
     function roamTarget(a, cx, cy, d) {
       var ang = R() * Math.PI * 2; d = d || 80 + R() * 150;
-      a.tx = clamp((cx === undefined ? a.x : cx) + Math.cos(ang) * d, 445, 975);
-      a.ty = clamp((cy === undefined ? a.y : cy) + Math.sin(ang) * d * .7, 45, 455);
+      a.tx = clamp((cx === undefined ? a.x : cx) + Math.cos(ang) * d, P.ROAM.x0, P.ROAM.x1);
+      a.ty = clamp((cy === undefined ? a.y : cy) + Math.sin(ang) * d * .7, P.ROAM.y0, P.ROAM.y1);
     }
 
     /* --- timeline ticks --- */
@@ -246,9 +247,9 @@
         var c = camps[p.camp], here = h >= Math.max(c.arrive, c.st.id === EV_STANDS.coffee ? 5.6 : 6.1) && h < 22.3;
         p.el.style.opacity = here ? 1 : 0;
         if (!here) return;
-        if (sitting) { p.tx = c.fire[0] + Math.cos(p.sitA) * 8; p.ty = c.fire[1] + Math.sin(p.sitA) * 6; }
+        if (sitting) { p.tx = c.fire[0] + Math.cos(p.sitA) * 6; p.ty = c.fire[1] + Math.sin(p.sitA) * 4.5; }
         else if (p.pause > 0) p.pause -= dt;
-        else if (Math.hypot(p.tx - p.x, p.ty - p.y) < 1) { p.tx = c.p[0] - 22 + R() * 44; p.ty = c.p[1] - 6 + R() * 22; p.pause = R() * 4; }
+        else if (Math.hypot(p.tx - p.x, p.ty - p.y) < 1) { p.tx = c.p[0] - 14 + R() * 28; p.ty = c.p[1] - 6 + R() * 14; p.pause = R() * 4; }
         if (!reduce) { var dx = p.tx - p.x, dy = p.ty - p.y, d = Math.hypot(dx, dy), st = Math.min(d, (sitting ? 20 : 8) * dt); if (d > .01) { p.x += dx / d * st; p.y += dy / d * st; } }
         else { p.x = p.tx; p.y = p.ty; }
         p.el.setAttribute('transform', 'translate(' + r1(p.x) + ' ' + r1(p.y) + ')');
@@ -257,26 +258,29 @@
       var swim = ramp(h, 12.3, 12.7) * (1 - ramp(h, 15, 15.4));
       swimmers.forEach(function (s, i) {
         s.el.style.opacity = swim;
-        if (swim > 0) { s.x = clamp(s.x + Math.sin(t * .8 + s.ph) * .15, 147, 183); s.y = clamp(s.y + Math.cos(t * .6 + s.ph) * .1, 121, 137); s.el.setAttribute('transform', 'translate(' + r1(s.x) + ' ' + r1(s.y + Math.sin(t * 3 + s.ph) * .6) + ')'); }
+        if (swim > 0) { s.x = clamp(s.x + Math.sin(t * .8 + s.ph) * .08, PR[0] + 2, PR[0] + PR[2] - 2); s.y = clamp(s.y + Math.cos(t * .6 + s.ph) * .06, PR[1] + 2, PR[1] + PR[3] - 2); s.el.setAttribute('transform', 'translate(' + r1(s.x) + ' ' + r1(s.y + Math.sin(t * 3 + s.ph) * .6) + ')'); }
       });
-      // game drive bakkie
-      var dprog = ramp(h, 8.5, 12.1), moving = dprog > 0 && dprog < 1;
+      // game drive bakkie: out the gate onto Kaallaagte Road at 08:30, gone two hours, back about 11:30
+      var outP = ramp(h, 8.5, 9.0), backP = ramp(h, 11.0, 11.5), dprog = outP * (1 - backP);
+      var moving = (h > 8.5 && h < 9.0) || (h > 11.0 && h < 11.5), returning = h >= 11.0;
       var L1 = dprog * routeLen, pA = route.getPointAtLength(L1), pB = route.getPointAtLength(Math.min(routeLen, L1 + 2));
-      var ang = moving ? Math.atan2(pB.y - pA.y, pB.x - pA.x) * 180 / Math.PI : 180;
-      bakkie.setAttribute('transform', 'translate(' + r1(pA.x) + ' ' + r1(pA.y) + ') rotate(' + r1(ang) + ')');
+      var ang = Math.atan2(pB.y - pA.y, pB.x - pA.x) * 180 / Math.PI + (returning ? 180 : 0);
+      if (!moving && dprog === 0) ang = 200;
+      bakkie.setAttribute('transform', 'translate(' + r1(pA.x) + ' ' + r1(pA.y) + ') rotate(' + r1(ang) + ') scale(.8)');
+      bakkie.style.opacity = dprog > .97 ? 0 : 1;
       dust.style.opacity = moving ? .5 : 0;
       // plains game: busy in the morning, resting at midday, gone after dark
       var act = h < 10 ? 1 : h < 11 ? 1 - ramp(h, 10, 11) * .9 : h < 15 ? .1 : h < 16 ? .1 + ramp(h, 15, 16) * .8 : .9;
       var plainVis = 1 - ramp(h, 18, 19.3);
       herds.forEach(function (hd, hi) {
         if (hi === 0 && h < 8.6) {                    // the wildebeest come to the coffee camp
-          var cp = at(EV_STANDS.coffee, 62, 16); hd.x += (cp[0] - hd.x) * Math.min(1, dt * 1.5); hd.y += (cp[1] - hd.y) * Math.min(1, dt * 1.5); hd.tx = hd.x; hd.ty = hd.y; return;
+          var cp = at(EV_STANDS.coffee, 40, 12); hd.x += (cp[0] - hd.x) * Math.min(1, dt * 1.5); hd.y += (cp[1] - hd.y) * Math.min(1, dt * 1.5); hd.tx = hd.x; hd.ty = hd.y; return;
         }
         if (reduce) return;
         if (hd.pause > 0) { hd.pause -= dt * act; return; }
         var dx = hd.tx - hd.x, dy = hd.ty - hd.y, d = Math.hypot(dx, dy);
         if (d < 2) { roamTarget(hd, hd.x, hd.y, 60 + R() * 120); hd.pause = 2 + R() * 6; return; }
-        var st = Math.min(d, 7 * act * dt); hd.x = clamp(hd.x + dx / d * st, 460, 960); hd.y = clamp(hd.y + dy / d * st, 50, 450); if (Math.abs(dx) > .3) hd.vx = dx > 0 ? 1 : -1;
+        var st = Math.min(d, 7 * act * dt); hd.x = clamp(hd.x + dx / d * st, P.ROAM.x0 + 45, P.ROAM.x1 - 25); hd.y = clamp(hd.y + dy / d * st, P.ROAM.y0 + 10, P.ROAM.y1 - 10); if (Math.abs(dx) > .3) hd.vx = dx > 0 ? 1 : -1;
       });
       plains.forEach(function (a, i) {
         var hd = herds[a.herd], moving2 = act > .3 && hd.pause <= 0;
@@ -302,10 +306,10 @@
             var dx = a.tx - a.x, dy = a.ty - a.y, d = Math.hypot(dx, dy);
             if (d < 2) {
               if (i === 4) { a.tx = preds[3].tx + 26; a.ty = preds[3].ty + 10; }                      // hyenas travel in pairs
-              else if (i === 3 && h > 20.4) { var np = at(EV_STANDS.night, -60 + R() * 120, 30 + R() * 30); a.tx = np[0]; a.ty = np[1]; }   // one pair checks out the night camp
+              else if (i === 3 && h > 20.4) { var np = at(EV_STANDS.night, -50 + R() * 80, 20 + R() * 25); a.tx = np[0]; a.ty = np[1]; }   // one pair checks out the night camp
               else roamTarget(a);
               a.pause = R() < .4 ? R() * 2.5 : 0;
-            } else { var st = Math.min(d, a.speed * dt); a.x = clamp(a.x + dx / d * st, 440, 980); a.y = clamp(a.y + dy / d * st, 40, 470); if (Math.abs(dx) > .3) a.dir = dx > 0 ? 1 : -1; }
+            } else { var st = Math.min(d, a.speed * dt); a.x = clamp(a.x + dx / d * st, P.ROAM.x0, P.ROAM.x1); a.y = clamp(a.y + dy / d * st, P.ROAM.y0, P.ROAM.y1); if (Math.abs(dx) > .3) a.dir = dx > 0 ? 1 : -1; }
           }
         }
         var walking = a.pause <= 0, bob = walking ? Math.abs(Math.sin(t * (a.kind === 'jackal' ? 14 : 10) + a.phase)) * -1.3 : 0;
@@ -324,11 +328,11 @@
       });
       // marker on the current moment (follows the bakkie on the game drive)
       if (curEvent >= 0) {
-        var mp = curEvent === 1 && moving ? [pA.x, pA.y] : EVENTS[curEvent].at();
+        var mp = curEvent === 1 ? (dprog > .97 ? P.GATE : [pA.x, pA.y]) : EVENTS[curEvent].at();
         var pulse = 1 + (t * 1.2 % 1) * .8;
         marker.setAttribute('transform', 'translate(' + r1(mp[0]) + ' ' + r1(mp[1]) + ')');
         marker.firstChild.setAttribute('r', r1(10 * pulse)); marker.firstChild.setAttribute('opacity', r1((1 - (pulse - 1) / .8) * 100) / 100);
-        if (mobile() && curEvent === 1 && moving) { var pw = panEl.clientWidth, mw2 = mapbox.clientWidth, tx2 = clamp(mw2 / 2 - pA.x / W * pw, mw2 - pw, 0); panEl.style.transform = 'translateX(' + r1(tx2) + 'px)'; }
+        if (mobile() && curEvent === 1 && moving && dprog < .97) { var pw = panEl.clientWidth, mw2 = mapbox.clientWidth, tx2 = clamp(mw2 / 2 - pA.x / W * pw, mw2 - pw, 0); panEl.style.transform = 'translateX(' + r1(tx2) + 'px)'; }
       }
       if (visible && (!reduce || Math.abs(target - hour) > .001)) raf = requestAnimationFrame(frame);
     }
