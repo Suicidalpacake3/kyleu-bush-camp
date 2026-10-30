@@ -3,7 +3,7 @@
    - Draws terrain, roads, fence, spruit, trees and buildings as SVG
    - Stands come from content/stands.md ("Map position: left %, top %")
    - Hover a stand → preview bubble; click → booking
-   - Jackals and hyenas wander around the unfenced area
+   - Wildebeest, zebra and impala graze around the unfenced area
    Tip for the Kyleu team: open any page with the map and add
    ?mapedit to the address, then click the map to get a "Map position".
    ========================================================= */
@@ -152,60 +152,64 @@
     return (baseCache[key] = o.join(''));
   }
 
-  /* ---------- wildlife ---------- */
+  /* ---------- wildlife: daytime herds (same as the morning in "A day at Kyleu") ---------- */
+  var AS = .62;   // animal size on the map
   var SHAPES = {
-    hyena: { w: 40, h: 24, name: 'Spotted hyena', speed: 15, fill: '#6f5236',
-      d: 'M3 12C4 9 8 8 12 8L23 4.5C26 3.6 29 3.5 31 5L33.5 4.5L35 6.5L38 8C39 9.5 38 11 36 11L33 11.5L31 13.5L30.5 23H28.3L27.8 15L26 15L25.4 23H23.2L22.6 14.5L14 14.5L13.2 23H11L10.8 15.5L9.2 15.5L8.6 23H6.4L6 15C5 14.6 4.4 14 4 13.2L1.4 17L.4 16.4Z',
-      spots: [[16, 10, 1.4], [20, 8, 1.2], [13, 12, 1.1], [24, 9.5, 1.3], [18, 12.5, 1]], spotFill: '#3e2c1c' },
-    jackal: { w: 36, h: 22, name: 'Black-backed jackal', speed: 24, fill: '#b9773a',
-      d: 'M8 10C10 8 22 8 26 9L28.5 6L29.6 1.5L31 5L32.4 1.5L33.2 6L36 8.2L35 10L31.5 11L29.4 13L28.6 21H27L26.2 14.5L13.4 14.5L12.5 21H10.9L10.3 14.2C8.6 13.6 7.4 12.6 6.6 11.4L1.2 14.2L.4 12.8L5.6 9.6Z',
-      saddle: 'M9.5 9.6C12 8.2 21 7.8 25.5 8.8L24.5 11C20 10.4 13 10.6 9.5 11.4Z', saddleFill: '#2f241b' }
+    wildebeest: { w: 34, h: 22, name: 'Blue wildebeest', fill: '#47423b', d: 'M3 12C4 9 9 8 14 8L22 5C25 3.6 28 4 30 6L33 9L34 13L31.5 14L29.5 12.6L28.6 13.4L28 21H26L25.5 14.6L13.4 14.6L12.8 21H10.8L10.3 14.2C7.6 13.8 5.4 13.2 4.2 12.6L2.2 16.4L1.2 15.8Z', extra: '<path d="M27.4 5.6c1.1-2.6 3.6-3.3 5.3-2.3" stroke="#221d18" stroke-width="1.2" fill="none"/><path d="M19 6.2L23.6 4.4" stroke="#221d18" stroke-width="2.2"/>' },
+    zebra: { w: 34, h: 22, name: 'Burchell\'s zebra', fill: '#f3efe4', d: 'M5 10C7 8 20 8 23 9L27 4L30 3L33 6L32 8.5L28.5 9.5L26.5 13L25.5 21H23.6L23.2 14.5L11.5 14.5L11 21H9L8.4 14C6.6 13.4 5.5 12.5 5 11.5L2.5 15L1.8 14.5Z', extra: '<path d="M9 9.6v4.6M12 9.1v5M15 8.9v5.3M18 9v5.2M21 9.3v4.8M24.6 7.6l1.7 3.4M27.1 5.3l1.9 2.7" stroke="#1d1814" stroke-width="1.3"/><path d="M23.4 8.6L27.3 3.7" stroke="#1d1814" stroke-width="1.7"/>' },
+    impala: { w: 30, h: 22, name: 'Impala', fill: '#bb7a41', d: 'M5 10C7 8.5 17 8.5 20 9.5L23 5L24.5 2.4L25.5 5L27.6 6.8L27 8.5L24.6 9L22.6 12L22 21H20.6L20.2 14L10.5 14L10 21H8.6L8.3 13.5C6.8 13 5.6 12 5 11L3 12.5L2.6 11.8Z', extra: '<path d="M10.5 13.3H20.2" stroke="#f3e6d0" stroke-width="1.5"/>', horns: '<path d="M24.2 2.8c.6-1.8.1-3-.7-3.6M25.4 3c.9-1.6.8-2.8 0-3.5" stroke="#2a1b12" stroke-width=".8" fill="none"/>' }
   };
-  function animalSVG(kind, id) {
-    var s = SHAPES[kind], g = '<g class="cm-animal cm-' + kind + '" data-a="' + id + '"><title>' + s.name + ' (wild animals roam the unfenced camp)</title><g class="cm-flip"><g class="cm-bob" transform="translate(' + (-s.w / 2) + ' ' + (-s.h) + ')">';
-    g += '<ellipse cx="' + s.w / 2 + '" cy="' + (s.h - .5) + '" rx="' + s.w * .42 + '" ry="2.4" fill="rgba(30,18,8,.28)"/>';
-    g += '<path d="' + s.d + '" fill="' + s.fill + '" stroke="#2a1b12" stroke-width=".7" stroke-linejoin="round"/>';
-    if (s.spots) s.spots.forEach(function (p) { g += '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="' + p[2] + '" fill="' + s.spotFill + '"/>'; });
-    if (s.saddle) g += '<path d="' + s.saddle + '" fill="' + s.saddleFill + '"/>';
-    g += '<circle cx="' + (kind === 'hyena' ? 34.5 : 32.6) + '" cy="' + (kind === 'hyena' ? 7.4 : 7.2) + '" r=".9" fill="#120a04"/>';
-    return g + '</g></g></g>';
+  var HERDS = [{ kind: 'wildebeest', n: 7, c: [600, 270] }, { kind: 'zebra', n: 5, c: [790, 330] }, { kind: 'impala', n: 8, c: [700, 110] }, { kind: 'zebra', n: 3, c: [540, 380] }, { kind: 'impala', n: 5, c: [890, 390] }];
+  function animalSVG(kind, id, horns) {
+    var s = SHAPES[kind];
+    return '<g class="cm-animal cm-' + kind + '" data-a="' + id + '"><title>' + s.name + ' (wild animals roam the unfenced camp)</title><g class="cm-flip"><g class="cm-bob" transform="translate(' + (-s.w / 2) + ' ' + (-s.h) + ')">' +
+      '<ellipse cx="' + s.w / 2 + '" cy="' + (s.h - .5) + '" rx="' + r1(s.w * .42) + '" ry="2.3" fill="rgba(30,18,8,.28)"/>' +
+      '<path d="' + s.d + '" fill="' + s.fill + '" stroke="#2a1b12" stroke-width=".7" stroke-linejoin="round"/>' + (s.extra || '') + (horns && s.horns ? s.horns : '') +
+      '</g></g></g>';
+  }
+  function herdsSVG() {
+    var out = [], id = 0;
+    HERDS.forEach(function (hd) { for (var k = 0; k < hd.n; k++) out.push(animalSVG(hd.kind, id++, hd.kind === 'impala' && k % 3 === 0)); });
+    return out.join('');
   }
   function startWildlife(svg, host) {
-    var R = Math.random, herd = [], last = 0, raf = 0, visible = true;
-    var kinds = ['jackal', 'jackal', 'hyena', 'hyena'];
-    kinds.forEach(function (k, i) {
-      var el = svg.querySelector('[data-a="' + i + '"]');
-      var a = { kind: k, el: el, flip: el.querySelector('.cm-flip'), bob: el.querySelector('.cm-bob'), x: ROAM.x0 + R() * (ROAM.x1 - ROAM.x0), y: ROAM.y0 + R() * (ROAM.y1 - ROAM.y0), tx: 0, ty: 0, pause: R() * 2, dir: 1, phase: R() * 6, speed: SHAPES[k].speed * (.85 + R() * .3) };
-      pick(a); herd.push(a);
+    var R = Math.random, last = 0, raf = 0, visible = true, id = 0;
+    var clampX = function (x) { return Math.min(ROAM.x1 - 25, Math.max(ROAM.x0 + 45, x)); };
+    var clampY = function (y) { return Math.min(ROAM.y1 - 10, Math.max(ROAM.y0 + 10, y)); };
+    var herds = HERDS.map(function (hd) { return { x: hd.c[0], y: hd.c[1], tx: hd.c[0], ty: hd.c[1], pause: R() * 4, vx: 1 }; });
+    var animals = [];
+    HERDS.forEach(function (hd, hi) {
+      for (var k = 0; k < hd.n; k++) {
+        var el = svg.querySelector('[data-a="' + (id++) + '"]');
+        var a = { herd: hi, s: SHAPES[hd.kind], el: el, flip: el.querySelector('.cm-flip'), bob: el.querySelector('.cm-bob'), ox: (R() - .5) * 70, oy: (R() - .5) * 38, dir: R() < .5 ? -1 : 1, phase: R() * 6 };
+        a.x = herds[hi].x + a.ox; a.y = herds[hi].y + a.oy; animals.push(a);
+      }
     });
-    // hyenas like to travel together
-    herd[3].x = herd[2].x + 30; herd[3].y = herd[2].y + 12;
-    function pick(a, near) {
-      var cx = near ? near.tx : a.x, cy = near ? near.ty : a.y, d = near ? 40 : 90 + R() * 160, ang = R() * Math.PI * 2;
-      a.tx = Math.min(ROAM.x1, Math.max(ROAM.x0, cx + Math.cos(ang) * d));
-      a.ty = Math.min(ROAM.y1, Math.max(ROAM.y0, cy + Math.sin(ang) * d * .7));
-    }
     function draw(a, moving, t) {
-      var bob = moving ? Math.abs(Math.sin(t * (a.kind === 'jackal' ? 14 : 10) + a.phase)) * -1.4 : 0;
-      a.el.setAttribute('transform', 'translate(' + r1(a.x) + ' ' + r1(a.y) + ')');
+      var bob = moving ? Math.abs(Math.sin(t * 9 + a.phase)) * -1.1 : (Math.sin(t * 1.3 + a.phase) > .6 ? .9 : 0);   // walking or grazing
+      a.el.setAttribute('transform', 'translate(' + r1(a.x) + ' ' + r1(a.y) + ') scale(' + AS + ')');
       a.flip.setAttribute('transform', 'scale(' + a.dir + ' 1)');
-      a.bob.setAttribute('transform', 'translate(' + (-SHAPES[a.kind].w / 2) + ' ' + r1(-SHAPES[a.kind].h + bob) + ')');
+      a.bob.setAttribute('transform', 'translate(' + (-a.s.w / 2) + ' ' + r1(-a.s.h + bob) + ')');
     }
     function tick(ts) {
       raf = 0; if (!visible || document.hidden) return;
-      var t = ts / 1000, dt = last ? Math.min(.1, t - last) : 0; last = t;
-      herd.forEach(function (a, i) {
-        if (a.pause > 0) { a.pause -= dt; draw(a, false, t); return; }
-        var dx = a.tx - a.x, dy = a.ty - a.y, dist = Math.hypot(dx, dy);
-        if (dist < 2) { a.pause = R() < .55 ? 1 + R() * 3.5 : 0; pick(a, a.kind === 'hyena' && i === 3 ? herd[2] : null); draw(a, false, t); return; }
-        var step = Math.min(dist, a.speed * dt);
-        a.x += dx / dist * step; a.y += dy / dist * step;
-        if (Math.abs(dx) > .5) a.dir = dx > 0 ? 1 : -1;
-        draw(a, true, t);
+      var t = ts / 1000, dt = last ? Math.max(0, Math.min(.1, t - last)) : 0; last = t;
+      herds.forEach(function (hd) {
+        if (hd.pause > 0) { hd.pause -= dt; return; }
+        var dx = hd.tx - hd.x, dy = hd.ty - hd.y, d = Math.hypot(dx, dy);
+        if (d < 2) { var ang = R() * Math.PI * 2, dist = 60 + R() * 120; hd.tx = clampX(hd.x + Math.cos(ang) * dist); hd.ty = clampY(hd.y + Math.sin(ang) * dist * .7); hd.pause = 2 + R() * 6; return; }
+        var st = Math.min(d, 7 * dt); hd.x = clampX(hd.x + dx / d * st); hd.y = clampY(hd.y + dy / d * st); if (Math.abs(dx) > .3) hd.vx = dx > 0 ? 1 : -1;
+      });
+      animals.forEach(function (a) {
+        var hd = herds[a.herd], moving = hd.pause <= 0;
+        if (R() < .004) { a.ox = Math.max(-40, Math.min(40, a.ox + (R() - .5) * 16)); a.oy = Math.max(-22, Math.min(22, a.oy + (R() - .5) * 10)); }
+        a.x += (hd.x + a.ox - a.x) * Math.min(1, dt * 1.2); a.y += (hd.y + a.oy - a.y) * Math.min(1, dt * 1.2);
+        if (moving) a.dir = hd.vx; else if (R() < .002) a.dir *= -1;
+        draw(a, moving, t);
       });
       raf = requestAnimationFrame(tick);
     }
-    herd.forEach(function (a) { draw(a, false, 0); });
+    animals.forEach(function (a) { draw(a, false, 0); });
     if (reduce) return;
     new IntersectionObserver(function (es) { visible = es[0].isIntersecting; if (visible && !raf) { last = 0; raf = requestAnimationFrame(tick); } }).observe(host);
     document.addEventListener('visibilitychange', function () { if (!document.hidden && visible && !raf) { last = 0; raf = requestAnimationFrame(tick); } });
@@ -216,7 +220,7 @@
   K.campMap = function (host, opts) {
     host.classList.add('campmap');
     host.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Illustrated map of Kyleu Bush Camp: the fenced camp with Inside 1-7 on the left, open unfenced stands 1-10 on the right and self-sufficient stands S1-S6 along the Kaallaagte spruit">' + terrain(opts.stands) +
-      '<g class="cm-wildlife">' + animalSVG('jackal', 0) + animalSVG('jackal', 1) + animalSVG('hyena', 2) + animalSVG('hyena', 3) + '</g></svg><div class="map-bubble" hidden></div>';
+      '<g class="cm-wildlife">' + herdsSVG() + '</g></svg><div class="map-bubble" hidden></div>';
     var svg = host.querySelector('svg'), bubble = host.querySelector('.map-bubble'), pins = [], current = null, hideT, lastPointer = 'mouse';
     startWildlife(svg, host);
 
