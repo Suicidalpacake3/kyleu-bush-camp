@@ -26,36 +26,11 @@
       }).catch(function () { el.innerHTML = '<p class="muted">News will appear here.</p>'; });
     });
 
-    /* ---------- "A day at Kyleu" scroll story ---------- */
-    var day = $('.day');
-    if (day) {
-      if (reduce) day.classList.add('static');
-      var steps = $$('.day-step', day), orb = $('.day-orb', day), sky = $('.day-sky', day), stars = $('.day-stars', day), clock = $('.day-clock span', day);
-      var skies = [['#f9c784', '#f4845f', '#5a3d2b'], ['#9fd3ec', '#d6eef7', '#6b8f4e'], ['#4f9fd1', '#a9d6e5', '#7c9a52'], ['#f8961e', '#f3722c', '#5b2a1a'], ['#0b132b', '#1c2541', '#0d0f12']];
-      var hex = function (h) { return [parseInt(h.substr(1, 2), 16), parseInt(h.substr(3, 2), 16), parseInt(h.substr(5, 2), 16)]; };
-      var mix = function (a, b, t) { a = hex(a); b = hex(b); return 'rgb(' + a.map(function (v, i) { return Math.round(v + (b[i] - v) * t); }).join(',') + ')'; };
-      var times = [6, 8.5, 13, 17.75, 21];
-      var update = function () {
-        if (day.classList.contains('static')) return;
-        var r = day.getBoundingClientRect(), total = r.height - innerHeight;
-        var p = Math.min(1, Math.max(0, -r.top / total));
-        var seg = p * (skies.length - 1), i = Math.min(skies.length - 2, Math.floor(seg)), t = seg - i;
-        ['--sky1', '--sky2', '--sky3'].forEach(function (k, j) { sky.style.setProperty(k, mix(skies[i][j], skies[i + 1][j], t)); });
-        var active = Math.min(steps.length - 1, Math.round(p * (steps.length - 1)));
-        steps.forEach(function (s, j) { s.classList.toggle('on', j === active); });
-        var hour = times[i] + (times[i + 1] - times[i]) * t; var hh = Math.floor(hour), mm = Math.round((hour - hh) * 60 / 15) * 15; if (mm === 60) { hh++; mm = 0; }
-        clock.textContent = (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm;
-        var night = p > 0.82;
-        var st = night ? 0.15 + (p - 0.82) / 0.18 * 0.3 : Math.min(1, p / 0.8);
-        var x = 40 + 920 * st, y = (1 - st) * (1 - st) * 290 + 2 * (1 - st) * st * -120 + st * st * 290;
-        orb.style.setProperty('--ox', (4 + 92 * x / 1000) + '%');
-        orb.style.setProperty('--oy', (14 + 52 * y / 300) + '%');
-        orb.classList.toggle('moon', night);
-        stars.style.setProperty('--stars', Math.max(0, (p - 0.72) * 3.6));
-      };
-      window.addEventListener('scroll', function () { requestAnimationFrame(update); }, { passive: true });
-      window.addEventListener('resize', update); update();
-    }
+    /* ---------- "A day at Kyleu" living camp map ---------- */
+    $$('.daymap').forEach(function (wrap) {
+      if (!K.campScene) return;
+      K.stands().then(function (stands) { K.campScene(wrap, stands); }).catch(function () {});
+    });
 
     /* ---------- Discover: sub-nav highlight ---------- */
     var subnav = $('.subnav');

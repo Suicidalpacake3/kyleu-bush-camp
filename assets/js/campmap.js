@@ -45,13 +45,14 @@
   var SPRUIT = [[300, 572], [420, 548], [520, 540], [660, 542], [760, 520], [860, 506], [940, 490], [1010, 482]];
   var ROADS = [
     [[200, -10], [205, 64]],                                                    // from Kaallaagte Road
-    [[205, 64], [150, 120], [95, 200], [80, 270], [87, 330]],
+    [[205, 64], [208, 112], [210, 165]],                                         // entrance road past reception
+    [[210, 165], [150, 190], [105, 240], [87, 330]],
     [[87, 330], [91, 395], [150, 425], [204, 400], [204, 363]],
     [[150, 425], [250, 420], [308, 376]],
-    [[205, 64], [240, 150], [199, 264]],
-    [[240, 150], [264, 220], [264, 273]],
-    [[264, 220], [330, 240], [372, 280]],
-    [[240, 150], [320, 120], [390, 110], [424, 70]],
+    [[210, 165], [205, 215], [199, 264]],
+    [[205, 215], [250, 228], [264, 273]],
+    [[250, 228], [320, 245], [372, 280]],
+    [[210, 165], [270, 148], [330, 125], [390, 110], [424, 70]],
     [[390, 110], [460, 135], [514, 139], [570, 110], [608, 85]],
     [[570, 110], [620, 150], [663, 194], [710, 170], [755, 130]],
     [[710, 170], [780, 185], [847, 152]],
@@ -64,8 +65,10 @@
     [[700, 265], [740, 360], [770, 470]],
     [[740, 360], [800, 400], [840, 430], [915, 440]]
   ];
+  // game drive loop: reception → entrance road → east road → open camp loop → back
+  var DRIVE = [[176, 96], [207, 100], [209, 140], [210, 165], [270, 148], [330, 125], [390, 110], [460, 135], [514, 139], [570, 110], [620, 150], [663, 194], [710, 170], [780, 185], [800, 220], [794, 257], [700, 265], [631, 276], [580, 290], [530, 260], [490, 210], [460, 135], [390, 110], [330, 125], [270, 148], [210, 165], [209, 140], [207, 100], [176, 96]];
   var ROAM = { x0: 440, x1: 975, y0: 40, y1: 450 };   // where wildlife may wander (unfenced)
-  var BUILDINGS = { house: [92, 86, 58, 34], cottage: [104, 132, 30, 20], pool: [212, 104, 46, 24], lapa: [266, 98, 34, 32] };
+  var BUILDINGS = { house: [88, 76, 60, 30], cottage: [52, 100, 26, 18], pool: [142, 118, 44, 22], lapa: [94, 116, 38, 30] };
 
   function standXY(st) { return st.map ? [st.map.x / 100 * W, st.map.y / 100 * H] : null; }
 
@@ -87,7 +90,7 @@
     // fenced camp ground (a little greener, it's watered)
     var fp = FENCE.map(function (p) { return p.join(','); }).join(' ');
     o.push('<polygon points="' + fp + '" fill="#c3bd84" opacity=".85"/>');
-    o.push('<ellipse cx="165" cy="118" rx="98" ry="62" fill="#9fb466" opacity=".9"/>');                  // lawn
+    o.push('<ellipse cx="128" cy="112" rx="94" ry="54" fill="#9fb466" opacity=".9"/>');                  // lawn
     o.push('<rect width="' + W + '" height="' + H + '" fill="#cdb880" filter="url(#cm-grain)" opacity=".9"/>');
     // spruit (stream) with green banks
     var sp = smooth(SPRUIT);
@@ -129,7 +132,7 @@
       var x = R() * W, y = R() * H, rr = 4 + R() * 8;
       var inFence = inPoly(x, y, FENCE);
       if (inFence && R() < .45) continue;
-      if (x > 50 && x < 310 && y > 60 && y < 175) continue;                          // lawn & buildings
+      if (x > 36 && x < 200 && y > 58 && y < 168) continue;                          // lawn & buildings
       if (Math.abs(y - spruitY(x)) < 22) continue;
       var near = false, k;
       for (k = 0; k < roadPts.length; k += 1) { if (Math.abs(roadPts[k][0] - x) < 15 + rr && Math.abs(roadPts[k][1] - y) < 15 + rr && Math.hypot(roadPts[k][0] - x, roadPts[k][1] - y) < 11 + rr) { near = true; break; } }
@@ -154,8 +157,8 @@
     o.push('<g class="cm-labels">' +
       '<text x="212" y="22" class="cm-small" text-anchor="start">↑ Kaallaagte Rd · Tau Gate</text>' +
       '<g transform="translate(205 64)"><rect x="-17" y="-7" width="34" height="14" rx="7" fill="#2a1b12"/><text y="4" class="cm-tag" text-anchor="middle">GATE</text></g>' +
-      '<text x="122" y="80" class="cm-small" text-anchor="middle">Reception</text>' +
-      '<text x="235" y="146" class="cm-small" text-anchor="middle">Pool &amp; lapa</text>' +
+      '<text x="118" y="70" class="cm-small" text-anchor="middle">Reception</text>' +
+      '<text x="132" y="166" class="cm-small" text-anchor="middle">Pool &amp; lapa</text>' +
       '<text x="210" y="485" class="cm-area" text-anchor="middle">FENCED CAMP</text>' +
       '<text x="690" y="26" class="cm-area" text-anchor="middle">OPEN BUSH CAMP · UNFENCED</text>' +
       '<text class="cm-water"><textPath href="#cm-spruit" xlink:href="#cm-spruit" startOffset="58%">Kaallaagte Spruit</textPath></text>' +
@@ -303,6 +306,9 @@
     update();
     return { update: update };
   };
+
+  // shared pieces for the "day at Kyleu" scene (campscene.js)
+  K.campMapParts = { terrain: terrain, smooth: smooth, standXY: standXY, DRIVE: DRIVE };
 
   /* ---------- small zoomed map for a single stand ---------- */
   K.campMapMini = function (stands, id) {

@@ -1,5 +1,5 @@
 <!--META
-{"title":"Kyleu Bush Camp | Big 5 Wild Camping in Dinokeng, near Pretoria","desc":"Family-run bush camp in the Dinokeng Big 5 Game Reserve, 50 km from Pretoria. 23 private campsites with own ablutions & hot water, fenced, unfenced & self-sufficient. Book online.","path":"","ogimg":"hero-rooftop-tents.jpg","nav":"home","loader":true,"headerclass":"","footbg":"on-paper"}
+{"title":"Kyleu Bush Camp | Big 5 Wild Camping in Dinokeng, near Pretoria","desc":"Family-run bush camp in the Dinokeng Big 5 Game Reserve, 50 km from Pretoria. 23 private campsites with own ablutions & hot water, fenced, unfenced & self-sufficient. Book online.","path":"","ogimg":"hero-rooftop-tents.jpg","nav":"home","loader":true,"headerclass":"","footbg":"on-paper","extra_js":"<script src=\"assets/js/campmap.js\" defer></script><script src=\"assets/js/campscene.js\" defer></script>"}
 -->
 <section class="hero" aria-label="Welcome to Kyleu Bush Camp">
   <div class="hero-slides" aria-hidden="true">
@@ -140,26 +140,29 @@
   </div>
 </section>
 
-<!-- DAY AT KYLEU (scroll story) -->
-<section class="day" id="a-day" aria-label="A day at Kyleu">
-  <div class="day-sticky">
-    <div class="day-sky"></div>
-    <div class="day-stars" aria-hidden="true"></div>
-    <svg class="day-arc" viewBox="0 0 1000 300" preserveAspectRatio="none" aria-hidden="true"><path d="M40 290 Q500 -120 960 290" fill="none" stroke="rgba(255,255,255,.25)" stroke-width="2" stroke-dasharray="4 8"/></svg>
-    <div class="day-orb" aria-hidden="true"></div>
-    <svg class="day-horizon" viewBox="0 0 1440 160" preserveAspectRatio="none" aria-hidden="true" fill="currentColor"><path d="M0 160v-50c160-10 300 8 480-4s340-12 500-2 300 10 460-4v60z"/><path d="M125.0 56C150.5 46 184.5 44 210 44C239.75 44 273.75 47 295.0 56C269.5 60 248.25 57 231.25 60C210 57 184.5 61 167.5 58C150.5 61 137.75 59 125.0 56Z"/><path d="M207 110L208 81.4L171.75 59L174.3 58L210 76.2L244.0 58L246.55 59L213 84.0L214 110Z"/><path d="M1170.0 70C1188.0 60 1212.0 58 1230 58C1251.0 58 1275.0 61 1290.0 70C1272.0 74 1257.0 71 1245.0 74C1230 71 1212.0 75 1200.0 72C1188.0 75 1179.0 73 1170.0 70Z"/><path d="M1227 106L1228 87.3L1203.0 73L1204.8 72L1230 83.9L1254.0 72L1255.8 73L1233 89.0L1234 106Z"/><g transform="translate(800 14) scale(.95)"><path d="M22 52L50 46L58 44L74 10L76 3L79 2L81 5L90 10L89 13L82 12L78 15L64 48L62 60L60 62L60 100L57 100L56 66L54 66L54 100L51 100L50 64L34 64L32 100L29 100L28 65L26 65L25 100L22 100L21 62L20 56L15 72L14 71L19 55Z"/></g><g transform="translate(905 46) scale(.62)"><path d="M22 52L50 46L58 44L74 10L76 3L79 2L81 5L90 10L89 13L82 12L78 15L64 48L62 60L60 62L60 100L57 100L56 66L54 66L54 100L51 100L50 64L34 64L32 100L29 100L28 65L26 65L25 100L22 100L21 62L20 56L15 72L14 71L19 55Z"/></g></svg>
-    <div class="wrap day-inner">
-      <div class="day-head"><span class="eyebrow">A day at Kyleu</span><h2>From the first coffee to the last ember</h2></div>
-      <ol class="day-steps">
-        <li class="day-step" data-time="06:00"><img src="assets/img/photos/wildebeest-at-camp.jpg" alt="Wildebeest grazing near camp at sunrise" loading="lazy"><div><b>06:00 · Coffee with the wildebeest</b><p>Plunger on, chairs out, and the morning visitors arrive for breakfast too.</p></div></li>
-        <li class="day-step" data-time="08:30"><img src="assets/img/photos/game-drive-vehicle.jpg" alt="Kyleu open game drive vehicle" loading="lazy"><div><b>08:30 · Out on a game drive</b><p>140&nbsp;km of reserve roads to explore, self-drive or with a Kyleu guide.</p></div></li>
-        <li class="day-step" data-time="13:00"><img src="assets/img/photos/pool-kids.jpg" alt="Kids splashing in the Kyleu pool" loading="lazy"><div><b>13:00 · Pool time</b><p>When the bushveld heats up, the pool and shady lapa are calling.</p></div></li>
-        <li class="day-step" data-time="17:45"><img src="assets/img/photos/campfire-stand.jpg" alt="Campfire burning at a Kyleu campsite in the late afternoon" loading="lazy"><div><b>17:45 · Golden hour braai</b><p>Light the fire with your free bag of wood as the sky turns orange.</p></div></li>
-        <li class="day-step" data-time="21:00"><img src="assets/img/wildlife/bonfire.jpg" alt="Campfire under the Milky Way" loading="lazy"><div><b>21:00 · Stars &amp; lion calls</b><p>No electricity means no light pollution. Listen for hyena and jackal in the dark.</p></div></li>
-      </ol>
-      <div class="day-clock" aria-hidden="true"><svg><use href="#i-clock"/></svg><span>06:00</span></div>
+<!-- DAY AT KYLEU: living camp map driven by scrolling (assets/js/campscene.js) -->
+<section class="daymap" id="a-day" aria-label="A day at Kyleu">
+  <div class="dm-sticky">
+    <div class="wrap dm-top">
+      <div><span class="eyebrow">A day at Kyleu</span><h2>Scroll through a day in camp</h2></div>
+      <div class="dm-clock" aria-hidden="true"><svg><use href="#i-clock"/></svg><span data-dm-clock>05:30</span></div>
     </div>
+    <div class="wrap dm-stage">
+      <div class="dm-mapwrap">
+        <div class="dm-mapbox"><div class="dm-pan"></div></div>
+        <div class="dm-card" hidden></div>
+      </div>
+    </div>
+    <div class="wrap dm-timeline" aria-hidden="true"><div class="dm-track"><div class="dm-progress"></div></div><div class="dm-ticks"></div></div>
   </div>
+  <ol class="sr-only">
+    <li>06:00, coffee with the wildebeest on the open stands.</li>
+    <li>08:30, the Kyleu game drive vehicle leaves reception for a loop through the reserve.</li>
+    <li>13:00, pool time while the animals rest in the shade.</li>
+    <li>15:00, new campers arrive and set up their tents and caravans.</li>
+    <li>17:45, golden hour braai fires are lit across camp.</li>
+    <li>21:00, jackals and hyenas come out after dark.</li>
+  </ol>
 </section>
 
 <!-- WILDLIFE -->
