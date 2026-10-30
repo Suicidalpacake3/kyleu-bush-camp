@@ -1,0 +1,164 @@
+<!--META
+{"title":"Book a Campsite — Stands, Availability & Prices | Kyleu Bush Camp","desc":"See every campsite at Kyleu Bush Camp in Dinokeng: photos, size, facilities and live price for your dates. Fenced, unfenced and self-sufficient stands from R100 pp. Book online.","path":"stay.html","ogimg":"camp-panorama.jpg","nav":"stay","headerclass":"","footbg":"","extra_js":"<script src=\"assets/js/campmap.js\" defer></script><script src=\"assets/js/booking.js\" defer></script>"}
+-->
+<section class="page-hero" style="padding-bottom:110px">
+  <div class="bg" data-parallax="0.15" style="background-image:url('assets/img/photos/camp-panorama.jpg')"></div>
+  <div class="wrap">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="index.html">Home</a><span>/</span>Stay &amp; Book</nav>
+    <span class="eyebrow">23 stands · 3 camp areas</span>
+    <h1 class="split-words">Find your stand in the bush</h1>
+    <p class="lead" data-reveal>Choose your dates and see which stands are free, what they look like and exactly what you'll pay — then book in a couple of minutes.</p>
+  </div>
+</section>
+
+<div class="wrap">
+  <div class="area-intro" data-stagger>
+    <button class="area-pick" type="button" data-area="fenced" data-reveal><img src="assets/img/photos/fenced-camp-lawn.jpg" alt=""><span><b>Fenced Bush Camp</b><small>7 stands · private ablutions · near the pool</small><span class="from">from <span data-price="Ablution stands|Weekday per person per night">R160</span> pppn</span></span></button>
+    <button class="area-pick" type="button" data-area="unfenced" data-reveal><img src="assets/img/photos/wildebeest-at-camp.jpg" alt=""><span><b>Open Bush Camp</b><small>10 unfenced stands · private ablutions</small><span class="from">from <span data-price="Ablution stands|Weekday per person per night">R160</span> pppn</span></span></button>
+    <button class="area-pick" type="button" data-area="self-sufficient" data-reveal><img src="assets/img/photos/gazebo-campfire.jpg" alt=""><span><b>Self-Sufficient Sites</b><small>6 unfenced stands on the spruit · no facilities</small><span class="from">from <span data-price="Self-sufficient|Weekday per person per night">R100</span> pppn</span></span></button>
+  </div>
+</div>
+
+<div class="searchbar-wrap" style="margin-top:28px">
+  <div class="wrap searchbar" role="search" aria-label="Search stands">
+    <div class="sb-fields">
+      <div class="sb-field"><label for="sb-in">Arrive</label><input id="sb-in" type="date"></div>
+      <div class="sb-field"><label for="sb-out">Leave</label><input id="sb-out" type="date"></div>
+      <div class="sb-field" style="position:relative"><label for="sb-guests">Guests</label>
+        <button id="sb-guests" type="button" aria-haspopup="true" aria-expanded="false"><span id="sb-guest-sum">2 adults</span><svg><use href="#i-down"/></svg></button>
+        <div class="guest-pop" hidden>
+          <div class="gp-row"><span><b>Adults</b><small>12 years and older</small></span><span class="sb-guests"><button type="button" data-gstep="adults" data-d="-1" aria-label="Fewer adults">−</button><output data-g="adults">2</output><button type="button" data-gstep="adults" data-d="1" aria-label="More adults">+</button></span></div>
+          <div class="gp-row"><span><b>Pensioners</b><small>RSA pensioners · weekday special</small></span><span class="sb-guests"><button type="button" data-gstep="pens" data-d="-1" aria-label="Fewer pensioners">−</button><output data-g="pens">0</output><button type="button" data-gstep="pens" data-d="1" aria-label="More pensioners">+</button></span></div>
+          <div class="gp-row"><span><b>Children</b><small>Under 12 · stay free</small></span><span class="sb-guests"><button type="button" data-gstep="kids" data-d="-1" aria-label="Fewer children">−</button><output data-g="kids">0</output><button type="button" data-gstep="kids" data-d="1" aria-label="More children">+</button></span></div>
+        </div>
+      </div>
+    </div>
+    <div class="sb-pills" role="group" aria-label="Camp area">
+      <button class="pill" type="button" data-area="">All areas</button>
+      <button class="pill" type="button" data-area="fenced">Fenced</button>
+      <button class="pill" type="button" data-area="unfenced">Unfenced</button>
+      <button class="pill" type="button" data-area="self-sufficient">Self-sufficient</button>
+    </div>
+    <div class="sb-view" role="group" aria-label="View">
+      <button type="button" data-view="grid" class="on"><svg><use href="#i-grid"/></svg>Stands</button>
+      <button type="button" data-view="map"><svg><use href="#i-map"/></svg>Map</button>
+    </div>
+  </div>
+</div>
+
+<section class="section-sm" id="results" style="padding-top:10px">
+  <div class="wrap">
+    <div class="results-head">
+      <div><h2 data-results-title>Loading stands…</h2><div class="muted" data-results-sub></div></div>
+      <a class="link-arrow" href="https://www.q2b.co.za/OnlineBooking/OnlineRooms/1504" data-q2b target="_blank" rel="noopener" style="font-size:.88rem">Prefer our current booking system?</a>
+    </div>
+    <div class="rule-note hidden" data-weekend role="status"><svg><use href="#i-info"/></svg><span></span><button class="btn btn-sm" type="button" data-fix-weekend>Fix my dates</button></div>
+    <div class="stands-grid" aria-live="polite"></div>
+    <div id="map-view" hidden>
+      <div class="sitemap-wrap" id="map">
+        <div class="sitemap"></div>
+        <div class="map-legend"><span><i style="background:var(--ok)"></i>Available for your dates</span><span><i style="background:var(--bad)"></i>Booked</span><span>Hover a stand for a preview, click to book</span><span><i class="sq" style="background:#efe4cf;border:1px solid #9c7b55"></i>Private ablution</span><span>S1–S6 = self-sufficient stands</span><span>🐾 Jackals &amp; hyenas roam the unfenced area</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section-sm bg-paper">
+  <div class="wrap">
+    <div class="features" data-stagger>
+      <div class="feature" data-reveal><div class="ic"><svg><use href="#i-shield"/></svg></div><h3>Book with confidence</h3><p>50% deposit secures your stand. Balance due 7 days before you arrive.</p></div>
+      <div class="feature" data-reveal><div class="ic"><svg><use href="#i-kid"/></svg></div><h3>Kids under 12 free</h3><p>Only adults and pensioners are charged — children camp for free.</p></div>
+      <div class="feature" data-reveal><div class="ic"><svg><use href="#i-cal"/></svg></div><h3>Weekend = Fri + Sat</h3><p>Weekends and long weekends are booked as a whole (minimum 2 nights).</p></div>
+      <div class="feature" data-reveal><div class="ic"><svg><use href="#i-wa"/></svg></div><h3>Big group?</h3><p>Need more than one stand or more guests? <a href="https://wa.me/27604584478" data-setting-href="wa">WhatsApp us</a> and we'll sort it out.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- Stand detail sheet -->
+<div class="sheet-backdrop"></div>
+<aside class="sheet" aria-hidden="true" aria-label="Stand details" role="dialog">
+  <button class="sheet-close" type="button" aria-label="Close"><svg><use href="#i-x"/></svg></button>
+  <div class="sheet-scroll"></div>
+  <div class="book-box"><div class="tot"><b>—</b><small></small></div><button class="btn" type="button" data-reserve>Reserve <svg><use href="#i-arrow"/></svg></button></div>
+</aside>
+
+<!-- Checkout -->
+<div class="modal" role="dialog" aria-modal="true" aria-label="Complete your booking">
+  <div class="modal-card">
+    <button class="mc-close" type="button" aria-label="Close"><svg><use href="#i-x"/></svg></button>
+    <div class="mc-main">
+      <ol class="steps"><li>Your details</li><li>Extras &amp; rules</li><li>Payment</li><li>Confirmed</li></ol>
+
+      <div class="mc-step" data-step="1">
+        <h2>Who's coming camping?</h2>
+        <p class="muted">We'll use these details for your booking, invoice and gate list only.</p>
+        <div class="form-grid">
+          <div class="grid-2">
+            <div class="field"><label for="f-first">First name</label><input id="f-first" name="first" autocomplete="given-name" required><span class="msg">Please add your first name</span></div>
+            <div class="field"><label for="f-last">Surname</label><input id="f-last" name="last" autocomplete="family-name" required><span class="msg">Please add your surname</span></div>
+          </div>
+          <div class="grid-2">
+            <div class="field"><label for="f-email">Email</label><input id="f-email" name="email" type="email" autocomplete="email" required><span class="msg">We need a valid email for your confirmation</span></div>
+            <div class="field"><label for="f-phone">Mobile number</label><input id="f-phone" name="phone" type="tel" autocomplete="tel" placeholder="e.g. 082 123 4567" required><span class="msg">Please add a mobile number</span></div>
+          </div>
+          <p class="fieldset-title">Your setup</p>
+          <div class="grid-3">
+            <div class="field"><label for="f-setup">Camping with</label><select id="f-setup" name="setup" required><option value="">Choose…</option><option>Ground tent</option><option>Rooftop tent</option><option>Off-road trailer</option><option>Caravan</option><option>Motorhome / camper</option><option>Mixed group</option></select><span class="msg">Please choose</span></div>
+            <div class="field"><label for="f-veh">Vehicles</label><select id="f-veh" name="vehicles"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></div>
+            <div class="field"><label for="f-eta">Arriving around</label><select id="f-eta" name="eta"><option>Before 12:00</option><option selected>12:00 – 15:00</option><option>15:00 – 18:00</option><option>After 18:00</option></select></div>
+          </div>
+          <div class="field"><label for="f-reg">Vehicle registration(s) <span class="opt">(optional — speeds up check-in)</span></label><input id="f-reg" name="reg" placeholder="e.g. CA 123-456"></div>
+          <div class="field"><label for="f-notes">Anything we should know? <span class="opt">(optional)</span></label><textarea id="f-notes" name="notes" placeholder="Celebrating something? Travelling with a big group? Need a porta potty?"></textarea></div>
+        </div>
+        <div class="mc-actions"><span class="muted" style="font-size:.85rem"><svg width="14" height="14" style="vertical-align:-2px"><use href="#i-lock"/></svg> Your details are protected under POPIA. <a href="policies.html#privacy" target="_blank">Privacy</a></span><button class="btn" type="button" data-next>Continue <svg><use href="#i-arrow"/></svg></button></div>
+      </div>
+
+      <div class="mc-step" data-step="2">
+        <h2>Make it even better</h2>
+        <p class="muted">Add a guided game drive or have wood and ice waiting. You can also buy these at the camp shop.</p>
+        <div data-extras></div>
+        <p class="fieldset-title" style="margin-top:26px">Before you book</p>
+        <div class="form-grid" style="margin-top:12px">
+          <label class="check"><input type="checkbox" name="tc" required><span>I've read and accept the <a href="policies.html" target="_blank">terms, payment &amp; cancellation policy</a>, and understand that <b>camping at Kyleu is entirely at my own risk</b> — wild animals roam freely.</span></label>
+          <label class="check"><input type="checkbox" name="rules" required><span>No pets, no music, quiet from 22:00 and fires only in the braai areas provided.</span></label>
+          <label class="check"><input type="checkbox" name="dk" required><span>I understand Dinokeng's conservation &amp; self-drive fees are paid separately to the reserve.</span></label>
+          <label class="check"><input type="checkbox" name="news"><span>Send me the occasional Kyleu newsletter and special offers. <span class="muted">(optional)</span></span></label>
+        </div>
+        <div class="mc-actions"><button class="btn btn-ghost" type="button" data-back>Back</button><button class="btn" type="button" data-next>Continue to payment <svg><use href="#i-arrow"/></svg></button></div>
+      </div>
+
+      <div class="mc-step" data-step="3">
+        <h2>Secure your stand</h2>
+        <p class="muted">Choose how you'd like to pay.</p>
+        <div class="demo-flag"><svg><use href="#i-info"/></svg><span>Demo mode — this is a mock-up. No card is charged and nothing is sent. Use the "fill test card" link to try it.</span></div>
+        <div class="pay-opts">
+          <label class="pay-opt" data-pay="deposit"><input type="radio" name="pay" value="deposit"><span><b>Pay the deposit now by card</b><small>Balance due 7 days before arrival</small></span><span class="amt">R0</span></label>
+          <label class="pay-opt" data-pay="full"><input type="radio" name="pay" value="full"><span><b>Pay in full by card</b><small>All done — nothing more to pay before you arrive</small></span><span class="amt">R0</span></label>
+          <label class="pay-opt" data-pay="eft"><input type="radio" name="pay" value="eft"><span><b>Instant EFT</b><small>Pay securely from your banking app — confirmed immediately</small></span><span class="amt">R0</span></label>
+          <label class="pay-opt" data-pay="invoice"><input type="radio" name="pay" value="invoice"><span><b>Send me an invoice (EFT / bank deposit)</b><small>Pay within 5 days to keep your booking</small></span><span class="amt">R0</span></label>
+        </div>
+        <div data-card>
+          <div class="card-box">
+            <span class="card-brand"></span>
+            <div class="form-grid">
+              <div class="field"><label for="c-name">Name on card</label><input id="c-name" name="cardname" autocomplete="cc-name"><span class="msg">Required</span></div>
+              <div class="field"><label for="c-num">Card number</label><input id="c-num" name="cardnum" inputmode="numeric" autocomplete="cc-number" placeholder="1234 5678 9012 3456"><span class="msg">Please check the card number</span></div>
+              <div class="grid-2">
+                <div class="field"><label for="c-exp">Expiry</label><input id="c-exp" name="exp" inputmode="numeric" autocomplete="cc-exp" placeholder="MM / YY"><span class="msg">Check the expiry date</span></div>
+                <div class="field"><label for="c-cvc">CVC</label><input id="c-cvc" name="cvc" inputmode="numeric" autocomplete="cc-csc" placeholder="123" maxlength="4"><span class="msg">3 or 4 digits</span></div>
+              </div>
+            </div>
+          </div>
+          <p class="secure"><svg><use href="#i-lock"/></svg>Secured by 3-D Secure · <button type="button" data-demo-card style="background:none;border:0;padding:0;color:var(--ember);font-weight:800;text-decoration:underline">fill test card</button></p>
+        </div>
+        <div data-eft hidden>
+          <div class="eft-box"><b>How it works</b><p class="muted" style="margin:6px 0 0">You'll get your invoice with Kyleu's banking details and your booking reference by email. Please send proof of payment to <a href="mailto:info@kyleu.co.za">info@kyleu.co.za</a>.</p></div>
+        </div>
+        <div class="mc-actions"><button class="btn btn-ghost" type="button" data-back>Back</button><button class="btn" type="button" data-pay><span data-pay-btn-label>Pay </span><span data-pay-amount>R0</span></button></div>
+      </div>
+
+      <div class="mc-step" data-step="4"><div data-success></div></div>
+    </div>
+    <aside class="mc-side" aria-label="Booking summary"></aside>
+  </div>
+</div>

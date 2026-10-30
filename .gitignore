@@ -1,0 +1,5 @@
+# Original source photos (the site uses the cleaned-up copies in assets/img)
+Images/
+.claude/
+Thumbs.db
+desktop.ini

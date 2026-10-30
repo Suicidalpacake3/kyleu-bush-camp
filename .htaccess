@@ -1,0 +1,18 @@
+# Old WordPress addresses → new pages (keeps Google rankings and old links working)
+RewriteEngine On
+RewriteRule ^fenced-bush-camp/?$ /discover.html#areas [R=301,NE,L]
+RewriteRule ^open-bush-camp/?$ /discover.html#areas [R=301,NE,L]
+RewriteRule ^self-sufficient-sites/?$ /discover.html#areas [R=301,NE,L]
+RewriteRule ^site-map/?$ /stay.html#map [R=301,NE,L]
+RewriteRule ^dinokeng-fees/?$ /discover.html#dinokeng-fees [R=301,NE,L]
+RewriteRule ^rates/?$ /discover.html#rates [R=301,NE,L]
+RewriteRule ^map-directions/?$ /contact.html [R=301,NE,L]
+RewriteRule ^game-drives/?$ /discover.html#game-drives [R=301,NE,L]
+RewriteRule ^product-catalogue/?$ /discover.html#shop [R=301,NE,L]
+RewriteRule ^terms-and-conditions/?$ /policies.html [R=301,NE,L]
+RewriteRule ^contact-us/?$ /contact.html [R=301,NE,L]
+RewriteRule ^wp-content/uploads/2026/06/PAIA-Manual-002\.pdf$ /docs/Kyleu-PAIA-Manual.pdf [R=301,NE,L]
+
+# Make sure the .md content files are served as readable text
+AddType text/markdown .md
+AddCharset utf-8 .md .txt
