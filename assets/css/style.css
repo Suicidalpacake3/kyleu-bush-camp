@@ -568,3 +568,6 @@ html, body { overflow-x: clip; }
 .rail { scroll-padding-inline: 24px; }
 .rail::after { content: ""; width: 1px; }
 @media (max-width: 600px) { .rail { scroll-padding-inline: 16px; } }
+
+/* stop the browser nudging the scroll position when sticky bars move */
+html { overflow-anchor: none; }

@@ -26,19 +26,34 @@
 
   document.addEventListener('DOMContentLoaded', function () {
     /* ---------- header ---------- */
+    // Swipe-away header: hides after you scroll DOWN a clear distance, comes back after
+    // you scroll UP a clear distance (or near the top). Small or slow scroll movements
+    // never flip it, so it can't flicker. Sticky bars (dates, Discover tabs) follow it
+    // via the body class, using transforms so the page never jumps.
     var header = $('.site-header');
-    var lastY = 0;
-    function onScroll() {
-      var y = window.scrollY;
-      if (header) {
-        header.classList.toggle('solid', y > 40);
-        header.classList.toggle('hide', y > 500 && y > lastY + 4 && !document.body.classList.contains('lock'));
-        if (y < lastY - 4) header.classList.remove('hide');
-      }
-      var mc = $('.mobile-cta'); if (mc) mc.classList.toggle('show', y > 520);
-      lastY = y;
+    var lastY = window.scrollY, travel = 0, hidden = false, ticking = false;
+    var HIDE_AFTER = 48, SHOW_AFTER = 36;
+    function setHidden(h) {
+      if (h === hidden) return;
+      hidden = h;
+      if (header) header.classList.toggle('hide', h);
+      document.body.classList.toggle('header-hidden', h);
     }
-    window.addEventListener('scroll', onScroll, { passive: true }); onScroll();
+    function onScroll() {
+      ticking = false;
+      var y = Math.max(0, window.scrollY), dy = y - lastY; lastY = y;
+      if (header) header.classList.toggle('solid', y > 40);
+      var mc = $('.mobile-cta'); if (mc) mc.classList.toggle('show', y > 520);
+      if (document.body.classList.contains('lock')) { travel = 0; return; }     // menu / popup open: leave it alone
+      if (y < 120) { travel = 0; setHidden(false); return; }
+      if (dy === 0) return;
+      if ((dy > 0) !== (travel > 0)) travel = 0;                                 // direction changed: start counting again
+      travel += dy;
+      if (travel > HIDE_AFTER) setHidden(true);
+      else if (travel < -SHOW_AFTER) setHidden(false);
+    }
+    window.addEventListener('scroll', function () { if (!ticking) { ticking = true; requestAnimationFrame(onScroll); } }, { passive: true });
+    onScroll();
 
     /* desktop dropdown */
     $$('.nav-drop').forEach(function (d) {

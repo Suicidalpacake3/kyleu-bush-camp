@@ -4,7 +4,6 @@
 
 /* ---------- Booking / Stay page ---------- */
 .searchbar-wrap { position: sticky; top: calc(var(--header-h) - 1px); z-index: 40; background: rgba(248, 241, 229, .96); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); transition: top .35s var(--ease); }
-.site-header.hide ~ main .searchbar-wrap { top: 0; }
 .searchbar { display: flex; gap: 10px; align-items: center; padding: 12px 0; flex-wrap: wrap; }
 .sb-fields { display: flex; background: #fff; border-radius: 16px; border: 1.5px solid var(--line); box-shadow: var(--shadow-sm); flex: 1 1 560px; min-width: 0; }
 .sb-field { padding: 8px 16px; display: flex; flex-direction: column; min-width: 0; flex: 1; position: relative; }
@@ -219,7 +218,6 @@
 
 /* ---------- Discover page ---------- */
 .subnav { position: sticky; top: calc(var(--header-h) - 1px); z-index: 40; background: rgba(248,241,229,.96); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); transition: top .35s var(--ease); }
-.site-header.hide ~ main .subnav { top: 0; }
 .subnav-inner { display: flex; gap: 6px; overflow-x: auto; padding: 10px 0; scrollbar-width: none; scroll-behavior: smooth; }
 .subnav-inner::-webkit-scrollbar { display: none; }
 .subnav a { flex: none; display: inline-flex; align-items: center; gap: 7px; padding: 9px 15px; border-radius: 999px; font-weight: 800; font-size: .88rem; text-decoration: none; color: var(--bark-2); border: 1.5px solid transparent; transition: .2s; }
@@ -522,3 +520,6 @@
   .dm-card img { min-height: 96px; }
   .dm-card-body p { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 }
+
+/* sticky bars slide up with the header once they are stuck (html has overflow-anchor: none, so the page never jumps) */
+body.header-hidden .searchbar-wrap, body.header-hidden .subnav { top: 0; }
