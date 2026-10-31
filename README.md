@@ -15,7 +15,8 @@ A fast, static website (plain HTML, CSS and JavaScript) for Kyleu Bush Camp in t
 | `contact.html` | Map (no API key needed), turn-by-turn directions, contact details, message form |
 | `news.html` | Blog / camp news (list plus single post via `news.html?post=…`) |
 | `policies.html` | Terms, payment & cancellation, privacy (POPIA), PAIA manual |
-| `admin/` | Staff admin MOCK-UP (kyleu.co.za/admin): dashboard, bookings, EFT payments queue, calendar, guests, payments, shop & game drives, enquiries, stands & blocks (add, copy or remove stands and change their photos), shop products, rates, reports (period compare, animated tiles and charts in the MegaVolt style), settings. Uses made-up demo data saved only in the browser; bookings made in the website demo show up here too. Hidden from search engines. |
+| `admin/` | Staff admin MOCK-UP (kyleu.co.za/admin), grouped like hotel software: Front desk (dashboard, bookings, calendar, inbox with full email threads, guests), Money (EFT payments with proof of payment, payments ledger and money still owed, reports), Shop & activities (till with sales history and refunds, game drive schedule, products with stock), Setup (stands with photos, rates & fees in tabs, settings). Uses made-up demo data saved only in the browser; bookings and proof of payment sent from the website demo show up here too. Hidden from search engines. |
+| `pop.html` | "Send proof of payment" page: guests who paid by EFT upload their bank proof with their booking reference, and it lands on the booking in the admin (no emailing needed). Demo: kept in the browser only. |
 
 **Card and EFT prices:** `content/prices.md` holds the normal (EFT) price. The website adds the card fee ("Card payment fee percentage" under Booking rules, now 3%) and shows the card price crossed out next to the EFT price. Paying by card charges the card price; EFT pays the normal price.
 

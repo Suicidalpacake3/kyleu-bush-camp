@@ -1,0 +1,51 @@
+<!--META
+{"title":"Send Proof of Payment | Kyleu Bush Camp","desc":"Paid for your Kyleu Bush Camp booking by EFT? Upload your proof of payment here with your booking reference and we will confirm your stand.","path":"pop.html","ogimg":"entrance-sign.jpg","nav":"","headerclass":"","footbg":"","extra_js":"<script src=\"assets/js/pop.js\" defer></script>"}
+-->
+<section class="page-hero page-hero-sm">
+  <div class="bg" data-parallax="0.15" style="background-image:url('assets/img/hero/kyleu-camp.jpg');background-position:50% 55%"></div>
+  <div class="wrap">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="index.html">Home</a><span>/</span>Proof of payment</nav>
+    <span class="eyebrow">Paid by EFT?</span>
+    <h1 class="split-words">Send us your proof of payment</h1>
+    <p class="lead" data-reveal>Upload it here and it goes straight onto your booking. No need to email it.</p>
+  </div>
+</section>
+
+<section class="section" style="padding-top:56px">
+  <div class="wrap pop-grid">
+    <div data-reveal="left">
+      <form class="contact-form form-grid pop-form" data-pop novalidate>
+        <h2 style="margin:0">Upload your proof of payment</h2>
+        <div class="grid-2">
+          <div class="field"><label for="p-ref">Booking reference</label><input id="p-ref" name="ref" placeholder="e.g. KY26-4F2K" autocomplete="off" autocapitalize="characters" required><span class="msg">Please add your booking reference</span></div>
+          <div class="field"><label for="p-email">Email used for the booking</label><input id="p-email" name="email" type="email" autocomplete="email" required><span class="msg">Please add your email address</span></div>
+        </div>
+        <div class="pop-found" data-found hidden></div>
+        <div class="field" data-file-field>
+          <label for="p-file">Proof of payment</label>
+          <label class="drop" data-drop>
+            <input id="p-file" type="file" name="file" accept="application/pdf,image/*" data-file>
+            <svg><use href="#i-doc"/></svg>
+            <b>Choose a file or drop it here</b>
+            <small>PDF, JPG or PNG, up to 10 MB. A screenshot from your banking app is fine.</small>
+          </label>
+          <div class="drop-file" data-picked hidden></div>
+          <span class="msg">Please choose your proof of payment</span>
+        </div>
+        <div class="field"><label for="p-note">Anything we should know? <span class="opt">(optional)</span></label><textarea id="p-note" name="note" rows="3" placeholder="e.g. Paid from my husband's account"></textarea></div>
+        <button class="btn" type="submit">Send proof of payment</button>
+        <div class="demo-flag" style="margin:0"><svg><use href="#i-info"/></svg><span>Demo mode: your file stays in this browser only, so you can see it arrive in the admin demo. Nothing is sent anywhere.</span></div>
+      </form>
+    </div>
+    <aside class="pop-side" data-reveal="right">
+      <h3>How it works</h3>
+      <ol class="next-steps">
+        <li><b>1</b><span>Pay by EFT into Kyleu's account using your <strong>booking reference</strong> as the payment reference.</span></li>
+        <li><b>2</b><span>Upload the proof of payment from your bank here. It goes straight onto your booking.</span></li>
+        <li><b>3</b><span>We check the bank and email your confirmation, usually within one working day.</span></li>
+      </ol>
+      <div class="eft-box"><b>Paid by card?</b><p class="muted" style="margin:6px 0 0">Then there is nothing to send: card payments confirm your booking straight away.</p></div>
+      <div class="eft-box"><b>Can't find your reference?</b><p class="muted" style="margin:6px 0 0">It's on your invoice email and starts with KY. You can also <a href="https://wa.me/27604584478" target="_blank" rel="noopener">WhatsApp us</a> or reply to your invoice email with the proof attached.</p></div>
+    </aside>
+  </div>
+</section>

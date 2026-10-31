@@ -394,7 +394,7 @@
       '<div class="ref">' + ref + '</div>' +
       '<p class="muted" style="font-size:.9rem">' + (paid ? K.money(paid) + ' received' + (isCard ? '' : ' by instant EFT') + '. ' : '') + 'A confirmation has been sent to <b>' + K.esc(f('email')) + '</b>.</p>' +
       '<ol class="next-steps">' +
-      (pay === 'invoice' ? '<li><b>1</b><span>We\'ll email your invoice. Pay the ' + (q.payFull ? 'full amount' : q.depPct + '% deposit (' + K.money(q.deposit) + ') within 5 days') + ' using reference <b>' + ref + '</b> and send proof of payment to info@kyleu.co.za.</span></li>' : '') +
+      (pay === 'invoice' ? '<li><b>1</b><span>We\'ll email your invoice. Pay the ' + (q.payFull ? 'full amount' : q.depPct + '% deposit (' + K.money(q.deposit) + ') within 5 days') + ' using reference <b>' + ref + '</b>, then <a href="pop.html?ref=' + encodeURIComponent(ref) + '&email=' + encodeURIComponent(f('email')) + '">upload your proof of payment</a>. It goes straight onto your booking.</span></li>' : '') +
       (!q.payFull && pay !== 'full' ? '<li><b>' + (pay === 'invoice' ? 2 : 1) + '</b><span>Balance of ' + K.money(isCard ? q.cardTotal - q.cardDeposit : q.total - q.deposit) + ' is due by ' + nice(q.balanceDue, { day: 'numeric', month: 'long' }) + '. We\'ll send a reminder.</span></li>' : '') +
       '<li><b>✓</b><span>Pay your Dinokeng conservation &amp; self-drive fees online or at Tau Gate. <a href="https://dinokeng.plnktn.io/south" target="_blank" rel="noopener">Pay Dinokeng fees</a></span></li>' +
       '<li><b>✓</b><span>Enter at Dinokeng <b>Tau Gate</b>, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km. <a href="contact.html">Directions</a></span></li></ol>' +

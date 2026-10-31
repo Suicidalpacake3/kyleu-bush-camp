@@ -23,7 +23,7 @@ LOADER = '''<div class="loader" role="status" aria-label="Loading Kyleu Bush Cam
 def strip(s):
     return re.sub(r'\s+', ' ', html.unescape(re.sub(r'<[^>]+>', '', s))).strip()
 
-for name in ['index', 'stay', 'discover', 'dinokeng', 'news', 'contact', 'policies']:
+for name in ['index', 'stay', 'discover', 'dinokeng', 'news', 'contact', 'policies', 'pop']:
     body = open(os.path.join(SRC, name + '.html'), encoding='utf-8').read()
     m = re.match(r'<!--META\s*(\{.*?\})\s*-->\s*', body, re.S)
     meta = json.loads(m.group(1)); body = body[m.end():]
