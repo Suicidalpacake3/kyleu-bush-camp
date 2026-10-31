@@ -13,7 +13,7 @@
   var esc = function (s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
   var money = function (n) { return (n < 0 ? '-' : '') + K.money(Math.abs(n || 0)); };
   var KEY = 'kyleu-admin-demo-v1', WEB = 'kyleu-web-bookings', SESS = 'kyleu-admin-user';
-  var P, STANDS = [], DB, ME, app;
+  var P, STANDS = [], CONTENT_STANDS = [], DB, ME, app;
 
   /* ---------- dates (all as YYYY-MM-DD strings) ---------- */
   function iso(d) { var z = new Date(d.getTime() - d.getTimezoneOffset() * 6e4); return z.toISOString().slice(0, 10); }
@@ -37,12 +37,20 @@
   function cardFee() { return num('Booking rules', 'Card payment fee percentage', 3); }
   function toCard(n) { return Math.round(n * (1 + cardFee() / 100)); }
   function depPct() { return num('Booking rules', 'Deposit percentage', 50); }
-  function standById(id) { return STANDS.filter(function (s) { return s.id === id; })[0] || { id: id, name: id, area: 'fenced', guests: 8 }; }
+  function standById(id) { return STANDS.filter(function (s) { return s.id === id; })[0] || (DB && DB.gone && DB.gone[id]) || { id: id, name: id, area: 'fenced', guests: 8, photos: [] }; }
   var AREA_SHORT = { fenced: 'Fenced', unfenced: 'Unfenced', 'self-sufficient': 'Self-sufficient' };
+  // shop products: from prices.md until staff add, change or remove one here
+  function shopSec() { return P.sections.filter(function (s) { return /shop/i.test(s.title); })[0]; }
   function shopItems() {
-    var sec = P.sections.filter(function (s) { return /shop/i.test(s.title); })[0];
-    return (sec ? sec.items : []).map(function (it) { return { label: it.label, amount: num('Camp shop', it.label, it.amount) }; });
+    if (DB && DB.products) return DB.products;
+    var sec = shopSec();
+    return (sec ? sec.items : []).map(function (it) { return { label: it.label, amount: num('Camp shop', it.label, it.amount), note: it.note || '' }; });
   }
+  function ensureProducts() { if (!DB.products) DB.products = JSON.parse(JSON.stringify(shopItems())); }
+  // stands: from stands.md until staff add, change or remove one here
+  function ensureStands() { if (!DB.stands) { DB.stands = JSON.parse(JSON.stringify(STANDS)); STANDS = DB.stands; } }
+  function imgSrc(p) { return /^(data:|https?:)/.test(p) ? p : '../' + p; }
+  function slugify(s) { return K.norm(s).replace(/[^a-z0-9 ]/g, '').trim().replace(/ +/g, '-') || 'stand'; }
   function isWeekendNight(s) { var dow = D(s).getDay(); return dow === 5 || dow === 6 || !!P.holidays[add(s, 1)]; }
   function quote(standId, ci, co, g, ex) {
     ex = ex || {};
@@ -104,9 +112,9 @@
   var SOURCES = ['Website', 'Website', 'Website', 'Website', 'WhatsApp', 'WhatsApp', 'Phone', 'Q2B', 'Website', 'Phone'];
   function seed() {
     var r = rng(2611), pick = function (a) { return a[Math.floor(r() * a.length)]; };
-    var db = { v: 1, seeded: TODAY, bookings: [], enquiries: [], blocks: [], sales: [], log: [], rates: {}, closed: {}, settings: { providerFee: 2.95 }, readEnq: {} };
+    var db = { v: 2, seeded: TODAY, gone: {}, bookings: [], enquiries: [], blocks: [], sales: [], log: [], rates: {}, closed: {}, settings: { providerFee: 2.95 }, readEnq: {} };
     var guests = [];
-    for (var i = 0; i < 46; i++) {
+    for (var i = 0; i < 420; i++) {
       var f = pick(FIRST), l = pick(LAST);
       guests.push({ first: f, last: l, email: (f + '.' + l.split(' ').pop()).toLowerCase() + '@' + pick(['gmail.com', 'outlook.com', 'icloud.com', 'mweb.co.za', 'yahoo.com']), phone: '0' + pick(['82', '83', '72', '76', '79', '61', '84']) + ' ' + Math.floor(100 + r() * 899) + ' ' + Math.floor(1000 + r() * 8999), consent: r() > .3 });
     }
@@ -123,7 +131,7 @@
       while (adults + pens + kids > st.guests) kids--;
       var ex = {}; if (r() < .25) ex.gd = 2 + Math.floor(r() * 3); if (r() < .3) ex.wood = 1 + Math.floor(r() * 4); if (r() < .15) ex.ice = 1 + Math.floor(r() * 3); if (st.area === 'self-sufficient' && r() < .3) ex.pp = 1;
       var q = quote(st.id, ci, co, { adults: adults, pens: pens, kids: kids }, ex);
-      var lead = Math.max(1, Math.floor(r() * 45) + 2), created = add(ci, -lead); if (created > TODAY) created = add(TODAY, -Math.floor(r() * 30));
+      var lead = 2 + Math.floor(r() * r() * 110), created = add(ci, -lead); if (created > TODAY) created = add(TODAY, -Math.floor(r() * Math.min(60, 4 + diff(TODAY, ci))));
       if (opts.created) created = opts.created;
       var method = r() < .55 ? 'card' : 'eft';
       var b = { ref: 'KY' + ci.slice(2, 4) + '-' + Math.floor(r() * 1679616).toString(36).toUpperCase().padStart(4, '0'), created: created + ' ' + String(7 + Math.floor(r() * 13)).padStart(2, '0') + ':' + String(Math.floor(r() * 60)).padStart(2, '0'),
@@ -155,9 +163,9 @@
     // overlaps() reads DB, so point DB at the new data while seeding
     DB = db;
     STANDS.forEach(function (st) {
-      for (var w = -6; w <= 10; w++) {
-        var f = add(fri, w * 7), dec = D(f).getMonth() === 11;
-        var p = (w < 0 ? .62 : w < 3 ? .55 : w < 6 ? .4 : .22) + (dec ? .25 : 0);
+      for (var w = -26; w <= 10; w++) {
+        var f = add(fri, w * 7), mo = D(f).getMonth(), dec = mo === 11, winter = mo >= 5 && mo <= 7;
+        var p = (w < 0 ? .62 : w < 3 ? .55 : w < 6 ? .4 : .22) + (dec ? .25 : 0) - (winter ? .2 : 0);
         if (r() < p) { var ci = r() < .15 ? add(f, -1) : f, co = r() < .2 ? add(f, 3) : add(f, 2); make(st, ci, co); }
         if (r() < (w < 2 ? .16 : .08)) { var m = add(f, 3 + Math.floor(r() * 2)); make(st, m, add(m, 1 + Math.floor(r() * 2))); }
       }
@@ -171,9 +179,9 @@
     // and a few fresh EFT requests waiting for payment
     STANDS.slice(8).filter(function (s) { return !overlaps(s.id, add(fri, 14), add(fri, 16)); }).slice(0, 3).forEach(function (s, i) { var b = make(s, add(fri, 14), add(fri, 16), { created: add(TODAY, -i), pending: true }); if (b) { b.method = 'eft'; b.total = b.eft; b.status = 'pending'; b.payments = []; b.pop = i === 0; } });
     db.bookings.sort(function (a, b) { return a.ci < b.ci ? -1 : 1; });
-    // shop sales, last 14 days
+    // shop sales, last 6 months
     var items = shopItems();
-    for (var dd = -14; dd <= 0; dd++) {
+    for (var dd = -182; dd <= 0; dd++) {
       var nSales = 2 + Math.floor(r() * 5);
       for (var s = 0; s < nSales; s++) {
         var it = items[Math.floor(r() * Math.min(items.length, 5))] || { label: 'Ice per bag', amount: 15 }, qty = 1 + Math.floor(r() * 3), m = r() < .55 ? 'card' : 'cash';
@@ -193,10 +201,12 @@
     db.log.sort(function (a, b) { return a.at < b.at ? 1 : -1; });
     return db;
   }
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(DB)); return true; } catch (e) { return false; } }
   function loadDB() {
     try { DB = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { DB = null; }
-    if (!DB || DB.v !== 1) { DB = seed(); save(); }
+    if (!DB || DB.v !== 2) { DB = seed(); save(); }
+    DB.gone = DB.gone || {};
+    if (DB.stands) STANDS = DB.stands;   // stands added or changed in this admin
     importWeb();
   }
   // bookings made in the website's demo checkout (same browser)
@@ -642,7 +652,10 @@
         '<label class="fld"><span>Stand (optional)</span><select data-sale-stand><option value="">Walk-in / not on a stand</option>' + STANDS.map(function (s) { return '<option>' + esc(s.name) + '</option>'; }).join('') + '</select></label>' +
         '<div class="row-btns"><button class="btn" data-sell="cash">' + ic('cash') + 'Cash ' + money(tot(false)) + '</button><button class="btn blue" data-sell="card">' + ic('card') + 'Card ' + money(tot(true)) + '</button></div>' : '<p class="empty">Nothing added yet.</p>') + '</div></section>' +
       '<section class="card"><header class="card-h"><h3>Today\'s shop sales</h3><span class="count">' + money(todays.reduce(function (a, s) { return a + s.amt; }, 0)) + '</span></header><ul class="feed">' + (todays.length ? todays.slice().reverse().map(function (s) { return '<li><span>' + s.qty + ' × ' + esc(s.item) + (s.stand ? ' · ' + esc(s.stand) : '') + '</span><small>' + methodLabel(s.m) + ' · ' + money(s.amt) + '</small></li>'; }).join('') : '<li><span class="muted">No sales yet today.</span></li>') + '</ul>' +
-      '<header class="card-h"><h3>Upcoming game drives</h3></header><ul class="feed">' + drives.map(function (b) { return '<li data-open="' + b.ref + '"><span><b>' + esc(guestName(b)) + '</b> · ' + b.extras.gd + ' people · ' + esc(standById(b.stand).name) + '</span><small>During stay ' + fd(b.ci) + ' to ' + fd(b.co) + ' · guide to confirm time</small></li>'; }).join('') + '</ul></section></div>';
+      '<header class="card-h"><h3>Upcoming game drives</h3></header><ul class="feed">' + drives.map(function (b) { return '<li data-open="' + b.ref + '"><span><b>' + esc(guestName(b)) + '</b> · ' + b.extras.gd + ' people · ' + esc(standById(b.stand).name) + '</span><small>During stay ' + fd(b.ci) + ' to ' + fd(b.co) + ' · guide to confirm time</small></li>'; }).join('') + '</ul></section></div>' + (ME.role === 'Front desk' ? '' :
+      '<section class="card"><header class="card-h"><h3>Products</h3><button class="btn sm" data-act="prod-add">' + ic('plus') + 'Add a product</button></header><table class="tbl prod"><thead><tr><th>Product</th><th class="r">Price</th><th class="r">Card price</th><th></th></tr></thead><tbody>' +
+      items.map(function (it, i) { return '<tr><td data-l="Product"><b>' + esc(it.label) + '</b>' + (it.note ? '<small>' + esc(it.note) + '</small>' : '') + '</td><td data-l="Price" class="r">' + money(it.amount) + '</td><td data-l="Card price" class="r muted">' + money(toCard(it.amount)) + '</td><td class="r prod-act"><button class="btn sm ghost" data-act="prod-edit" data-ref="' + i + '">Edit</button><button class="icon-btn sm" data-act="prod-del" data-ref="' + i + '" aria-label="Remove ' + esc(it.label) + '" title="Remove product">' + ic('x') + '</button></td></tr>'; }).join('') +
+      (items.length ? '' : '<tr><td colspan="4" class="empty">No products yet.</td></tr>') + '</tbody></table><p class="demo-note">' + ic('info') + 'Changes show on the till straight away. In the live version they update the website\'s Rates page too.</p></section>');
   }
 
   var ENQ = null;
@@ -656,16 +669,115 @@
 
   function vStands() {
     var tonight = standsBookedOn(TODAY);
-    return '<div class="page-h"><div><h1>Stands & blocks</h1><p class="muted">' + STANDS.length + ' stands. Names, photos and descriptions come from content/stands.md.</p></div><div class="ph-act"><button class="btn" data-act="block">' + ic('lock') + 'Block dates</button></div></div>' +
+    return '<div class="page-h"><div><h1>Stands & blocks</h1><p class="muted">' + STANDS.length + ' stands. Add, copy or remove stands and change their photos and details.</p></div><div class="ph-act"><button class="btn ghost" data-act="block">' + ic('lock') + 'Block dates</button><button class="btn" data-act="stand-add">' + ic('plus') + 'Add a stand</button></div></div>' +
       '<section class="card"><header class="card-h"><h3>Blocked dates</h3><span class="muted small">Maintenance, owner holds, private events</span></header>' + (DB.blocks.length ? '<ul class="feed">' + DB.blocks.map(function (k) { return '<li><span><b>' + esc(standById(k.stand).name) + '</b> · ' + fd(k.from) + ' to ' + fd(k.to) + ' · ' + esc(k.reason) + '</span><button class="btn sm ghost" data-unblock="' + k.id + '">Remove</button></li>'; }).join('') + '</ul>' : '<p class="empty">No blocks.</p>') + '</section>' +
       ['fenced', 'unfenced', 'self-sufficient'].map(function (a) {
-        return '<h3 class="grp">' + AREA_SHORT[a] + '</h3><div class="stand-grid">' + STANDS.filter(function (s) { return s.area === a; }).map(function (s) {
-          var b = tonight[s.id], nxt = DB.bookings.filter(function (x) { return live(x) && x.stand === s.id && x.ci > TODAY; })[0], closed = DB.closed[s.id];
-          return '<article class="stand' + (closed ? ' closed' : '') + '">' + (s.photos[0] ? '<img src="../' + esc(s.photos[0]) + '" alt="" loading="lazy">' : '<div class="ph"></div>') + '<div class="stand-b"><b>' + esc(s.name) + '</b><small>' + s.guests + ' guests · ' + esc(s.setups) + '</small>' +
+        var list = STANDS.filter(function (s) { return s.area === a; });
+        return '<h3 class="grp">' + AREA_SHORT[a] + ' <small>' + list.length + '</small></h3><div class="stand-grid">' + list.map(function (s) {
+          var b = tonight[s.id], nxt = DB.bookings.filter(function (x) { return live(x) && x.stand === s.id && x.ci > TODAY; })[0], closed = DB.closed[s.id], n = (s.photos || []).length;
+          return '<article class="stand' + (closed ? ' closed' : '') + '"><button type="button" class="stand-ph" data-act="stand-edit" data-ref="' + esc(s.id) + '" aria-label="Edit ' + esc(s.name) + '">' + (n ? '<img src="' + esc(imgSrc(s.photos[0])) + '" alt="" loading="lazy">' : '<span class="ph">No photo yet</span>') + '<span class="ph-n">' + n + ' photo' + (n === 1 ? '' : 's') + '</span>' + (s.status === 'new' ? '<span class="ph-new">New</span>' : '') + '</button>' +
+            '<div class="stand-b"><b>' + esc(s.name) + '</b><small>' + s.guests + ' guests' + (s.setups ? ' · ' + esc(s.setups) : '') + '</small>' +
             '<p class="small">' + (closed ? '<span class="pill muted"><i></i>Closed to bookings</span>' : b ? 'Tonight: <a href="#" data-open="' + b.ref + '">' + esc(guestName(b)) + '</a>' : '<span class="ok-t">Free tonight</span>') + (nxt ? '<br><span class="muted">Next: ' + fd(nxt.ci) + ', ' + esc(nxt.guest.last) + '</span>' : '') + '</p>' +
-            '<label class="switch"><input type="checkbox" data-close-stand="' + s.id + '"' + (closed ? '' : ' checked') + '><span></span>Open for bookings</label></div></article>';
-        }).join('') + '</div>';
-      }).join('');
+            '<label class="switch"><input type="checkbox" data-close-stand="' + s.id + '"' + (closed ? '' : ' checked') + '><span></span>Open for bookings</label>' +
+            '<div class="stand-act"><button class="btn sm ghost" data-act="stand-edit" data-ref="' + esc(s.id) + '">Edit</button><button class="btn sm ghost" data-act="stand-copy" data-ref="' + esc(s.id) + '">Copy</button><button class="icon-btn sm" data-act="stand-del" data-ref="' + esc(s.id) + '" aria-label="Remove ' + esc(s.name) + '" title="Remove stand">' + ic('x') + '</button></div></div></article>';
+        }).join('') + (list.length ? '' : '<p class="empty">No stands in this area.</p>') + '</div>';
+      }).join('') +
+      '<p class="demo-note">' + ic('info') + 'Demo: changes are kept in this browser only. In the live version, saving a stand here updates the website straight away, so content/stands.md is no longer needed.</p>';
+  }
+
+  /* add / edit / copy a stand. EDIT holds the photos while the form is open. */
+  var EDIT = null;
+  function allPhotos() { var seen = {}, out = []; STANDS.forEach(function (s) { (s.photos || []).forEach(function (p) { if (!seen[p] && !/^data:/.test(p)) { seen[p] = 1; out.push(p); } }); }); return out; }
+  function phGrid() {
+    return EDIT.photos.length ? EDIT.photos.map(function (p, i) {
+      return '<figure class="ph-it"><img src="' + esc(imgSrc(p)) + '" alt="">' + (i ? '<button type="button" class="ph-b cov" data-ph-cover="' + i + '">Make cover</button>' : '<span class="ph-tag">Cover</span>') + '<button type="button" class="ph-b del" data-ph-del="' + i + '" aria-label="Remove this photo">' + ic('x') + '</button></figure>';
+    }).join('') : '<p class="muted small ph-none">No photos yet. Upload some or pick from the website\'s photos below.</p>';
+  }
+  function phRefresh() { var g = $('[data-ph-grid]'); if (g) g.innerHTML = phGrid(); $$('[data-ph-pick]').forEach(function (b) { b.classList.toggle('on', EDIT.photos.indexOf(b.dataset.phPick) >= 0); }); }
+  // shrink a photo before keeping it (phones take huge photos)
+  function shrink(file, cb) {
+    if (!/^image\//.test(file.type)) { toast('That file is not a photo'); return; }
+    var rd = new FileReader();
+    rd.onload = function () { var im = new Image(); im.onload = function () { var s = Math.min(1, 1100 / Math.max(im.width, im.height)), c = document.createElement('canvas'); c.width = Math.round(im.width * s); c.height = Math.round(im.height * s); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); cb(c.toDataURL('image/jpeg', .78)); }; im.onerror = function () { toast('That photo could not be opened'); }; im.src = rd.result; };
+    rd.readAsDataURL(file);
+  }
+  function actStand(id, copyFrom) {
+    var isNew = !id, src = id ? standById(id) : copyFrom ? standById(copyFrom) : null;
+    EDIT = { id: id, photos: src ? (src.photos || []).slice() : [] };
+    var val = function (k) { return src && src[k] != null ? esc(src[k]) : ''; };
+    var area = src ? src.area : 'fenced';
+    var body = (isNew ? '<label class="fld"><span>Copy details from</span><select data-copy-from><option value="">Nothing, start blank</option>' + STANDS.map(function (s) { return '<option value="' + esc(s.id) + '"' + (s.id === copyFrom ? ' selected' : '') + '>' + esc(s.name) + ' (' + AREA_SHORT[s.area] + ')</option>'; }).join('') + '</select></label>' : '') +
+      '<div class="grid2"><label class="fld"><span>Name</span><input name="name" value="' + (isNew ? (src ? esc(nextName(src.name)) : '') : val('name')) + '" placeholder="e.g. Inside 5" autocomplete="off"></label><label class="fld"><span>Area (sets the price)</span><select name="area">' + Object.keys(AREA_SHORT).map(function (a) { return '<option value="' + a + '"' + (a === area ? ' selected' : '') + '>' + AREA_SHORT[a] + '</option>'; }).join('') + '</select></label></div>' +
+      '<div class="grid2"><label class="fld"><span>Most guests</span><input name="guests" inputmode="numeric" value="' + (src ? src.guests : 8) + '"></label><label class="fld"><span>Setups</span><input name="setups" value="' + val('setups') + '" placeholder="1-2 trailers or tents"></label></div>' +
+      '<label class="fld"><span>Short line</span><input name="feel" value="' + val('feel') + '" placeholder="e.g. Intimate yet spacious"></label>' +
+      '<label class="fld"><span>Highlights, separated by commas</span><input name="hl" value="' + (src ? esc((src.highlights || []).join(', ')) : '') + '" placeholder="Braai area, Near the fence"></label>' +
+      '<label class="fld"><span>Description</span><textarea name="desc" rows="4">' + val('description') + '</textarea></label>' +
+      '<label class="check"><input type="checkbox" name="isnew"' + (isNew || src.status === 'new' ? ' checked' : '') + '><span>Show a "New stand" badge on the website</span></label>' +
+      '<h5>Photos <span class="muted">· the first one is the cover</span></h5><div class="ph-grid" data-ph-grid>' + phGrid() + '</div>' +
+      '<div class="row-btns"><label class="btn ghost file-btn">' + ic('plus') + 'Upload photos<input type="file" accept="image/*" multiple data-ph-file></label></div>' +
+      '<details class="ph-lib"><summary>Pick from photos already on the website</summary><div class="ph-pick">' + allPhotos().map(function (p) { return '<button type="button" data-ph-pick="' + esc(p) + '"' + (EDIT.photos.indexOf(p) >= 0 ? ' class="on"' : '') + '><img src="' + esc(imgSrc(p)) + '" alt="" loading="lazy"></button>'; }).join('') + '</div></details>' +
+      (isNew ? '<p class="muted small">New stands are not on the camp map yet. In the live version you drop a pin for them on the map.</p>' : '');
+    modal(isNew ? (src ? 'Copy ' + esc(src.name) : 'Add a stand') : 'Edit ' + esc(src.name), body, isNew ? 'Add stand' : 'Save stand', function (f) {
+      var nm = fval(f, 'name'), ar = fval(f, 'area');
+      if (!nm) { toast('Give the stand a name'); f.elements.name.focus(); return false; }
+      if (STANDS.some(function (s) { return s.id !== id && K.norm(s.name) === K.norm(nm); })) { toast('There is already a stand called ' + esc(nm)); return false; }
+      ensureStands();
+      var like = STANDS.filter(function (s) { return s.area === ar && s.areaInfo; })[0];
+      var data = { name: nm, area: ar, areaInfo: like ? like.areaInfo : null, guests: parseInt(fval(f, 'guests'), 10) || 8, setups: fval(f, 'setups'), feel: fval(f, 'feel'), highlights: fval(f, 'hl').split(',').map(function (h) { return h.trim(); }).filter(Boolean), description: fval(f, 'desc'), photos: EDIT.photos.slice(), status: fval(f, 'isnew') ? 'new' : 'open' };
+      var st;
+      if (isNew) {
+        var base = slugify(nm), sid = base, n = 2; while (STANDS.some(function (s) { return s.id === sid; }) || DB.gone[sid]) sid = base + '-' + n++;
+        data.id = sid; data.map = null; st = data;
+        var at = -1; STANDS.forEach(function (s, i) { if (s.area === ar) at = i; });
+        STANDS.splice(at < 0 ? STANDS.length : at + 1, 0, data);
+      } else { st = standById(id); Object.keys(data).forEach(function (k) { st[k] = data[k]; }); }
+      log((isNew ? (src ? 'Copied ' + src.name + ' to ' : 'Added ') : 'Updated ') + st.name);
+      if (!save()) toast('This browser is out of space for photos. Try fewer photos (the live version keeps them on the server).');
+      EDIT = null; render(); toast(isNew ? esc(st.name) + ' added. It can be booked straight away.' : esc(st.name) + ' saved');
+    }, { wide: true, noFocus: !isNew });
+  }
+  // "Inside 4" becomes "Inside 5" (the first free number), otherwise "Copy of ..."
+  function nextName(n) {
+    var m = n.match(/^(.*?)(\d+)$/); if (!m) return 'Copy of ' + n;
+    for (var i = +m[2] + 1; i < 200; i++) { var c = m[1] + i; if (!STANDS.some(function (s) { return K.norm(s.name) === K.norm(c); })) return c; }
+    return 'Copy of ' + n;
+  }
+  function actRemoveStand(id) {
+    var s = standById(id), up = DB.bookings.filter(function (b) { return live(b) && b.stand === id && b.co > TODAY; });
+    if (up.length) {
+      modal('Move ' + up.length + ' booking' + (up.length > 1 ? 's' : '') + ' first', '<p>' + esc(s.name) + ' still has upcoming bookings. Open each one and use <b>Change dates or stand</b>, then remove the stand. Or switch off <b>Open for bookings</b> so nobody new can book it.</p><div class="list">' + up.map(function (b) { return '<button type="button" class="brow" data-open="' + b.ref + '"><span class="brow-st">' + fd(b.ci) + '</span><span class="brow-g"><b>' + esc(guestName(b)) + '</b><small>' + b.ref + ' · ' + diff(b.ci, b.co) + ' nights</small></span>' + pill(stateOf(b)) + '</button>'; }).join('') + '</div>', null);
+      return;
+    }
+    modal('Remove ' + esc(s.name) + '?', '<p>It comes off the website, the calendar and the booking form. Past bookings keep their history.</p>', 'Remove stand', function () {
+      ensureStands(); var st = standById(id);
+      DB.gone[id] = { id: id, name: st.name, area: st.area, guests: st.guests, photos: [] };
+      STANDS.splice(STANDS.indexOf(st), 1); DB.blocks = DB.blocks.filter(function (k) { return k.stand !== id; }); delete DB.closed[id];
+      log('Removed ' + st.name); save(); render(); toast(esc(st.name) + ' removed');
+    }, { danger: true });
+  }
+
+  /* shop products */
+  function actProduct(i) {
+    var items = shopItems(), it = i == null ? null : items[i];
+    modal(it ? 'Edit ' + esc(it.label) : 'Add a product', '<label class="fld"><span>Product</span><input name="n" value="' + (it ? esc(it.label) : '') + '" placeholder="e.g. Braai tongs"></label>' +
+      '<div class="grid2"><label class="fld"><span>Price (EFT and cash)</span><input name="a" inputmode="numeric" value="' + (it ? it.amount : '') + '" placeholder="R" data-prod-price></label><label class="fld"><span>Card price</span><input data-prod-card value="' + (it ? money(toCard(it.amount)) : '') + '" disabled></label></div>' +
+      '<label class="fld"><span>Short note (optional)</span><input name="t" value="' + (it ? esc(it.note || '') : '') + '" placeholder="e.g. Enamel, two designs"></label>',
+      it ? 'Save product' : 'Add product', function (f) {
+        var nm = fval(f, 'n'), amt = parseFloat(fval(f, 'a').replace(/[^\d.]/g, ''));
+        if (!nm) { toast('Give the product a name'); return false; }
+        if (isNaN(amt)) { toast('Enter a price'); return false; }
+        if (items.some(function (x, j) { return j !== i && K.norm(x.label) === K.norm(nm); })) { toast('There is already a product called ' + esc(nm)); return false; }
+        ensureProducts();
+        var row = { label: nm, amount: amt, note: fval(f, 't') };
+        if (it) { if (CART[it.label]) { CART[nm] = CART[it.label]; if (nm !== it.label) delete CART[it.label]; } DB.products[i] = row; } else DB.products.push(row);
+        log((it ? 'Updated product ' : 'Added product ') + nm); save(); render(); toast(esc(nm) + (it ? ' saved' : ' added to the shop'));
+      });
+  }
+  function actRemoveProduct(i) {
+    var it = shopItems()[i];
+    modal('Remove ' + esc(it.label) + '?', '<p>It comes off the shop till and the Rates page. Past sales keep their history.</p>', 'Remove product', function () {
+      ensureProducts(); DB.products.splice(i, 1); delete CART[it.label]; log('Removed product ' + it.label); save(); render(); toast(esc(it.label) + ' removed');
+    }, { danger: true });
   }
   function actBlock() {
     modal('Block dates', '<label class="fld"><span>Stand</span><select name="stand">' + standOptions('') + '</select></label><div class="grid2"><label class="fld"><span>From</span><input type="date" name="from" value="' + TODAY + '"></label><label class="fld"><span>Until</span><input type="date" name="to" value="' + add(TODAY, 2) + '"></label></div><label class="fld"><span>Reason (staff only)</span><input name="why" placeholder="e.g. Fixing the braai"></label>',
@@ -682,8 +794,9 @@
     return '<div class="page-h"><div><h1>Rates & fees</h1><p class="muted">Enter the <b>normal (EFT) price</b>. Card prices are worked out by adding the card fee. Dinokeng\'s fees are not Kyleu\'s, so they are not managed here.</p></div><div class="ph-act"><button class="btn" data-act="save-rates">' + ic('check') + 'Save prices</button></div></div>' +
       '<div class="card fee-card"><div><h3>Card payment fee</h3><p class="muted small">Added to every price when a guest pays by card. EFT and cash pay the normal price. Your card provider charges about ' + (DB.settings.providerFee || 2.95) + '%.</p></div><label class="fld inline"><input data-rate="Booking rules|Card payment fee percentage" inputmode="decimal" value="' + cardFee() + '"><span>%</span></label></div>' +
       '<div class="rate-grid">' + secs.map(function (s) {
-        return '<section class="card"><header class="card-h"><h3>' + esc(s.title) + '</h3></header><table class="tbl rates"><thead><tr><th>Item</th><th class="r">EFT price</th><th class="r">Card price</th></tr></thead><tbody>' + s.items.filter(function (it) { return !isNaN(it.amount); }).map(function (it) {
-          var v = num(s.title, it.label, it.amount), rule = /booking rules/i.test(s.title);
+        var rows = /shop/i.test(s.title) ? shopItems() : s.items;
+        return '<section class="card"><header class="card-h"><h3>' + esc(s.title) + '</h3>' + (/shop/i.test(s.title) && can('shop') ? '<a class="small" href="#/shop">Add or remove products</a>' : '') + '</header><table class="tbl rates"><thead><tr><th>Item</th><th class="r">EFT price</th><th class="r">Card price</th></tr></thead><tbody>' + rows.filter(function (it) { return !isNaN(it.amount); }).map(function (it) {
+          var v = /shop/i.test(s.title) ? it.amount : num(s.title, it.label, it.amount), rule = /booking rules/i.test(s.title);
           if (/card payment fee/i.test(it.label)) return '';
           return '<tr><td data-l="Item">' + esc(it.label) + (it.note ? '<small>' + esc(it.note) + '</small>' : '') + '</td><td data-l="' + (rule ? 'Value' : 'EFT price') + '" class="r"><label class="money-in">' + (rule ? '' : 'R') + '<input data-rate="' + esc(s.title + '|' + it.label) + '" inputmode="numeric" value="' + v + '" aria-label="' + esc(it.label) + '"></label></td><td data-l="Card price" class="r muted" data-cardof="' + esc(s.title + '|' + it.label) + '">' + (rule || !v ? '' : money(toCard(v))) + '</td></tr>';
         }).join('') + '</tbody></table></section>';
@@ -692,27 +805,346 @@
       '<p class="demo-note">' + ic('info') + 'Demo: saved prices are used by this admin straight away. In the live version, saving here also updates the website, so content/prices.md is no longer needed.</p>';
   }
 
-  var REP = { range: 'last6' };
-  function vReports() {
-    var months = []; for (var i = -2; i <= 3; i++) { var d = D(TODAY.slice(0, 7) + '-01'); d.setMonth(d.getMonth() + i); months.push(iso(d).slice(0, 7)); }
-    var rev = months.map(function (m) {
-      var card = 0, eft = 0; DB.bookings.forEach(function (b) { if (!live(b) || b.ci.slice(0, 7) !== m) return; if (b.method === 'card') card += b.total; else eft += b.total; });
-      return { label: D(m + '-01').toLocaleDateString('en-ZA', { month: 'short' }), a: card, b: eft, hl: m === TODAY.slice(0, 7), tip: D(m + '-01').toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' }) + ': card ' + money(card) + ' · EFT ' + money(eft) + ' · total ' + money(card + eft) };
-    });
-    var from = add(TODAY, -90), nightsAvail = {}, nightsSold = {};
-    Object.keys(AREA_SHORT).forEach(function (a) { nightsAvail[a] = STANDS.filter(function (s) { return s.area === a; }).length * 90; nightsSold[a] = 0; });
-    var src = {}, stays = 0, nights = 0, party = 0, lead = 0, canc = 0, tot = 0, card = 0;
+  /* =========================================================
+     Reports, in the MegaVolt style: pick a period, compare it with
+     the period before; tiles count up, bars grow, rows slide out.
+     ========================================================= */
+  var RP_KEY = 'kyleu-admin-reports', RP = { range: 'last_30', compare: true, tab: 'overview' };
+  try { var rps = JSON.parse(localStorage.getItem(RP_KEY) || 'null'); if (rps) { RP.range = rps.range || RP.range; RP.compare = rps.compare !== false; RP.tab = rps.tab || RP.tab; } } catch (e) {}
+  function rpSave() { try { localStorage.setItem(RP_KEY, JSON.stringify({ range: RP.range, compare: RP.compare, tab: RP.tab })); } catch (e) {} }
+  var RP_RANGES = [['this_week', 'This week'], ['last_week', 'Last week'], ['this_month', 'This month'], ['last_month', 'Last month'], ['last_30', 'Last 30 days'], ['last_90', 'Last 90 days']];
+  var RP_TABS = [['overview', 'Overview'], ['money', 'Money'], ['stays', 'Stays'], ['guests', 'Guests'], ['shop', 'Shop']];
+  var RP_COLORS = ['#1f78b8', '#d2601a', '#3a8f55', '#8a5cb8', '#b8901f'];   // validated: light surface, CVD with labels
+  var C_CASH = '#3a8f55', MS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var RP_CH = [], RP_FIG = [], rpDelay = 0, rpGid = 0, rpTimer = null, rpInstant = false;
+  function rpD() { return (rpDelay += 45); }
+  function monthAdd(s, n) { var d = D(s.slice(0, 7) + '-01'); d.setMonth(d.getMonth() + n); return iso(d); }
+  function rpRange(k) {
+    var t = TODAY, mon = add(t, -((D(t).getDay() + 6) % 7)), ms = t.slice(0, 8) + '01';
+    var r = function (a, b, pa, pb) { return { from: a, to: b, pf: pa, pt: pb }; };
+    if (k === 'this_week') return r(mon, t, add(mon, -7), add(t, -7));
+    if (k === 'last_week') return r(add(mon, -7), add(mon, -1), add(mon, -14), add(mon, -8));
+    if (k === 'this_month') { var pm = monthAdd(ms, -1); return r(ms, t, pm, add(pm, Math.min(diff(ms, t), diff(pm, ms) - 1))); }
+    if (k === 'last_month') { var lm = monthAdd(ms, -1); return r(lm, add(ms, -1), monthAdd(ms, -2), add(lm, -1)); }
+    if (k === 'last_90') return r(add(t, -89), t, add(t, -179), add(t, -90));
+    return r(add(t, -29), t, add(t, -59), add(t, -30));
+  }
+  function rpRangeText(a, b) { return a === b ? fd(a, { day: 'numeric', month: 'short', year: 'numeric' }) : fd(a) + ' to ' + fd(b, { day: 'numeric', month: 'short', year: 'numeric' }); }
+  // days for a month or less, weeks up to about 3 months
+  function rpBuckets(from, to) {
+    var n = diff(from, to) + 1, kind = n <= 31 ? 'day' : n <= 100 ? 'week' : 'month', keys = [], s = from;
+    if (kind === 'week') s = add(from, -((D(from).getDay() + 6) % 7));
+    while (s <= to) { keys.push(s); s = kind === 'day' ? add(s, 1) : kind === 'week' ? add(s, 7) : monthAdd(s, 1); }
+    return { kind: kind, keys: keys, idx: function (d) { if (d < from || d > to) return -1; for (var i = keys.length - 1; i >= 0; i--) if (d >= keys[i]) return i; return -1; },
+      label: function (k, long) { if (kind === 'week') return long ? 'Week of ' + fd(k, { day: 'numeric', month: 'long' }) : fd(k); return long ? fdw(k) : fd(k); } };
+  }
+
+  /* ---------- figures for one period ---------- */
+  function rpStats(from, to, bk, shift) {
+    var n = bk.keys.length, z = function () { var a = []; for (var i = 0; i < n; i++) a.push(0); return a; };
+    var at = function (d) { return bk.idx(shift ? add(d, shift) : d); }, inR = function (d) { return d >= from && d <= to; };
+    var fee = function (amt) { return amt - amt / (1 + cardFee() / 100); };
+    var S = { received: 0, card: 0, eft: 0, cash: 0, refunds: 0, fee: 0, nPay: 0, shop: 0, shopN: 0, shopQ: 0, shopCard: 0, items: {}, itemsQ: {}, byArea: {}, made: 0, madeValue: 0, cancelled: 0, src: {}, lead: 0,
+      nights: 0, arrivals: 0, stayN: 0, guests: 0, kids: 0, newG: 0, retG: 0, consent: 0, groups: {}, lens: [0, 0, 0, 0], dow: [0, 0, 0, 0, 0, 0, 0], standN: {}, areaN: {}, top: {},
+      s: { received: z(), card: z(), eft: z(), cash: z(), made: z(), nights: z(), guests: z(), shop: z() } };
+    var first = {};
+    DB.bookings.forEach(function (b) { if (live(b)) { var e = b.guest.email; if (!first[e] || b.ci < first[e]) first[e] = b.ci; } });
     DB.bookings.forEach(function (b) {
-      if (b.ci >= from && b.ci < TODAY) { tot++; if (!live(b)) { canc++; return; } var st = standById(b.stand); nightsSold[st.area] += diff(b.ci, b.co); }
+      var st = standById(b.stand);
+      (b.payments || []).forEach(function (p) {
+        if (!inR(p.d)) return;
+        if (p.amt < 0) { S.refunds -= p.amt; return; }
+        var i = at(p.d); S.received += p.amt; S.nPay++; S[p.m] += p.amt; if (p.m === 'card') S.fee += fee(p.amt);
+        S.byArea[st.area] = (S.byArea[st.area] || 0) + p.amt;
+        if (i >= 0) { S.s.received[i] += p.amt; S.s[p.m][i] += p.amt; }
+      });
+      var cd = b.created.slice(0, 10);
+      if (inR(cd)) { S.made++; if (!live(b)) S.cancelled++; else { S.madeValue += b.total; S.src[b.source] = (S.src[b.source] || 0) + 1; S.lead += Math.max(0, diff(cd, b.ci)); var i2 = at(cd); if (i2 >= 0) S.s.made[i2]++; } }
       if (!live(b)) return;
-      src[b.source] = (src[b.source] || 0) + 1; stays++; nights += diff(b.ci, b.co); party += people(b); lead += Math.max(0, diff(b.created.slice(0, 10), b.ci)); if (b.method === 'card') card++;
+      for (var d = b.ci < from ? from : b.ci; d < b.co && d <= to; d = add(d, 1)) { S.nights++; S.standN[b.stand] = (S.standN[b.stand] || 0) + 1; S.areaN[st.area] = (S.areaN[st.area] || 0) + 1; var i3 = at(d); if (i3 >= 0) S.s.nights[i3]++; }
+      if (!inR(b.ci)) return;
+      var ppl = people(b), len = diff(b.ci, b.co);
+      S.arrivals++; S.stayN += len; S.guests += ppl; S.kids += b.kids; if (b.guest.consent) S.consent++;
+      var i4 = at(b.ci); if (i4 >= 0) S.s.guests[i4] += ppl;
+      if (first[b.guest.email] === b.ci) S.newG++; else S.retG++;
+      var g = b.pens ? 'Pensioners' : b.kids ? 'Families' : b.adults === 2 ? 'Couples' : b.adults === 1 ? 'On their own' : 'Groups of friends';
+      S.groups[g] = (S.groups[g] || 0) + 1; S.lens[Math.min(3, len - 1)]++; S.dow[(D(b.ci).getDay() + 6) % 7]++;
+      var e = b.guest.email; S.top[e] = S.top[e] || { name: guestName(b), email: e, stays: 0, nights: 0, spent: 0 }; S.top[e].stays++; S.top[e].nights += len; S.top[e].spent += b.total;
     });
-    return '<div class="page-h"><div><h1>Reports</h1><p class="muted">How the camp is doing. Hover or tap a bar for the numbers.</p></div><div class="ph-act"><button class="btn ghost" data-act="csv-bookings">' + ic('download') + 'Export bookings</button></div></div>' +
-      '<div class="kpis">' + tile('Average stay', (nights / stays).toFixed(1) + ' nights', stays + ' bookings') + tile('Average group', (party / stays).toFixed(1) + ' people', 'adults and kids') + tile('Booked ahead', Math.round(lead / stays) + ' days', 'on average') + tile('Paid by card', Math.round(card / stays * 100) + '%', 'the rest pay EFT or cash') + tile('Cancelled', (tot ? Math.round(canc / tot * 100) : 0) + '%', 'last 90 days') + '</div>' +
-      '<section class="card"><header class="card-h"><h3>Booking value by arrival month</h3><div class="key"><span><i style="background:' + C_CARD + '"></i>Card</span><span><i style="background:' + C_EFT + '"></i>EFT / cash</span></div></header>' + colChart(rev, { fmt: kfmt, band: 70, bar: 24, label: 'Booking value by month, card and EFT' }) +
-      '<details class="tbl-view"><summary>Show as a table</summary><table class="tbl"><thead><tr><th>Month</th><th class="r">Card</th><th class="r">EFT / cash</th><th class="r">Total</th></tr></thead><tbody>' + rev.map(function (r) { return '<tr><td>' + r.label + '</td><td class="r">' + money(r.a) + '</td><td class="r">' + money(r.b) + '</td><td class="r"><b>' + money(r.a + r.b) + '</b></td></tr>'; }).join('') + '</tbody></table></details></section>' +
-      '<div class="cols"><section class="card"><header class="card-h"><h3>Occupancy by area, last 90 days</h3></header>' + hbars(Object.keys(AREA_SHORT).map(function (a) { var p = Math.round(nightsSold[a] / nightsAvail[a] * 100); return { l: AREA_SHORT[a], v: p, t: p + '%', tip: nightsSold[a] + ' of ' + nightsAvail[a] + ' stand nights' }; }), { max: 100 }) + '</section>' +
-      '<section class="card"><header class="card-h"><h3>Where bookings come from</h3></header>' + hbars(Object.keys(src).sort(function (a, b) { return src[b] - src[a]; }).map(function (k) { return { l: k, v: src[k], t: src[k] + ' (' + Math.round(src[k] / stays * 100) + '%)' }; })) + '</section></div>';
+    DB.sales.forEach(function (x) {
+      if (!inR(x.d)) return;
+      var i = at(x.d); S.shop += x.amt; S.shopN++; S.shopQ += x.qty; S.received += x.amt; S.nPay++; S[x.m] += x.amt;
+      if (x.m === 'card') { S.shopCard += x.amt; S.fee += fee(x.amt); }
+      S.items[x.item] = (S.items[x.item] || 0) + x.amt; S.itemsQ[x.item] = (S.itemsQ[x.item] || 0) + x.qty;
+      if (i >= 0) { S.s.received[i] += x.amt; S.s[x.m][i] += x.amt; S.s.shop[i] += x.amt; }
+    });
+    S.days = diff(from, to) + 1; S.standNights = STANDS.length * S.days;
+    S.occ = S.standNights ? S.nights / S.standNights * 100 : 0;
+    S.booked = S.made - S.cancelled;
+    return S;
+  }
+  var avg = function (a, b) { return b ? a / b : 0; };
+
+  /* ---------- formatting ---------- */
+  function rpFmt(k, v, u) {
+    v = v || 0;
+    if (k === 'money') return money(Math.round(v));
+    if (k === 'pct') return Math.round(v) + '%';
+    if (k === 'dec') return (Math.round(v * 10) / 10).toFixed(1) + (u || '');
+    return Math.round(v).toLocaleString('en-ZA') + (u || '');
+  }
+  function rpShort(k, v) {
+    if (k === 'money') return v >= 1e6 ? 'R' + (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? 'R' + (v / 1e3).toFixed(v >= 1e4 || v % 1000 === 0 ? 0 : 1) + 'k' : 'R' + Math.round(v);
+    if (k === 'pct') return Math.round(v) + '%';
+    return String(Math.round(v * 10) / 10);
+  }
+  // change against the period before (green = better)
+  function rpDelta(cur, prev, lower, kind) {
+    if (prev == null) return null;
+    if (!prev && !cur) return { t: 'No change', c: 'flat' };
+    if (!prev) return { t: 'New', c: lower ? 'down' : 'up' };
+    var df = cur - prev, pc = df / Math.abs(prev) * 100;
+    if (Math.abs(pc) < .5) return { t: 'No change', c: 'flat' };
+    var good = lower ? df < 0 : df > 0, ar = df > 0 ? '▲ ' : '▼ ';
+    if (kind === 'pct') return { t: ar + Math.abs(Math.round(df)) + ' pts', c: good ? 'up' : 'down' };
+    var a = Math.abs(pc); return { t: ar + (a >= 100 ? Math.round(a) : a.toFixed(a < 10 ? 1 : 0)) + '%', c: good ? 'up' : 'down' };
+  }
+
+  /* ---------- pieces ---------- */
+  function rpKpi(o) {
+    var d = RP.compare ? rpDelta(o.v, o.p, o.lower, o.kind) : null;
+    RP_FIG.push([o.label, rpFmt(o.kind, o.v, o.u), o.p == null ? '' : rpFmt(o.kind, o.p, o.u)]);
+    return '<div class="rp-kpi rp-in" style="--d:' + rpD() + 'ms"' + (o.help ? ' title="' + esc(o.help) + '"' : '') + '>' +
+      '<div class="rp-kpi-top"><span class="rp-kpi-lab">' + esc(o.label) + '</span>' + (d ? '<span class="rp-delta ' + d.c + '" title="' + esc('Period before: ' + rpFmt(o.kind, o.p, o.u)) + '">' + d.t + '</span>' : '') + '</div>' +
+      '<div class="rp-kpi-val" data-count="' + (o.v || 0) + '" data-kind="' + (o.kind || 'count') + '" data-u="' + esc(o.u || '') + '">' + rpFmt(o.kind, 0, o.u) + '</div>' +
+      '<div class="rp-kpi-foot"><span class="rp-kpi-note">' + esc(o.note != null ? o.note : RP.compare && o.p != null ? 'Before: ' + rpFmt(o.kind, o.p, o.u) : '') + '</span>' + (o.spark ? '<span class="rp-kpi-spark">' + rpSpark(o.spark) + '</span>' : '') + '</div></div>';
+  }
+  function rpSpark(data) {
+    if (data.length < 2) return '';
+    var W = 120, H = 34, max = Math.max.apply(null, data.concat([1])), id = 'rps' + (++rpGid);
+    var pts = data.map(function (v, i) { return (i / (data.length - 1) * W).toFixed(1) + ',' + (H - 2 - v / max * (H - 6)).toFixed(1); }).join(' ');
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" class="rp-spark" aria-hidden="true"><defs><linearGradient id="' + id + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e8731c" stop-opacity=".32"/><stop offset="1" stop-color="#e8731c" stop-opacity="0"/></linearGradient></defs>' +
+      '<polygon points="0,' + H + ' ' + pts + ' ' + W + ',' + H + '" fill="url(#' + id + ')" class="rp-spark-area"/><polyline points="' + pts + '" class="rp-spark-line" pathLength="100"/></svg>';
+  }
+  function rpCard(title, body, o) {
+    o = o || {};
+    return '<section class="rp-card rp-in' + (o.wide ? ' wide' : '') + '" style="--d:' + rpD() + 'ms"><div class="rp-card-head"><div><h3>' + esc(title) + '</h3>' + (o.sub ? '<div class="rp-card-sub">' + esc(o.sub) + '</div>' : '') + '</div>' + (o.side || '') + '</div>' + body + '</section>';
+  }
+  function rpLegend(items) {
+    return '<div class="rp-legend-inline">' + items.map(function (it) { return '<span><i class="rp-dot' + (it.ghost ? ' ghost' : '') + '"' + (it.c ? ' style="background:' + it.c + '"' : '') + '></i>' + esc(it.n) + '</span>'; }).join('') + '</div>';
+  }
+  // column chart: drawn after the page is on screen, at the width it really has
+  function rpCols(o) { RP_CH.push(o); return '<div class="rp-chart" data-rpc="' + (RP_CH.length - 1) + '" style="height:' + (o.h || 250) + 'px"></div>'; }
+  function rpTicks(v, kind) {
+    if (!(v > 0)) return { top: kind === 'money' ? 100 : 4, step: kind === 'money' ? 25 : 1 };
+    var raw = v / 4, p = Math.pow(10, Math.floor(Math.log10(raw))), n = raw / p;
+    var step = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 && kind === 'money' ? 2.5 : n <= 5 ? 5 : 10) * p;
+    if (kind !== 'money') step = Math.max(1, Math.round(step));
+    return { top: Math.ceil(v / step) * step, step: step };
+  }
+  function rpColsSVG(o, W, H) {
+    var padL = 46, padR = 6, padT = 12, padB = 28, pw = W - padL - padR, ph = H - padT - padB, n = o.labels.length;
+    var main = o.series.filter(function (s) { return !s.ghost; }), ghosts = o.series.filter(function (s) { return s.ghost; });
+    var vals = []; o.series.forEach(function (s) { vals = vals.concat(s.data); });
+    var tk = o.max ? { top: o.max, step: o.max / 4 } : rpTicks(Math.max.apply(null, vals.concat([0])), o.kind), max = tk.top;
+    var y = function (v) { return padT + ph - v / max * ph; }, base = padT + ph, gid = 'rpg' + (++rpGid);
+    var out = '<defs><linearGradient id="' + gid + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e8731c"/><stop offset="1" stop-color="#e8731c" stop-opacity=".62"/></linearGradient></defs>';
+    for (var g = 0; g * tk.step <= max + tk.step / 2; g++) { var v = g * tk.step, yy = y(v).toFixed(1); out += '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + yy + '" y2="' + yy + '" class="rp-grid' + (g ? '' : ' base') + '"/><text x="' + (padL - 8) + '" y="' + (+yy + 4) + '" text-anchor="end" class="rp-axis">' + rpShort(o.kind, v) + '</text>'; }
+    var slot = pw / Math.max(1, n), gw = Math.min(slot * .72, 46), gap = main.length > 1 ? 2 : 0, bw = Math.max(2, (gw - (main.length - 1) * gap) / main.length), r = Math.min(4, bw / 2);
+    for (var i = 0; i < n; i++) {
+      var cx = padL + slot * i + slot / 2, tip = '<b>' + esc(o.tips[i]) + '</b>';
+      o.series.forEach(function (s) { tip += '<div><i class="rp-dot' + (s.ghost ? ' ghost' : '') + '"' + (s.ghost ? '' : ' style="background:' + (s.color || '#e8731c') + '"') + '></i>' + esc(s.name) + ': <b>' + esc(rpFmt(o.kind, s.data[i], o.u)) + '</b></div>'; });
+      ghosts.forEach(function (s) { var gv = s.data[i]; if (!gv) return; var gy = Math.max(padT, y(gv)); out += '<rect x="' + (cx - gw / 2 - 3).toFixed(1) + '" y="' + gy.toFixed(1) + '" width="' + (gw + 6).toFixed(1) + '" height="' + (base - gy).toFixed(1) + '" rx="' + r + '" class="rp-ghost"/>'; });
+      main.forEach(function (s, si) {
+        var bv = s.data[i] || 0, by = y(bv), h = base - by, x = cx - gw / 2 + si * (bw + gap); if (h < .5) return;
+        var rr = Math.min(r, h);
+        out += '<path d="M' + x.toFixed(1) + ',' + base + 'V' + (by + rr).toFixed(1) + 'q0,-' + rr + ' ' + rr + ',-' + rr + 'h' + (bw - 2 * rr).toFixed(1) + 'q' + rr + ',0 ' + rr + ',' + rr + 'V' + base + 'Z" fill="' + (s.color || 'url(#' + gid + ')') + '" class="rp-bar" style="animation-delay:' + Math.min(i * 22, 480) + 'ms"/>';
+      });
+      out += '<rect x="' + (padL + slot * i).toFixed(1) + '" y="' + padT + '" width="' + slot.toFixed(1) + '" height="' + ph + '" class="rp-hit" data-rtip="' + esc(tip) + '"/>';
+    }
+    var every = n <= 8 ? 1 : Math.max(1, Math.ceil(n / Math.max(2, Math.floor(pw / 52))));
+    for (var j = 0; j < n; j += every) out += '<text x="' + (padL + slot * j + slot / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" class="rp-axis">' + esc(o.labels[j]) + '</text>';
+    return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(o.label || '') + '">' + out + '</svg>';
+  }
+  function rpDrawCharts(again) {
+    $$('[data-rpc]').forEach(function (host) {
+      var o = RP_CH[+host.dataset.rpc], W = Math.round(host.clientWidth); if (!o || !W || host._w === W) return;
+      host._w = W; host.classList.toggle('rp-noanim', !!again); host.innerHTML = rpColsSVG(o, W, o.h || 250);
+    });
+  }
+  // a table under a chart, for anyone who would rather read numbers
+  function rpTableView(o) {
+    return '<details class="tbl-view"><summary>Show as a table</summary><table class="tbl"><thead><tr><th>' + esc(o.head || 'Period') + '</th>' + o.series.map(function (s) { return '<th class="r">' + esc(s.name) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      o.labels.map(function (l, i) { return '<tr><td>' + esc(o.tips[i]) + '</td>' + o.series.map(function (s) { return '<td class="r">' + esc(rpFmt(o.kind, s.data[i], o.u)) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></details>';
+  }
+  // ranked bars that slide out
+  function rpHBars(rows, kind, o) {
+    o = o || {};
+    var list = rows.filter(function (r) { return r.v > 0; }); if (!o.keep) list.sort(function (a, b) { return b.v - a.v; }); list = list.slice(0, o.limit || 8);
+    if (!list.length) return '<p class="rp-empty">Nothing in this period.</p>';
+    var max = o.max || Math.max.apply(null, list.map(function (r) { return r.v; })), total = rows.reduce(function (a, r) { return a + r.v; }, 0), d0 = rpDelay + 120;
+    return '<div class="rp-hbars">' + list.map(function (r, i) {
+      var txt = r.t || rpFmt(kind, r.v, o.u);
+      return '<div class="rp-hrow" title="' + esc(r.l + ': ' + txt + (total && !o.max ? ' (' + Math.round(r.v / total * 100) + '%)' : '')) + '"><div class="rp-hlab"><span class="rp-hname">' + esc(r.l) + '</span><span class="rp-hval">' + esc(txt) + '</span></div>' +
+        '<div class="rp-htrack"><span class="rp-hfill" style="width:' + Math.max(1.5, Math.min(100, r.v / max * 100)).toFixed(1) + '%;animation-delay:' + (d0 + i * 50) + 'ms' + (o.color ? ';background:' + o.color : '') + '"></span></div></div>';
+    }).join('') + '</div>';
+  }
+  function rpDonut(rows, kind, centre) {
+    var list = rows.filter(function (r) { return r.v > 0; }); if (!list.length) return '<p class="rp-empty">Nothing in this period.</p>';
+    var total = list.reduce(function (a, r) { return a + r.v; }, 0), R = 52, C = 2 * Math.PI * R, acc = 0, rings = '';
+    list.forEach(function (r, i) {
+      var len = r.v / total * C, col = r.c || RP_COLORS[i % RP_COLORS.length], gap = list.length > 1 ? 2 : 0;
+      rings += '<circle r="' + R + '" cx="70" cy="70" fill="none" stroke="' + col + '" stroke-width="18" stroke-dasharray="' + Math.max(.5, len - gap).toFixed(2) + ' ' + (C - len + gap).toFixed(2) + '" stroke-dashoffset="' + (-acc).toFixed(2) + '" class="rp-arc" style="animation-delay:' + (rpDelay + 80 + i * 90) + 'ms"><title>' + esc(r.l + ': ' + rpFmt(kind, r.v) + ' (' + Math.round(r.v / total * 100) + '%)') + '</title></circle>';
+      acc += len;
+    });
+    return '<div class="rp-donut-wrap"><svg viewBox="0 0 140 140" class="rp-donut" role="img" aria-label="' + esc(centre) + '"><g transform="rotate(-90 70 70)">' + rings + '</g><text x="70" y="68" text-anchor="middle" class="rp-donut-val">' + esc(rpShort(kind, total)) + '</text><text x="70" y="86" text-anchor="middle" class="rp-donut-lab">' + esc(centre) + '</text></svg>' +
+      '<div class="rp-legend">' + list.map(function (r, i) { return '<div class="rp-leg"><i style="background:' + (r.c || RP_COLORS[i % RP_COLORS.length]) + '"></i><span class="rp-leg-name">' + esc(r.l) + '</span><span class="rp-leg-val">' + esc(rpFmt(kind, r.v)) + ' · ' + Math.round(r.v / total * 100) + '%</span></div>'; }).join('') + '</div></div>';
+  }
+  // figures that don't depend on the period
+  function rpNow() {
+    var tn = Object.keys(standsBookedOn(TODAY)).length, wk = add(TODAY, 7);
+    var arr = DB.bookings.filter(function (b) { return live(b) && b.ci > TODAY && b.ci <= wk; });
+    var pend = DB.bookings.filter(function (b) { return b.status === 'pending'; });
+    var owe = DB.bookings.filter(function (b) { return live(b) && b.status !== 'pending' && balance(b) > 0; });
+    var item = function (lab, val, sub, cls, go) { return (can(go) ? '<button type="button" data-go="' + go + '"' : '<div') + ' class="rp-now-item ' + (cls || '') + '"><span class="rp-now-val">' + val + '</span><span class="rp-now-lab">' + lab + '</span>' + (sub ? '<span class="rp-now-sub">' + sub + '</span>' : '') + (can(go) ? '</button>' : '</div>'); };
+    return '<div class="rp-now rp-in" style="--d:' + rpD() + 'ms"><div class="rp-now-title">Right now</div>' +
+      item('Stands in use tonight', tn + ' <small>of ' + STANDS.length + '</small>', Math.round(tn / Math.max(1, STANDS.length) * 100) + '% full', 'ok', 'calendar') +
+      item('Arriving in the next 7 days', arr.length, arr.reduce(function (a, b) { return a + people(b); }, 0) + ' guests', '', 'bookings') +
+      item('Waiting for EFT', pend.length, money(pend.reduce(function (a, b) { return a + deposit(b); }, 0)) + ' in deposits', 'warn', 'eft') +
+      item('Balances still owing', money(owe.reduce(function (a, b) { return a + balance(b); }, 0)), owe.length + ' bookings', 'bad', 'payments') + '</div>';
+  }
+  function rpHow() {
+    return '<details class="rp-how"><summary>How these figures are worked out</summary><ul>' + [
+      'Money received is every deposit, balance and shop sale paid in the period, on the day it was paid. Refunds are shown on their own.',
+      'Bookings made counts bookings created in the period that were not cancelled. Cancelled is the share of bookings made in the period that were later cancelled.',
+      'Occupancy is the stand nights booked in the period out of every night on every stand (' + STANDS.length + ' stands).',
+      'Guests, stay length and group size count bookings arriving in the period. A new guest is someone staying with Kyleu for the first time.',
+      '"The period before" is the same length of time just before, for example this month so far against the same days last month.'
+    ].map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul></details>';
+  }
+
+  /* ---------- the page ---------- */
+  function vReports() {
+    var r = rpRange(RP.range);
+    return '<div class="page-h"><div><h1>Reports</h1><p class="muted">Money, stays and guests for any period, compared with the period before.</p></div><div class="ph-act"><button class="btn ghost" data-act="csv-report">' + ic('download') + 'Export</button></div></div>' +
+      '<div class="card rp-filters"><div class="rp-filters-row"><div class="rp-filters-left"><select data-rp-range aria-label="Period">' + RP_RANGES.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === RP.range ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' +
+      '<label class="rp-cmp"><input type="checkbox" data-rp-cmp' + (RP.compare ? ' checked' : '') + '><span>Compare with the period before</span></label></div>' +
+      '<div class="rp-range-text"><b>' + rpRangeText(r.from, r.to) + '</b>' + (RP.compare ? '<span>vs ' + rpRangeText(r.pf, r.pt) + '</span>' : '') + '</div></div>' +
+      '<div class="rp-tabs" role="tablist">' + RP_TABS.map(function (t) { return '<button type="button" role="tab" aria-selected="' + (RP.tab === t[0]) + '" class="' + (RP.tab === t[0] ? 'on' : '') + '" data-rp-tab="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div></div>' +
+      '<div class="rp-body" data-rp-body>' + (rpInstant ? '' : '<div class="rp-skel">' + [1, 2, 3, 4, 5, 6].map(function () { return '<div class="rp-skel-tile"></div>'; }).join('') + '</div><div class="rp-skel-chart"></div>') + '</div>';
+  }
+  function rpFill() {
+    clearTimeout(rpTimer);
+    var instant = rpInstant; rpInstant = false;
+    rpTimer = setTimeout(function () {
+      var body = $('[data-rp-body]'); if (!body) return;
+      RP_CH = []; RP_FIG = []; rpDelay = 0;
+      body.innerHTML = rpBody();
+      rpDrawCharts(false); rpCountUp(body);
+    }, instant ? 0 : 450);
+  }
+  // numbers count up from 0 as their tile arrives, then give a little bounce
+  function rpCountUp(root) {
+    var still = false; try { still = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+    $$('[data-count]', root).forEach(function (n) {
+      var v = +n.dataset.count, k = n.dataset.kind, u = n.dataset.u, tile = n.closest('.rp-in'), wait = tile ? parseInt(tile.style.getPropertyValue('--d'), 10) || 0 : 0;
+      if (still) { n.textContent = rpFmt(k, v, u); return; }
+      // if the page is in the background the animation pauses, so make sure the real number lands
+      setTimeout(function () { if (!n.classList.contains('pop')) n.textContent = rpFmt(k, v, u); }, wait + 1400);
+      setTimeout(function () {
+        var t0 = null;
+        requestAnimationFrame(function step(now) {
+          if (t0 === null) t0 = now;
+          var p = Math.min(1, (now - t0) / 900), e = 1 - Math.pow(1 - p, 3);
+          n.textContent = rpFmt(k, v * e, u);
+          if (p < 1) requestAnimationFrame(step); else n.classList.add('pop');
+        });
+      }, wait);
+    });
+  }
+  function rpBody() {
+    var r = rpRange(RP.range), bk = rpBuckets(r.from, r.to), c = rpStats(r.from, r.to, bk, 0), p = rpStats(r.pf, r.pt, bk, diff(r.pf, r.from));
+    var labels = bk.keys.map(function (k) { return bk.label(k); }), tips = bk.keys.map(function (k) { return bk.label(k, true); });
+    var per = bk.kind === 'day' ? 'day' : 'week';
+    var ghost = function (arr) { return RP.compare ? [{ name: 'Period before', data: arr, ghost: true }] : []; };
+    var gLeg = function (n) { return rpLegend([{ n: n || 'This period', c: '#e8731c' }].concat(RP.compare ? [{ n: 'Period before', ghost: true }] : [])); };
+    var k = function (o) { return rpKpi(o); }, h = '', tab = RP.tab;
+    var series = function (name, cur, prev) { return [{ name: name, data: cur }].concat(ghost(prev)); };
+    var main = function (title, o, sub) { var html = rpCols(o) + rpTableView(o); return rpCard(title, html, { wide: true, sub: sub, side: o.legend || gLeg() }); };
+    var payRows = function (S) { return [{ l: 'Card', v: S.card, c: C_CARD }, { l: 'EFT', v: S.eft, c: C_EFT }, { l: 'Cash', v: S.cash, c: C_CASH }]; };
+
+    if (tab === 'overview') {
+      h += '<div class="rp-kpis">' +
+        k({ label: 'Money received', v: c.received, p: p.received, kind: 'money', spark: c.s.received, note: c.nPay + ' payments and sales', help: 'Every deposit, balance and shop sale paid in this period' }) +
+        k({ label: 'Bookings made', v: c.booked, p: p.booked, spark: c.s.made, note: money(c.madeValue) + ' booked' }) +
+        k({ label: 'Occupancy', v: c.occ, p: p.occ, kind: 'pct', note: c.nights + ' of ' + c.standNights + ' stand nights' }) +
+        k({ label: 'Guests hosted', v: c.guests, p: p.guests, spark: c.s.guests, note: c.arrivals + ' arrivals' }) +
+        k({ label: 'Average booking', v: avg(c.madeValue, c.booked), p: avg(p.madeValue, p.booked), kind: 'money' }) +
+        k({ label: 'Shop sales', v: c.shop, p: p.shop, kind: 'money', spark: c.s.shop, note: c.shopQ + ' items sold' }) + '</div>';
+      h += rpNow();
+      h += main('Money received', { labels: labels, tips: tips, kind: 'money', label: 'Money received per ' + per, series: series('This period', c.s.received, p.s.received) }, RP.compare ? 'Bars: this period · outline: the period before' : 'Paid in, per ' + per);
+      h += '<div class="rp-grid2">' + rpCard('How it was paid', rpDonut(payRows(c), 'money', 'received'), { sub: 'Card prices include the ' + cardFee() + '% card fee' }) +
+        rpCard('Where bookings come from', rpHBars(Object.keys(c.src).map(function (s) { return { l: s, v: c.src[s] }; }), 'count', { u: ' bookings' }), { sub: 'Bookings made in this period' }) + '</div>';
+    }
+
+    if (tab === 'money') {
+      var prov = Math.round(c.card * (DB.settings.providerFee || 2.95) / 100);
+      h += '<div class="rp-kpis">' +
+        k({ label: 'Money received', v: c.received, p: p.received, kind: 'money', spark: c.s.received, note: c.nPay + ' payments and sales' }) +
+        k({ label: 'Paid by card', v: c.card, p: p.card, kind: 'money', spark: c.s.card }) +
+        k({ label: 'Paid by EFT', v: c.eft, p: p.eft, kind: 'money', spark: c.s.eft }) +
+        k({ label: 'Cash', v: c.cash, p: p.cash, kind: 'money', note: 'Mostly the shop' }) +
+        k({ label: 'Refunds', v: c.refunds, p: p.refunds, kind: 'money', lower: true, note: 'Cancellations' }) +
+        k({ label: 'Card fee covered', v: c.fee, p: p.fee, kind: 'money', note: 'Provider cost about ' + money(prov), help: 'The extra ' + cardFee() + '% card guests paid. It should cover what the card company charges.' }) + '</div>';
+      h += rpNow();
+      h += main('Card and EFT', { labels: labels, tips: tips, kind: 'money', label: 'Card and EFT payments per ' + per, legend: rpLegend([{ n: 'Card', c: C_CARD }, { n: 'EFT', c: C_EFT }]), series: [{ name: 'Card', data: c.s.card, color: C_CARD }, { name: 'EFT', data: c.s.eft, color: C_EFT }] }, 'Money in, per ' + per);
+      h += '<div class="rp-grid2">' + rpCard('How it was paid', rpDonut(payRows(c), 'money', 'received')) +
+        rpCard('By area', rpHBars(Object.keys(AREA_SHORT).map(function (a) { return { l: AREA_SHORT[a], v: c.byArea[a] || 0 }; }), 'money'), { sub: 'Booking payments, by where the stand is' }) + '</div>';
+    }
+
+    if (tab === 'stays') {
+      var fw = add(TODAY, -((D(TODAY).getDay() + 6) % 7)), ahead = [], aheadL = [], aheadT = [];
+      for (var w = 0; w < 12; w++) { var ws = add(fw, w * 7), nn = 0; for (var dd = 0; dd < 7; dd++) nn += Object.keys(standsBookedOn(add(ws, dd))).length; ahead.push(nn / Math.max(1, STANDS.length * 7) * 100); aheadL.push(fd(ws)); aheadT.push('Week of ' + fd(ws, { day: 'numeric', month: 'long' })); }
+      h += '<div class="rp-kpis">' +
+        k({ label: 'Occupancy', v: c.occ, p: p.occ, kind: 'pct', note: c.nights + ' of ' + c.standNights + ' stand nights' }) +
+        k({ label: 'Stand nights sold', v: c.nights, p: p.nights, spark: c.s.nights }) +
+        k({ label: 'Average stay', v: avg(c.stayN, c.arrivals), p: avg(p.stayN, p.arrivals), kind: 'dec', u: ' nights' }) +
+        k({ label: 'Average group', v: avg(c.guests, c.arrivals), p: avg(p.guests, p.arrivals), kind: 'dec', u: ' people' }) +
+        k({ label: 'Booked ahead', v: avg(c.lead, c.booked), p: avg(p.lead, p.booked), u: ' days', note: 'Between booking and arriving' }) +
+        k({ label: 'Cancelled', v: avg(c.cancelled, c.made) * 100, p: avg(p.cancelled, p.made) * 100, kind: 'pct', lower: true, note: c.cancelled + ' of ' + c.made + ' bookings' }) + '</div>';
+      h += main('Stand nights sold', { labels: labels, tips: tips, kind: 'count', u: ' nights', label: 'Stand nights sold per ' + per, series: series('Stand nights', c.s.nights, p.s.nights) }, 'Every stand booked for a night counts once');
+      h += '<div class="rp-grid2">' +
+        rpCard('Occupancy by area', rpHBars(Object.keys(AREA_SHORT).map(function (a) { var cap = STANDS.filter(function (s) { return s.area === a; }).length * c.days, v = cap ? (c.areaN[a] || 0) / cap * 100 : 0; return { l: AREA_SHORT[a], v: v, t: Math.round(v) + '%' }; }), 'pct', { max: 100, keep: true })) +
+        rpCard('Busiest stands', rpHBars(STANDS.map(function (s) { return { l: s.name, v: c.standN[s.id] || 0 }; }), 'count', { u: ' nights' }), { sub: 'Nights booked in this period' }) +
+        rpCard('Arrival days', rpCols({ labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], tips: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], kind: 'count', u: ' arrivals', h: 210, label: 'Arrivals by weekday', series: [{ name: 'Arrivals', data: c.dow }] }), { sub: 'Which day guests arrive' }) +
+        rpCard('Length of stay', rpCols({ labels: ['1 night', '2 nights', '3 nights', '4+'], tips: ['1 night', '2 nights', '3 nights', '4 nights or more'], kind: 'count', u: ' bookings', h: 210, label: 'Bookings by length of stay', series: [{ name: 'Bookings', data: c.lens }] }), { sub: 'Bookings arriving in this period' }) + '</div>';
+      h += rpCard('On the books: the next 12 weeks', rpCols({ labels: aheadL, tips: aheadT, kind: 'pct', max: 100, h: 220, label: 'Occupancy already booked for the next 12 weeks', series: [{ name: 'Booked', data: ahead }] }), { wide: true, sub: 'How full each week already is. Not affected by the period above.' });
+    }
+
+    if (tab === 'guests') {
+      var tops = Object.keys(c.top).map(function (e) { return c.top[e]; }).sort(function (a, b) { return b.spent - a.spent; }).slice(0, 8);
+      h += '<div class="rp-kpis">' +
+        k({ label: 'Guests hosted', v: c.guests, p: p.guests, spark: c.s.guests, note: c.kids + ' of them children' }) +
+        k({ label: 'New guests', v: c.newG, p: p.newG, note: 'First stay at Kyleu' }) +
+        k({ label: 'Returning guests', v: c.retG, p: p.retG, note: 'Stayed before' }) +
+        k({ label: 'Returning share', v: avg(c.retG, c.arrivals) * 100, p: avg(p.retG, p.arrivals) * 100, kind: 'pct' }) +
+        k({ label: 'Mailing list', v: avg(c.consent, c.arrivals) * 100, p: avg(p.consent, p.arrivals) * 100, kind: 'pct', note: 'Agreed to news (POPIA)' }) + '</div>';
+      h += main('Guests arriving', { labels: labels, tips: tips, kind: 'count', u: ' guests', label: 'Guests arriving per ' + per, series: series('Guests', c.s.guests, p.s.guests) }, 'Adults, pensioners and children, by arrival day');
+      h += '<div class="rp-grid2">' + rpCard('Who comes', rpDonut(Object.keys(c.groups).sort(function (a, b) { return c.groups[b] - c.groups[a]; }).map(function (g) { return { l: g, v: c.groups[g] }; }), 'count', 'bookings'), { sub: 'Bookings arriving in this period' }) +
+        rpCard('Top guests', tops.length ? '<table class="tbl rp-tbl"><thead><tr><th>Guest</th><th class="r">Stays</th><th class="r">Nights</th><th class="r">Spent</th></tr></thead><tbody>' + tops.map(function (t) { return '<tr data-guest="' + esc(t.email) + '" tabindex="0"><td data-l="Guest"><b>' + esc(t.name) + '</b></td><td data-l="Stays" class="r">' + t.stays + '</td><td data-l="Nights" class="r">' + t.nights + '</td><td data-l="Spent" class="r">' + money(t.spent) + '</td></tr>'; }).join('') + '</tbody></table>' : '<p class="rp-empty">Nothing in this period.</p>', { sub: 'By booking value, arriving in this period. Tap a guest to open them.' }) + '</div>';
+    }
+
+    if (tab === 'shop') {
+      h += '<div class="rp-kpis">' +
+        k({ label: 'Shop sales', v: c.shop, p: p.shop, kind: 'money', spark: c.s.shop }) +
+        k({ label: 'Items sold', v: c.shopQ, p: p.shopQ }) +
+        k({ label: 'Average sale', v: avg(c.shop, c.shopN), p: avg(p.shop, p.shopN), kind: 'money', note: c.shopN + ' sales' }) +
+        k({ label: 'Paid by card', v: avg(c.shopCard, c.shop) * 100, p: avg(p.shopCard, p.shop) * 100, kind: 'pct', note: 'The rest is cash' }) + '</div>';
+      h += main('Shop sales', { labels: labels, tips: tips, kind: 'money', label: 'Shop sales per ' + per, series: series('Sales', c.s.shop, p.s.shop) }, 'Sales rung up at reception, per ' + per);
+      h += '<div class="rp-grid2">' + rpCard('Best sellers', rpHBars(Object.keys(c.items).map(function (i) { return { l: i, v: c.items[i] }; }), 'money'), { sub: 'By money taken' }) +
+        rpCard('Most sold', rpHBars(Object.keys(c.itemsQ).map(function (i) { return { l: i, v: c.itemsQ[i] }; }), 'count', { u: ' sold', color: C_EFT }), { sub: 'By how many' }) + '</div>';
+    }
+    return h + rpHow();
   }
 
   var SET = 'staff';
@@ -753,6 +1185,7 @@
     var bd = badges();
     $$('[data-nav]').forEach(function (a) { a.classList.toggle('on', a.dataset.nav === v); var em = $('em', a), n = bd[a.dataset.nav]; if (n) { if (!em) { em = document.createElement('em'); a.appendChild(em); } em.textContent = n; } else if (em) em.remove(); });
     el.innerHTML = VIEWS[v]();
+    if (v === 'reports') rpFill();
     document.title = NAV.filter(function (n) { return n.id === v; })[0].t + ' · Kyleu admin';
   }
 
@@ -794,6 +1227,10 @@
       Object.keys(CART).forEach(function (k) { if (!CART[k]) return; var it = items.filter(function (i) { return i.label === k; })[0], amt = (m === 'card' ? toCard(it.amount) : it.amount) * CART[k]; total += amt; DB.sales.push({ d: TODAY, item: k, qty: CART[k], m: m, amt: amt, stand: stand }); });
       CART = {}; log('Shop sale ' + money(total) + ' (' + methodLabel(m) + ')'); save(); render(); toast('Sale of ' + money(total) + ' recorded'); return;
     }
+    var rt = t.closest('[data-rp-tab]'); if (rt) { RP.tab = rt.dataset.rpTab; rpSave(); rpInstant = true; render(); return; }
+    var pd = t.closest('[data-ph-del]'); if (pd) { EDIT.photos.splice(+pd.dataset.phDel, 1); phRefresh(); return; }
+    var pc = t.closest('[data-ph-cover]'); if (pc) { var ph = EDIT.photos.splice(+pc.dataset.phCover, 1)[0]; EDIT.photos.unshift(ph); phRefresh(); return; }
+    var pk = t.closest('[data-ph-pick]'); if (pk) { var pi = EDIT.photos.indexOf(pk.dataset.phPick); if (pi >= 0) EDIT.photos.splice(pi, 1); else EDIT.photos.push(pk.dataset.phPick); phRefresh(); return; }
     var ub = t.closest('[data-unblock]'); if (ub) { DB.blocks = DB.blocks.filter(function (k) { return k.id !== ub.dataset.unblock; }); save(); render(); toast('Block removed'); return; }
     var a = t.closest('[data-act]'); if (!a) return;
     var act = a.dataset.act, ref = a.dataset.ref;
@@ -806,25 +1243,34 @@
     if (act === 'release') return actCancel(ref);
     if (act === 'move') return actMove(ref);
     if (act === 'block') return actBlock();
+    if (act === 'stand-add') return actStand(null, null);
+    if (act === 'stand-edit') return actStand(ref);
+    if (act === 'stand-copy') return actStand(null, ref);
+    if (act === 'stand-del') return actRemoveStand(ref);
+    if (act === 'prod-add') return actProduct(null);
+    if (act === 'prod-edit') return actProduct(+ref);
+    if (act === 'prod-del') return actRemoveProduct(+ref);
+    if (act === 'csv-report') { var rr = rpRange(RP.range); csv('kyleu-report-' + RP.tab + '-' + rr.from + '-to-' + rr.to + '.csv', [['Figure', rpRangeText(rr.from, rr.to), 'Period before: ' + rpRangeText(rr.pf, rr.pt)]].concat(RP_FIG)); return; }
     if (act === 'checkin' || act === 'checkout') { var b = byRef(ref); if (act === 'checkin') { b.status = 'in'; if (balance(b) > 0) b.notes.push({ at: nowStamp(), by: ME.name, text: 'Checked in with ' + money(balance(b)) + ' still owing. Collect at reception.' }); } else b.status = 'out'; log(guestName(b) + (act === 'checkin' ? ' checked in at ' : ' checked out of ') + standById(b.stand).name, b.ref); save(); refresh(); toast(act === 'checkin' ? (balance(b) > 0 ? 'Checked in. ' + money(balance(b)) + ' still owing: collect at reception' : 'Checked in. Enjoy your stay, ' + esc(b.guest.first) + '!') : 'Checked out. The stand is ready for cleaning.'); return; }
     if (act === 'csv-bookings') { csv('kyleu-bookings.csv', [['Ref', 'Created', 'Source', 'Guest', 'Email', 'Phone', 'Stand', 'Area', 'Arrive', 'Depart', 'Nights', 'Adults', 'Pensioners', 'Kids', 'Pays by', 'EFT price', 'Card price', 'Total', 'Paid', 'Balance', 'Status']].concat(DB.bookings.map(function (b) { var st = standById(b.stand); return [b.ref, b.created, b.source, guestName(b), b.guest.email, b.guest.phone, st.name, AREA_SHORT[st.area], b.ci, b.co, diff(b.ci, b.co), b.adults, b.pens, b.kids, methodLabel(b.method), b.eft, b.card, b.total, paid(b), balance(b), stateOf(b).t]; }))); return; }
     if (act === 'csv-guests') { csv('kyleu-mailing-list.csv', [['Name', 'Email', 'Phone', 'Stays', 'Last visit']].concat(guestsList().filter(function (g) { return g.consent; }).map(function (g) { return [g.name, g.email, g.phone, g.stays, g.last]; }))); toast('Only guests who agreed to receive news are exported'); return; }
     if (act === 'csv-pay') { csv('kyleu-payments-' + PAYF.month + '.csv', [['Date', 'Ref', 'From', 'For', 'Method', 'Amount', 'Card fee part']].concat(allPayments().filter(function (p) { return p.d.slice(0, 7) === PAYF.month; }).map(function (p) { return [p.d, p.ref, p.who, p.what, methodLabel(p.m), p.amt, p.fee]; }))); return; }
     if (act === 'save-rates') {
-      $$('[data-rate]').forEach(function (inp) { var v = parseFloat(inp.value.replace(/[^\d.]/g, '')); if (!isNaN(v)) { var k = inp.dataset.rate.split('|'); var orig = P.num(k[0], k[1], null); if (orig !== v) DB.rates[k[0] + '|' + k[1]] = v; else delete DB.rates[k[0] + '|' + k[1]]; } });
+      $$('[data-rate]').forEach(function (inp) { var v = parseFloat(inp.value.replace(/[^\d.]/g, '')); if (!isNaN(v)) { var k = inp.dataset.rate.split('|'); if (/shop/i.test(k[0])) { ensureProducts(); DB.products.forEach(function (pr) { if (pr.label === k[1]) pr.amount = v; }); return; } var orig = P.num(k[0], k[1], null); if (orig !== v) DB.rates[k[0] + '|' + k[1]] = v; else delete DB.rates[k[0] + '|' + k[1]]; } });
       log('Prices updated'); save(); render(); toast('Prices saved'); return;
     }
     if (act === 'enq-book') { var q = DB.enquiries.filter(function (x) { return x.id === ref; })[0], nm = q.name.split(' '); actNew({ first: nm[0], last: nm.slice(1).join(' '), email: q.email, phone: q.phone }); return; }
     if (act === 'invite') { modal('Invite a staff member', '<label class="fld"><span>Name</span><input name="n"></label><label class="fld"><span>Email</span><input name="e" type="email"></label><label class="fld"><span>Role</span><select name="r">' + Object.keys(ROLES).map(function (r) { return '<option>' + r + '</option>'; }).join('') + '</select></label>', 'Send invite', function () { toast('Invite sent (demo)'); }); return; }
     if (act === 'connect') { modal('Connect ' + esc(ref), '<p>In the live version you would sign in to your ' + esc(ref) + ' account here. Guests then pay on ' + esc(ref) + '\'s secure page and the booking is confirmed by itself the moment the payment goes through.</p><p class="muted small">Card numbers never touch the Kyleu website.</p>', null); return; }
     if (act === 'export-json') { var bl = document.createElement('a'); bl.href = URL.createObjectURL(new Blob([JSON.stringify(DB, null, 1)], { type: 'application/json' })); bl.download = 'kyleu-admin-backup.json'; bl.click(); return; }
-    if (act === 'reset') { modal('Reset demo data?', '<p>All demo bookings, payments and notes go back to the start. Bookings made on the website demo are removed too.</p>', 'Reset', function () { try { localStorage.removeItem(KEY); localStorage.removeItem(WEB); } catch (x) {} DB = seed(); save(); render(); toast('Demo data reset'); }, { danger: true }); return; }
+    if (act === 'reset') { modal('Reset demo data?', '<p>All demo bookings, payments and notes go back to the start. Bookings made on the website demo are removed too.</p>', 'Reset', function () { try { localStorage.removeItem(KEY); localStorage.removeItem(WEB); } catch (x) {} STANDS = CONTENT_STANDS.slice(); DB = null; DB = seed(); save(); render(); toast('Demo data reset'); }, { danger: true }); return; }
   }
   function onInput(e) {
     var t = e.target;
     if (t.matches('[data-f=q]')) { F.q = t.value; var pos = t.selectionStart; render(); var i = $('[data-f=q]'); i.focus(); i.setSelectionRange(pos, pos); return; }
     if (t.matches('[data-gq]')) { GQ = t.value; var p2 = t.selectionStart; render(); var g = $('[data-gq]'); g.focus(); g.setSelectionRange(p2, p2); return; }
     if (t.matches('[data-rate]')) { var c = $('[data-cardof="' + t.dataset.rate.replace(/"/g, '\\"') + '"]'), v = parseFloat(t.value); if (/card payment fee/i.test(t.dataset.rate)) return; if (c) c.textContent = v ? money(Math.round(v * (1 + (parseFloat(($('[data-rate="Booking rules|Card payment fee percentage"]') || {}).value) || cardFee()) / 100))) : ''; return; }
+    if (t.matches('[data-prod-price]')) { var pv = parseFloat(t.value.replace(/[^\d.]/g, '')), pcard = $('[data-prod-card]'); if (pcard) pcard.value = isNaN(pv) ? '' : money(toCard(pv)); return; }
     if (t.matches('[data-provfee]')) { DB.settings.providerFee = parseFloat(t.value) || 0; save(); return; }
     if (t.matches('[data-match]')) {
       var q = t.value.trim().toUpperCase().replace(/\s/g, ''), out = $('[data-match-out]');
@@ -845,6 +1291,10 @@
     var t = e.target;
     if (t.matches('[data-f=area]')) { F.area = t.value; render(); }
     if (t.matches('[data-pm]')) { PAYF.month = t.value; render(); }
+    if (t.matches('[data-rp-range]')) { RP.range = t.value; rpSave(); render(); }
+    if (t.matches('[data-rp-cmp]')) { RP.compare = t.checked; rpSave(); rpInstant = true; render(); }
+    if (t.matches('[data-copy-from]')) { actStand(null, t.value || null); }
+    if (t.matches('[data-ph-file]')) { Array.prototype.slice.call(t.files || []).slice(0, 10).forEach(function (file) { shrink(file, function (url) { if (EDIT) { EDIT.photos.push(url); phRefresh(); } }); }); t.value = ''; }
     if (t.matches('[data-close-stand]')) { var id = t.dataset.closeStand; if (t.checked) delete DB.closed[id]; else DB.closed[id] = true; log(standById(id).name + (t.checked ? ' opened' : ' closed') + ' for bookings'); save(); render(); toast(standById(id).name + (t.checked ? ' is open for bookings' : ' is closed to new bookings')); }
   }
   function onSubmit(e) {
@@ -854,9 +1304,10 @@
   }
   // tooltips for charts
   function onOver(e) {
-    var g = e.target.closest && e.target.closest('[data-tip]'), tip = $('.tip'); if (!tip) return;
+    var g = e.target.closest && e.target.closest('[data-tip],[data-rtip]'), tip = $('.tip'); if (!tip) return;
     if (!g) { tip.hidden = true; return; }
-    tip.textContent = g.dataset.tip; tip.hidden = false;
+    if (g.dataset.rtip) { tip.innerHTML = g.dataset.rtip; tip.classList.add('rich'); } else { tip.textContent = g.dataset.tip; tip.classList.remove('rich'); }
+    tip.hidden = false;
     var r = g.getBoundingClientRect(); tip.style.left = Math.min(window.innerWidth - tip.offsetWidth - 8, Math.max(8, r.left + r.width / 2 - tip.offsetWidth / 2)) + 'px'; tip.style.top = (r.top - tip.offsetHeight - 6) + 'px';
   }
 
@@ -872,11 +1323,12 @@
       if (e.key === 'Enter' && e.target.matches('tr[data-open],tr[data-guest]')) e.target.click();
     });
     document.addEventListener('focusout', function (e) { if (e.target.matches('[data-global]')) setTimeout(function () { var s = $('[data-sugg]'); if (s) s.hidden = true; }, 200); });
+    var rsz; window.addEventListener('resize', function () { clearTimeout(rsz); rsz = setTimeout(function () { if ($('[data-rpc]')) rpDrawCharts(true); }, 120); });
     window.addEventListener('hashchange', function () { document.body.classList.remove('nav-open'); if (ME) { render(); window.scrollTo(0, 0); } });
     // pick up website demo bookings made in another tab
     window.addEventListener('storage', function (e) { if (e.key === WEB && ME && importWeb()) { render(); toast('New booking from the website'); } });
     Promise.all([K.prices(), K.stands()]).then(function (r) {
-      P = r[0]; STANDS = r[1]; loadDB();
+      P = r[0]; CONTENT_STANDS = r[1]; STANDS = r[1].slice(); loadDB();
       var id = null; try { id = sessionStorage.getItem(SESS); } catch (e) {}
       var s = STAFF.filter(function (x) { return x.id === id; })[0];
       if (s) start(s); else login();
