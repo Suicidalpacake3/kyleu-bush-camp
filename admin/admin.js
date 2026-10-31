@@ -564,36 +564,44 @@
       '<div class="kpis">' + tile('Arriving today', arr.length, arr.filter(function (b) { return b.status === 'in'; }).length + ' checked in', 'today') + tile('Departing today', dep.length, dep.filter(function (b) { return b.status === 'out'; }).length + ' checked out', 'today') +
       tile('In camp tonight', nT + '<small>/' + STANDS.length + '</small>', Math.round(nT / STANDS.length * 100) + '% occupied', 'calendar') + tile('Awaiting EFT', pend.length, money(pendAmt) + ' in deposits', 'eft', pend.length ? 'warn' : '') +
       tile('Balances due in 7 days', money(balAmt), balSoon.length + ' booking' + (balSoon.length === 1 ? '' : 's'), 'eft') + (can('payments') ? tile('Received this month', money(recv), 'bookings and shop', 'payments', 'ok') : '') + '</div>' +
-      '<div class="cols"><section class="card" id="today"><header class="card-h"><h3>Today at camp</h3><div class="tabs" role="tablist"><button class="on" data-tab="arr">Arriving <span>' + arr.length + '</span></button><button data-tab="dep">Departing <span>' + dep.length + '</span></button><button data-tab="in">In camp <span>' + nT + '</span></button></div></header>' +
-      '<div data-pane="arr">' + (arr.length ? arr.map(function (b) { return rowB(b, b.status === 'in' ? '<span class="pill ok"><i></i>Checked in</span>' : '<span class="row-act" data-act="checkin" data-ref="' + b.ref + '">' + ic('in') + 'Check in</span>'); }).join('') : '<p class="empty">No arrivals today.</p>') + '</div>' +
-      '<div data-pane="dep" hidden>' + (dep.length ? dep.map(function (b) { return rowB(b, b.status === 'out' ? '<span class="pill muted"><i></i>Checked out</span>' : '<span class="row-act" data-act="checkout" data-ref="' + b.ref + '">' + ic('out') + 'Check out</span>'); }).join('') : '<p class="empty">No departures today.</p>') + '</div>' +
-      '<div data-pane="in" hidden>' + Object.keys(tonight).map(function (id) { return rowB(tonight[id]); }).join('') + '</div>' +
-      '<footer class="card-f"><span>' + ic('fire') + '<b>' + woodBags + '</b> free firewood bags tonight</span><span>' + ic('car') + '<b>' + drives.length + '</b> game drive' + (drives.length === 1 ? '' : 's') + ' booked</span><span>' + ic('ice') + '<b>' + ice + '</b> bags of ice to hand out</span></footer></section>' +
-      '<section class="card"><header class="card-h"><h3>Needs attention</h3><span class="count">' + attention.length + '</span></header>' + (attention.length ? '<ul class="attn">' + attention.slice(0, 9).map(function (a) { return '<li><button ' + (a.ref ? 'data-open="' + a.ref + '"' : 'data-go="' + a.go + '"') + '><span class="attn-i ' + a.tone + '">' + ic(a.i) + '</span><span>' + a.t + '</span>' + ic('chev-r', 'chev') + '</button></li>'; }).join('') + '</ul>' : '<p class="empty">All clear. Enjoy the bush!</p>') + '</section></div>' +
-      '<div class="cols"><section class="card"><header class="card-h"><h3>Stands booked, next 30 nights</h3><span class="muted small">Weekend nights in bold</span></header>' + colChart(occ, { max: STANDS.length, label: 'Stands booked per night', colA: C_CARD, band: 24 }) + '</section>' +
-      '<section class="card"><header class="card-h"><h3>Recent activity</h3></header><ul class="feed">' + DB.log.slice(0, 7).map(function (l) { return '<li' + (l.ref ? ' data-open="' + l.ref + '"' : '') + '><span>' + esc(l.text) + '</span><small>' + esc(l.by) + ' · ' + esc(l.at) + '</small></li>'; }).join('') + '</ul></section></div>';
+      (function () {
+        var inList = Object.keys(tonight).map(function (id) { return tonight[id]; });
+        var lists = { arr: arr, dep: dep, in: inList }, pg = pageOf(lists[DP.tab], DP.tab, 6), at = pageOf(attention, 'attn', 6), ac = pageOf(DB.log, 'act', 7);
+        var row = function (b) { return DP.tab === 'arr' ? rowB(b, b.status === 'in' ? '<span class="pill ok"><i></i>Checked in</span>' : '<span class="row-act" data-act="checkin" data-ref="' + b.ref + '">' + ic('in') + 'Check in</span>') : DP.tab === 'dep' ? rowB(b, b.status === 'out' ? '<span class="pill muted"><i></i>Checked out</span>' : '<span class="row-act" data-act="checkout" data-ref="' + b.ref + '">' + ic('out') + 'Check out</span>') : rowB(b); };
+        return '<div class="cols"><section class="card" id="today"><header class="card-h"><h3>Today at camp</h3><div class="tabs" role="tablist">' + [['arr', 'Arriving', arr.length], ['dep', 'Departing', dep.length], ['in', 'In camp', nT]].map(function (x) { return '<button class="' + (DP.tab === x[0] ? 'on' : '') + '" data-dtab="' + x[0] + '">' + x[1] + ' <span>' + x[2] + '</span></button>'; }).join('') + '</div></header>' +
+          (pg.items.length ? pg.items.map(row).join('') : '<p class="empty">' + ({ arr: 'No arrivals today.', dep: 'No departures today.', in: 'Nobody in camp tonight.' })[DP.tab] + '</p>') + pg.bar +
+          '<footer class="card-f"><span>' + ic('fire') + '<b>' + woodBags + '</b> free firewood bags tonight</span><span>' + ic('car') + '<b>' + drives.length + '</b> game drive' + (drives.length === 1 ? '' : 's') + ' booked</span><span>' + ic('ice') + '<b>' + ice + '</b> bags of ice to hand out</span></footer></section>' +
+          '<section class="card"><header class="card-h"><h3>Needs attention</h3><span class="count">' + attention.length + '</span></header>' + (attention.length ? '<ul class="attn">' + at.items.map(function (a) { return '<li><button ' + (a.ref ? 'data-open="' + a.ref + '"' : 'data-go="' + a.go + '"') + '><span class="attn-i ' + a.tone + '">' + ic(a.i) + '</span><span>' + a.t + '</span>' + ic('chev-r', 'chev') + '</button></li>'; }).join('') + '</ul>' + at.bar : '<p class="empty">All clear. Enjoy the bush!</p>') + '</section></div>' +
+          '<div class="cols"><section class="card"><header class="card-h"><h3>Stands booked, next 30 nights</h3><span class="muted small">Weekend nights in bold</span></header>' + colChart(occ, { max: STANDS.length, label: 'Stands booked per night', colA: C_CARD, band: 24 }) + '</section>' +
+          '<section class="card"><header class="card-h"><h3>Recent activity</h3><span class="count">' + DB.log.length + '</span></header><ul class="feed">' + ac.items.map(function (l) { return '<li' + (l.ref ? ' data-open="' + l.ref + '"' : '') + '><span>' + esc(l.text) + '</span><small>' + esc(l.by) + ' · ' + esc(l.at) + '</small></li>'; }).join('') + '</ul>' + ac.bar + '</section></div>';
+      })();
   }
 
-  var F = { q: '', st: 'upcoming', area: '' };
+  var F = { q: '', st: 'upcoming', area: '', stand: '', src: '', m: '', from: '', to: '' };
   function bucket(b) {
     var s = stateOf(b);
     return { pending: s.k === 'pending' || s.k === 'pop' || s.k === 'overdue', baldue: s.k === 'baldue', in: s.k === 'in', cancelled: s.k === 'cancelled', upcoming: live(b) && b.co >= TODAY && b.status !== 'out', past: b.status === 'out' || (b.co < TODAY && live(b)), all: true };
   }
   function vBookings() {
     var groups = [['upcoming', 'Upcoming'], ['pending', 'Awaiting EFT'], ['baldue', 'Balance due'], ['in', 'In camp'], ['past', 'Past'], ['cancelled', 'Cancelled'], ['all', 'All']];
-    var counts = {}; groups.forEach(function (g) { counts[g[0]] = 0; }); DB.bookings.forEach(function (b) { var k = bucket(b); groups.forEach(function (g) { if (k[g[0]]) counts[g[0]]++; }); });
     var q = F.q.toLowerCase();
-    var list = DB.bookings.filter(function (b) { var st = standById(b.stand); return bucket(b)[F.st] && (!F.area || st.area === F.area) && (!q || (b.ref + ' ' + guestName(b) + ' ' + b.guest.email + ' ' + b.guest.phone + ' ' + st.name).toLowerCase().indexOf(q) >= 0); });
+    var base = DB.bookings.filter(function (b) { var st = standById(b.stand); return (!F.area || st.area === F.area) && (!F.stand || b.stand === F.stand) && (!F.src || b.source === F.src) && (!F.m || b.method === F.m) && (!F.from || b.ci >= F.from) && (!F.to || b.ci <= F.to) && (!q || (b.ref + ' ' + guestName(b) + ' ' + b.guest.email + ' ' + b.guest.phone + ' ' + st.name).toLowerCase().indexOf(q) >= 0); });
+    var counts = {}; groups.forEach(function (g) { counts[g[0]] = 0; }); base.forEach(function (b) { var k = bucket(b); groups.forEach(function (g) { if (k[g[0]]) counts[g[0]]++; }); });
+    var list = base.filter(function (b) { return bucket(b)[F.st]; });
+    var srcs = []; DB.bookings.forEach(function (b) { if (srcs.indexOf(b.source) < 0) srcs.push(b.source); }); srcs.sort();
     if (F.st === 'past' || F.st === 'cancelled' || F.st === 'all') list = list.slice().reverse();
     return '<div class="page-h"><div><h1>Bookings</h1><p class="muted">' + list.length + ' shown · card prices include the ' + cardFee() + '% card fee, EFT prices do not</p></div><div class="ph-act"><button class="btn ghost" data-act="csv-bookings">' + ic('download') + 'Export</button><button class="btn" data-act="new">' + ic('plus') + 'New booking</button></div></div>' +
       '<div class="filters"><label class="search">' + ic('search') + '<input type="search" placeholder="Search name, ref, phone or stand" value="' + esc(F.q) + '" data-f="q" aria-label="Search bookings"></label>' +
-      '<select data-f="area" aria-label="Camp area"><option value="">All areas</option>' + Object.keys(AREA_SHORT).map(function (a) { return '<option value="' + a + '"' + (F.area === a ? ' selected' : '') + '>' + AREA_SHORT[a] + '</option>'; }).join('') + '</select></div>' +
+      '</div><div class="filter-row">' + fsel('F:area', F.area, [['', 'All areas']].concat(Object.keys(AREA_SHORT).map(function (a) { return [a, AREA_SHORT[a]]; }))) +
+      fsel('F:stand', F.stand, [['', 'All stands']].concat(STANDS.filter(function (x) { return !F.area || x.area === F.area; }).map(function (x) { return [x.id, x.name]; }))) +
+      fsel('F:src', F.src, [['', 'Booked via: any']].concat(srcs.map(function (x) { return [x, 'Booked via ' + x]; }))) + fsel('F:m', F.m, [['', 'Pays by: any'], ['card', 'Pays by card'], ['eft', 'Pays by EFT']]) +
+      '<label class="fdate"><span>Arriving from</span><input type="date" data-fk="F:from" value="' + F.from + '"' + (F.from ? ' class="on"' : '') + '></label><label class="fdate"><span>to</span><input type="date" data-fk="F:to" value="' + F.to + '"' + (F.to ? ' class="on"' : '') + '></label>' + fclear('F', ['area', 'stand', 'src', 'm', 'from', 'to']) + '</div>' +
       '<div class="chips scroll">' + groups.map(function (g) { return '<button class="chip' + (F.st === g[0] ? ' on' : '') + '" data-fst="' + g[0] + '">' + g[1] + ' <span>' + counts[g[0]] + '</span></button>'; }).join('') + '</div>' +
       '<div class="card flush"><table class="tbl"><thead><tr><th>Guest</th><th>Stand</th><th>Dates</th><th>Guests</th><th class="r">Total</th><th class="r">Balance</th><th>Status</th></tr></thead><tbody>' +
       (list.length ? list.map(function (b) {
         var st = standById(b.stand);
         return '<tr data-open="' + b.ref + '" tabindex="0"><td data-l="Guest"><b>' + esc(guestName(b)) + '</b>' + (b.isNew ? ' <span class="new">New</span>' : '') + '<small>' + esc(b.ref) + ' · ' + esc(b.source) + '</small></td><td data-l="Stand">' + esc(st.name) + '<small>' + AREA_SHORT[st.area] + '</small></td>' +
-          '<td data-l="Dates">' + fd(b.ci) + ' to ' + fd(b.co) + '<small>' + diff(b.ci, b.co) + ' nights · ' + rel(b.ci) + '</small></td><td data-l="Guests">' + people(b) + '</td>' +
+          '<td data-l="Dates" data-s="' + b.ci + '">' + fd(b.ci) + ' to ' + fd(b.co) + '<small>' + diff(b.ci, b.co) + ' nights · ' + rel(b.ci) + '</small></td><td data-l="Guests">' + people(b) + '</td>' +
           '<td data-l="Total" class="r">' + money(b.total) + '<small>' + methodLabel(b.method) + (b.method !== 'card' ? ' · card ' + money(b.card) : '') + '</small></td><td data-l="Balance" class="r">' + (balance(b) ? money(balance(b)) : '<span class="muted">0</span>') + '</td><td data-l="Status">' + pill(stateOf(b)) + '</td></tr>';
       }).join('') : '<tr><td colspan="7" class="empty">No bookings match.</td></tr>') + '</tbody></table></div>';
   }
@@ -617,13 +625,13 @@
       sec('EFT balances due soon', 'Balances are due ' + num('Booking rules', 'Balance due days before arrival', 7) + ' days before arrival.', bal, 'bal');
   }
 
-  var CAL = { start: null, days: 21 };
+  var CAL = { start: null, days: 21, area: '' };
   function vCalendar() {
     if (!CAL.start) CAL.start = add(TODAY, -2);
     var days = window.innerWidth < 700 ? 10 : CAL.days, s = CAL.start, e = add(s, days), cols = [];
     for (var i = 0; i < days; i++) cols.push(add(s, i));
     var head = '<div class="cal-row cal-head"><div class="cal-name">Stand</div>' + cols.map(function (d) { var dd = D(d); return '<div class="cal-day' + (d === TODAY ? ' today' : '') + (isWeekendNight(d) ? ' wk' : '') + '"><small>' + dd.toLocaleDateString('en-ZA', { weekday: 'short' }) + '</small><b>' + dd.getDate() + '</b></div>'; }).join('') + '</div>';
-    var rows = ['fenced', 'unfenced', 'self-sufficient'].map(function (a) {
+    var rows = ['fenced', 'unfenced', 'self-sufficient'].filter(function (a) { return !CAL.area || a === CAL.area; }).map(function (a) {
       return '<div class="cal-group">' + AREA_SHORT[a] + '</div>' + STANDS.filter(function (st) { return st.area === a; }).map(function (st) {
         var cells = cols.map(function (d, i) { return '<button class="cal-cell' + (d === TODAY ? ' today' : '') + (isWeekendNight(d) ? ' wk' : '') + '" style="grid-column:' + (i + 2) + '" data-newat="' + st.id + '|' + d + '" aria-label="New booking ' + esc(st.name) + ' ' + d + '"></button>'; }).join('');
         var bars = DB.bookings.filter(function (b) { return live(b) && b.stand === st.id && b.ci < e && s < b.co; }).map(function (b) {
@@ -637,7 +645,7 @@
         return '<div class="cal-row"><div class="cal-name"><b>' + esc(st.name) + '</b><small>' + st.guests + ' guests</small></div>' + cells + bars + blocks + '</div>';
       }).join('');
     }).join('');
-    return '<div class="page-h"><div><h1>Calendar</h1><p class="muted">' + fd(s, { day: 'numeric', month: 'long' }) + ' to ' + fd(add(e, -1), { day: 'numeric', month: 'long', year: 'numeric' }) + ' · tap an empty night to book it</p></div><div class="ph-act"><button class="icon-btn" data-cal="-7" aria-label="Previous week">' + ic('chev-l') + '</button><button class="btn ghost sm" data-cal="0">Today</button><button class="icon-btn" data-cal="7" aria-label="Next week">' + ic('chev-r') + '</button></div></div>' +
+    return '<div class="page-h"><div><h1>Calendar</h1><p class="muted">' + fd(s, { day: 'numeric', month: 'long' }) + ' to ' + fd(add(e, -1), { day: 'numeric', month: 'long', year: 'numeric' }) + ' · tap an empty night to book it</p></div><div class="ph-act">' + fsel('CAL:area', CAL.area, [['', 'All areas']].concat(Object.keys(AREA_SHORT).map(function (a) { return [a, AREA_SHORT[a]]; }))) + '<button class="icon-btn" data-cal="-7" aria-label="Previous week">' + ic('chev-l') + '</button><button class="btn ghost sm" data-cal="0">Today</button><button class="icon-btn" data-cal="7" aria-label="Next week">' + ic('chev-r') + '</button></div></div>' +
       '<div class="legend"><span><i class="lg info"></i>Deposit paid</span><span><i class="lg ok"></i>Paid in full / in camp</span><span><i class="lg warn"></i>Awaiting EFT or balance due</span><span><i class="lg bad"></i>Overdue</span><span><i class="lg block"></i>Blocked</span></div>' +
       '<div class="card flush cal-wrap"><div class="cal" style="--days:' + days + '">' + head + rows + '</div></div>';
   }
@@ -649,20 +657,23 @@
       var g = map[k] = map[k] || { name: guestName(b), email: b.guest.email, phone: b.guest.phone, consent: b.guest.consent, stays: 0, nights: 0, spent: 0, last: '', next: '', refs: [], pens: false, gd: false };
       g.refs.push(b.ref);
       if (!live(b)) return;
-      g.stays++; g.nights += diff(b.ci, b.co); g.spent += paid(b); if (b.pens) g.pens = true; if (b.extras && b.extras.gd) g.gd = true;
+      g.stays++; g.nights += diff(b.ci, b.co); g.spent += paid(b); if (b.ci <= TODAY && TODAY < b.co) g.now = true; if (b.pens) g.pens = true; if (b.extras && b.extras.gd) g.gd = true;
       if (b.co <= TODAY && b.ci > g.last) g.last = b.ci; if (b.ci >= TODAY && (!g.next || b.ci < g.next)) g.next = b.ci;
     });
     return Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) { return b.spent - a.spent; });
   }
-  var GQ = '';
+  var GQ = '', GF = { tag: '', area: '' };
+  var GTAGS = [['', 'All guests', function () { return true; }], ['now', 'In camp now', function (g) { return g.now; }], ['next', 'Coming up', function (g) { return g.next; }], ['ret', 'Returning', function (g) { return g.stays > 1; }], ['first', 'First-timers', function (g) { return g.stays === 1; }], ['mail', 'On the mailing list', function (g) { return g.consent; }], ['pens', 'Pensioners', function (g) { return g.pens; }], ['gd', 'Game drives', function (g) { return g.gd; }]];
   function vGuests() {
-    var all = guestsList(), q = GQ.toLowerCase(), list = all.filter(function (g) { return !q || (g.name + ' ' + g.email + ' ' + g.phone).toLowerCase().indexOf(q) >= 0; });
+    var all = guestsList(), q = GQ.toLowerCase(), tagF = GTAGS.filter(function (t) { return t[0] === GF.tag; })[0] || GTAGS[0];
+    var list = all.filter(function (g) { return tagF[2](g) && (!q || (g.name + ' ' + g.email + ' ' + g.phone).toLowerCase().indexOf(q) >= 0); });
     return '<div class="page-h"><div><h1>Guests</h1><p class="muted">' + all.length + ' guests · ' + all.filter(function (g) { return g.stays > 1; }).length + ' returning · ' + all.filter(function (g) { return g.consent; }).length + ' agreed to news and specials</p></div><div class="ph-act"><button class="btn ghost" data-act="csv-guests">' + ic('download') + 'Export mailing list</button></div></div>' +
-      '<div class="filters"><label class="search">' + ic('search') + '<input type="search" data-gq placeholder="Search guests" value="' + esc(GQ) + '" aria-label="Search guests"></label></div>' +
+      '<div class="filters"><label class="search">' + ic('search') + '<input type="search" data-gq placeholder="Search name, email or phone" value="' + esc(GQ) + '" aria-label="Search guests"></label></div>' +
+      '<div class="chips scroll">' + GTAGS.map(function (t) { return '<button class="chip' + (GF.tag === t[0] ? ' on' : '') + '" data-gtag="' + t[0] + '">' + t[1] + ' <span>' + all.filter(t[2]).length + '</span></button>'; }).join('') + '</div>' +
       '<div class="card flush"><table class="tbl"><thead><tr><th>Guest</th><th>Contact</th><th class="r">Stays</th><th class="r">Nights</th><th class="r">Spent</th><th>Last / next visit</th><th>Tags</th></tr></thead><tbody>' +
       list.map(function (g) {
         var tags = (g.stays > 1 ? '<span class="tag">Returning</span>' : '') + (g.pens ? '<span class="tag">Pensioner</span>' : '') + (g.gd ? '<span class="tag">Game drives</span>' : '') + (g.consent ? '<span class="tag ok">Mailing list</span>' : '');
-        return '<tr data-guest="' + esc(g.email) + '" tabindex="0"><td data-l="Guest"><b>' + esc(g.name) + '</b></td><td data-l="Contact">' + esc(g.phone) + '<small>' + esc(g.email) + '</small></td><td data-l="Stays" class="r">' + g.stays + '</td><td data-l="Nights" class="r">' + g.nights + '</td><td data-l="Spent" class="r">' + money(g.spent) + '</td><td data-l="Visits">' + (g.last ? fd(g.last, { day: 'numeric', month: 'short', year: 'numeric' }) : '<span class="muted">None yet</span>') + (g.next ? '<small>Next: ' + fd(g.next) + '</small>' : '') + '</td><td data-l="Tags">' + (tags || '<span class="muted">None</span>') + '</td></tr>';
+        return '<tr data-guest="' + esc(g.email) + '" tabindex="0"><td data-l="Guest"><b>' + esc(g.name) + '</b></td><td data-l="Contact">' + esc(g.phone) + '<small>' + esc(g.email) + '</small></td><td data-l="Stays" class="r">' + g.stays + '</td><td data-l="Nights" class="r">' + g.nights + '</td><td data-l="Spent" class="r">' + money(g.spent) + '</td><td data-l="Visits" data-s="' + (g.next || g.last || '') + '">' + (g.last ? fd(g.last, { day: 'numeric', month: 'short', year: 'numeric' }) : '<span class="muted">None yet</span>') + (g.next ? '<small>Next: ' + fd(g.next) + '</small>' : '') + '</td><td data-l="Tags">' + (tags || '<span class="muted">None</span>') + '</td></tr>';
       }).join('') + '</tbody></table></div>';
   }
   function openGuest(email) {
@@ -675,12 +686,16 @@
       'Save', function (f) { var c = fval(f, 'consent'); DB.bookings.forEach(function (b) { if (b.guest.email === email) b.guest.consent = c; }); save(); render(); toast('Guest updated'); }, { noFocus: true });
   }
 
+  var STF = { q: '', area: '', state: '' };
   function vStands() {
-    var tonight = standsBookedOn(TODAY);
+    var tonight = standsBookedOn(TODAY), sq = STF.q.toLowerCase();
+    var keep = function (s) { var cl = DB.closed[s.id], busy = !!tonight[s.id]; return (!sq || (s.name + ' ' + (s.feel || '') + ' ' + (s.highlights || []).join(' ')).toLowerCase().indexOf(sq) >= 0) && (!STF.state || (STF.state === 'open' ? !cl : STF.state === 'closed' ? cl : STF.state === 'free' ? !cl && !busy : STF.state === 'busy' ? busy : (s.photos || []).length === 0)); };
     return '<div class="page-h"><div><h1>Stands & blocks</h1><p class="muted">' + STANDS.length + ' stands. Add, copy or remove stands and change their photos and details.</p></div><div class="ph-act"><button class="btn ghost" data-act="block">' + ic('lock') + 'Block dates</button><button class="btn" data-act="stand-add">' + ic('plus') + 'Add a stand</button></div></div>' +
       '<section class="card"><header class="card-h"><h3>Blocked dates</h3><span class="muted small">Maintenance, owner holds, private events</span></header>' + (DB.blocks.length ? '<ul class="feed">' + DB.blocks.map(function (k) { return '<li><span><b>' + esc(standById(k.stand).name) + '</b> · ' + fd(k.from) + ' to ' + fd(k.to) + ' · ' + esc(k.reason) + '</span><button class="btn sm ghost" data-unblock="' + k.id + '">Remove</button></li>'; }).join('') + '</ul>' : '<p class="empty">No blocks.</p>') + '</section>' +
-      ['fenced', 'unfenced', 'self-sufficient'].map(function (a) {
-        var list = STANDS.filter(function (s) { return s.area === a; });
+      '<div class="filters">' + fsearch('STF:q', STF.q, 'Search stands') + fsel('STF:area', STF.area, [['', 'All areas']].concat(Object.keys(AREA_SHORT).map(function (a) { return [a, AREA_SHORT[a]]; }))) + fsel('STF:state', STF.state, [['', 'Any status'], ['free', 'Free tonight'], ['busy', 'Occupied tonight'], ['open', 'Open for bookings'], ['closed', 'Closed to bookings'], ['nophoto', 'Without photos']]) + fclear('STF', ['q', 'area', 'state']) + '</div>' +
+      ['fenced', 'unfenced', 'self-sufficient'].filter(function (a) { return !STF.area || a === STF.area; }).map(function (a) {
+        var list = STANDS.filter(function (s) { return s.area === a && keep(s); });
+        if (!list.length && (STF.q || STF.state)) return '';
         return '<h3 class="grp">' + AREA_SHORT[a] + ' <small>' + list.length + '</small></h3><div class="stand-grid">' + list.map(function (s) {
           var b = tonight[s.id], nxt = DB.bookings.filter(function (x) { return live(x) && x.stand === s.id && x.ci > TODAY; })[0], closed = DB.closed[s.id], n = (s.photos || []).length;
           return '<article class="stand' + (closed ? ' closed' : '') + '"><button type="button" class="stand-ph" data-act="stand-edit" data-ref="' + esc(s.id) + '" aria-label="Edit ' + esc(s.name) + '">' + (n ? '<img src="' + esc(imgSrc(s.photos[0])) + '" alt="" loading="lazy">' : '<span class="ph">No photo yet</span>') + '<span class="ph-n">' + n + ' photo' + (n === 1 ? '' : 's') + '</span>' + (s.status === 'new' ? '<span class="ph-new">New</span>' : '') + '</button>' +
@@ -860,7 +875,7 @@
   /* =========================================================
      Inbox: every email with a guest, kept as one conversation
      ========================================================= */
-  var IN = { box: 'open', id: null, q: '' };
+  var IN = { box: 'open', id: null, q: '', f: '', age: '' };
   var BOXES = [['open', 'Needs reply'], ['waiting', 'Waiting on guest'], ['closed', 'Closed'], ['all', 'All']];
   var QUICK = [
     ['We will check and come back to you', function () { return 'Thank you for your message. Let me check and come back to you today.'; }],
@@ -883,10 +898,12 @@
     var all = DB.threads.slice().sort(function (a, b) { return lastMsg(a).at < lastMsg(b).at ? 1 : -1; });
     var cnt = {}; BOXES.forEach(function (x) { cnt[x[0]] = all.filter(function (t) { return x[0] === 'all' || t.status === x[0]; }).length; });
     var q = IN.q.toLowerCase();
-    var list = all.filter(function (t) { return (IN.box === 'all' || t.status === IN.box || t.id === IN.id) && (!q || (t.name + ' ' + t.email + ' ' + t.subject + ' ' + t.ref + ' ' + t.msgs.map(function (m) { return m.body; }).join(' ')).toLowerCase().indexOf(q) >= 0); });
+    var hasAtt = function (t) { return t.msgs.some(function (m) { return m.att && m.att.length; }); };
+    var list = all.filter(function (t) { return (IN.box === 'all' || t.status === IN.box || t.id === IN.id) && (!IN.f || (IN.f === 'unread' ? t.unread : IN.f === 'att' ? hasAtt(t) : IN.f === 'linked' ? t.ref : !t.ref)) && (!IN.age || lastMsg(t).at.slice(0, 10) >= add(TODAY, 1 - IN.age)) && (!q || (t.name + ' ' + t.email + ' ' + t.subject + ' ' + t.ref + ' ' + t.msgs.map(function (m) { return m.body; }).join(' ')).toLowerCase().indexOf(q) >= 0); });
     var t = IN.id ? thrById(IN.id) : null;
     return '<div class="page-h"><div><h1>Inbox</h1><p class="muted">Every email with a guest, kept together as one conversation. Replies go from info@kyleu.co.za.</p></div><div class="ph-act"><button class="btn" data-act="mail-new">' + ic('plus') + 'New email</button></div></div>' +
       '<div class="mail' + (t ? ' reading' : '') + '"><section class="card flush mail-list"><div class="mail-tools"><label class="search">' + ic('search') + '<input type="search" data-inq placeholder="Search name, subject or booking" value="' + esc(IN.q) + '" aria-label="Search emails"></label>' +
+      '<div class="mail-filt">' + fsel('IN:f', IN.f, [['', 'All conversations'], ['unread', 'Unread'], ['att', 'With attachments'], ['linked', 'Linked to a booking'], ['unlinked', 'Not linked to a booking']]) + fsel('IN:age', IN.age, [['', 'Any time'], ['1', 'Today'], ['7', 'Last 7 days'], ['30', 'Last 30 days']]) + '</div>' +
       '<div class="mail-boxes">' + BOXES.map(function (x) { return '<button class="' + (IN.box === x[0] ? 'on' : '') + '" data-box="' + x[0] + '">' + x[1] + ' <span>' + cnt[x[0]] + '</span></button>'; }).join('') + '</div></div>' +
       '<ul>' + (list.length ? list.map(function (x) {
         var l = lastMsg(x), hasAtt = x.msgs.some(function (m) { return m.att && m.att.length; });
@@ -941,7 +958,7 @@
   /* =========================================================
      Payments: a ledger of every transaction, plus money still owed
      ========================================================= */
-  var PAYF = { tab: 'tx', range: 'this_month', type: '', m: '', q: '', lim: 120 };
+  var PAYF = { tab: 'tx', range: 'this_month', type: '', m: '', q: '', lim: 1e9 };
   function vPayments() {
     var rg = simpleRange(PAYF.range), q = PAYF.q.toLowerCase(), owed = receivables();
     var inRange = allTx().filter(function (x) { return x.d >= rg[0] && x.d <= rg[1]; });
@@ -966,10 +983,10 @@
       '<div class="filters"><label class="search">' + ic('search') + '<input type="search" data-payq placeholder="Search name, booking ref or amount" value="' + esc(PAYF.q) + '" aria-label="Search payments"></label>' +
       '<select data-paym aria-label="Payment method"><option value="">All methods</option><option value="card"' + (PAYF.m === 'card' ? ' selected' : '') + '>Card</option><option value="eft"' + (PAYF.m === 'eft' ? ' selected' : '') + '>EFT</option><option value="cash"' + (PAYF.m === 'cash' ? ' selected' : '') + '>Cash</option></select></div>' +
       '<div class="chips">' + [['', 'Everything'], ['booking', 'Booking payments'], ['shop', 'Shop sales'], ['refund', 'Refunds']].map(function (o) { return '<button class="chip' + (PAYF.type === o[0] ? ' on' : '') + '" data-payt="' + o[0] + '">' + o[1] + ' <span>' + inRange.filter(function (x) { return !o[0] || x.kind === o[0]; }).length + '</span></button>'; }).join('') + '</div>' +
-      '<div class="card flush"><table class="tbl ledger"><thead><tr><th>Time</th><th>Description</th><th>Type</th><th>Method</th><th class="r">Amount</th></tr></thead><tbody>' +
+      '<div class="card flush"><table class="tbl ledger" data-sort-key="tx"><thead><tr><th>Time</th><th>Description</th><th>Type</th><th>Method</th><th class="r">Amount</th></tr></thead><tbody>' +
       (days.length ? days.map(function (d) {
         return '<tr class="day"><td colspan="4">' + dayLabel(d) + '</td><td class="r">' + money(dayTot[d]) + '</td></tr>' + byDay[d].map(function (x) {
-          return '<tr ' + (x.ref ? 'data-open="' + x.ref + '"' : 'data-sale="' + x.sid + '"') + ' tabindex="0"><td data-l="Time" class="muted">' + (x.t || '') + '</td><td data-l="Description"><b>' + esc(x.who) + '</b><small>' + esc(x.what) + '</small></td><td data-l="Type"><span class="tag' + (x.amt < 0 ? ' bad' : x.kind === 'shop' ? ' shop' : '') + '">' + esc(x.type) + '</span></td><td data-l="Method"><span class="mth pm-' + x.m + '"><i></i>' + methodLabel(x.m) + '</span></td><td data-l="Amount" class="r amt' + (x.amt < 0 ? ' bad-t' : '') + '">' + money(x.amt) + '</td></tr>';
+          return '<tr ' + (x.ref ? 'data-open="' + x.ref + '"' : 'data-sale="' + x.sid + '"') + ' tabindex="0"><td data-l="Time" class="muted" data-s="' + x.d + ' ' + (x.t || '') + '">' + (x.t || fd(x.d)) + '</td><td data-l="Description"><b>' + esc(x.who) + '</b><small>' + esc(x.what) + '</small></td><td data-l="Type"><span class="tag' + (x.amt < 0 ? ' bad' : x.kind === 'shop' ? ' shop' : '') + '">' + esc(x.type) + '</span></td><td data-l="Method"><span class="mth pm-' + x.m + '"><i></i>' + methodLabel(x.m) + '</span></td><td data-l="Amount" class="r amt' + (x.amt < 0 ? ' bad-t' : '') + '">' + money(x.amt) + '</td></tr>';
         }).join('');
       }).join('') : '<tr><td colspan="5" class="empty">No payments match.</td></tr>') + '</tbody></table>' +
       (list.length > PAYF.lim ? '<div class="more"><button class="btn ghost" data-act="pay-more">Show more (' + (list.length - PAYF.lim) + ' left)</button></div>' : '') + '</div>';
@@ -977,10 +994,10 @@
   function owedHTML(owed) {
     var late = owed.filter(function (o) { return o.late; }), soon = owed.filter(function (o) { return !o.late && diff(TODAY, o.due) <= 7; }), later = owed.filter(function (o) { return !o.late && diff(TODAY, o.due) > 7; });
     var tot = function (l) { return money(l.reduce(function (a, o) { return a + o.amt; }, 0)); };
-    var rows = function (l) { return l.map(function (o) { var b = o.b, st = standById(b.stand); return '<tr data-open="' + b.ref + '" tabindex="0"><td data-l="Guest"><b>' + esc(guestName(b)) + '</b><small>' + esc(b.ref) + '</small></td><td data-l="Stay">' + esc(st.name) + '<small>' + fd(b.ci) + ' to ' + fd(b.co) + '</small></td><td data-l="For">' + o.what + '<small>Pays by ' + methodLabel(b.method) + '</small></td><td data-l="Due" class="' + (o.late ? 'bad-t' : '') + '">' + fd(o.due) + '<small>' + (o.late ? 'Overdue ' + -diff(TODAY, o.due) + ' days' : rel(o.due)) + '</small></td><td data-l="Amount" class="r amt">' + money(o.amt) + '</td><td class="r row-btn"><button class="btn sm ghost" data-act="remind" data-ref="' + b.ref + '">' + ic('send') + 'Remind</button><button class="btn sm" data-act="pay" data-ref="' + b.ref + '">Record payment</button></td></tr>'; }).join(''); };
+    var rows = function (l) { return l.map(function (o) { var b = o.b, st = standById(b.stand); return '<tr data-open="' + b.ref + '" tabindex="0"><td data-l="Guest"><b>' + esc(guestName(b)) + '</b><small>' + esc(b.ref) + '</small></td><td data-l="Stay" data-s="' + b.ci + '">' + esc(st.name) + '<small>' + fd(b.ci) + ' to ' + fd(b.co) + '</small></td><td data-l="For">' + o.what + '<small>Pays by ' + methodLabel(b.method) + '</small></td><td data-l="Due" data-s="' + o.due + '" class="' + (o.late ? 'bad-t' : '') + '">' + fd(o.due) + '<small>' + (o.late ? 'Overdue ' + -diff(TODAY, o.due) + ' days' : rel(o.due)) + '</small></td><td data-l="Amount" class="r amt">' + money(o.amt) + '</td><td class="r row-btn"><button class="btn sm ghost" data-act="remind" data-ref="' + b.ref + '">' + ic('send') + 'Remind</button><button class="btn sm" data-act="pay" data-ref="' + b.ref + '">Record payment</button></td></tr>'; }).join(''); };
     var sec = function (title, l) { return l.length ? '<tr class="day"><td colspan="4">' + title + ' · ' + l.length + '</td><td class="r">' + tot(l) + '</td><td></td></tr>' + rows(l) : ''; };
     return '<div class="kpis">' + tile('Overdue', tot(late), late.length + ' booking' + (late.length === 1 ? '' : 's'), null, late.length ? 'warn' : 'ok') + tile('Due in the next 7 days', tot(soon), soon.length + ' booking' + (soon.length === 1 ? '' : 's')) + tile('Due later', tot(later), later.length + ' booking' + (later.length === 1 ? '' : 's')) + '</div>' +
-      '<div class="card flush"><table class="tbl ledger owed"><thead><tr><th>Guest</th><th>Stay</th><th>For</th><th>Due</th><th class="r">Amount</th><th></th></tr></thead><tbody>' +
+      '<div class="card flush"><table class="tbl ledger owed" data-sort-key="owed"><thead><tr><th>Guest</th><th>Stay</th><th>For</th><th>Due</th><th class="r">Amount</th><th></th></tr></thead><tbody>' +
       (owed.length ? sec('Overdue', late) + sec('Due in the next 7 days', soon) + sec('Due later', later) : '<tr><td colspan="6" class="empty">Nothing owed. Everyone has paid.</td></tr>') + '</tbody></table></div>' +
       '<p class="demo-note">' + ic('info') + 'Deposits are due ' + num('Booking rules', 'Deposit due within days of invoice', 5) + ' days after the invoice, balances ' + num('Booking rules', 'Balance due days before arrival', 7) + ' days before arrival.</p>';
   }
@@ -988,7 +1005,7 @@
   /* =========================================================
      Shop: a till like Square or Yoco, and the sales history
      ========================================================= */
-  var SHOP = { tab: 'till', cat: '', q: '', who: '', range: 'today' };
+  var SHOP = { tab: 'till', cat: '', q: '', who: '', range: 'today', sm: '', sq: '' };
   var CART = {};   // product id → how many
   function bookingsHere() { return DB.bookings.filter(function (b) { return live(b) && b.status !== 'pending' && b.status !== 'out' && b.ci <= TODAY && TODAY <= b.co && (b.status === 'in' || TODAY < b.co); }).sort(function (a, b) { return standById(a.stand).name < standById(b.stand).name ? -1 : 1; }); }
   function vShop() {
@@ -1034,18 +1051,18 @@
     toast(m === 'bill' ? money(total) + ' added to ' + esc(guestName(b)) + '\'s bill' : 'Sale of ' + money(total) + ' recorded (' + saleMethod(m) + ')');
   }
   function salesHTML() {
-    var rg = simpleRange(SHOP.range), rs = receipts().filter(function (r) { return r.d >= rg[0] && r.d <= rg[1]; });
+    var rg = simpleRange(SHOP.range), sq = SHOP.sq.toLowerCase(), rs = receipts().filter(function (r) { return r.d >= rg[0] && r.d <= rg[1] && (!SHOP.sm || r.m === SHOP.sm) && (!sq || (r.summary + ' ' + r.stand + ' ' + r.guest + ' ' + r.by).toLowerCase().indexOf(sq) >= 0); });
     var sales = rs.filter(function (r) { return r.amt > 0; }), refunds = rs.filter(function (r) { return r.amt < 0; });
     var total = rs.reduce(function (a, r) { return a + r.amt; }, 0), items = sales.reduce(function (a, r) { return a + r.qty; }, 0), onBill = sales.filter(function (r) { return r.m === 'bill'; }).reduce(function (a, r) { return a + r.amt; }, 0);
     var best = {}; sales.forEach(function (r) { r.lines.forEach(function (l) { best[l.item] = (best[l.item] || 0) + l.amt; }); });
     var top = Object.keys(best).sort(function (a, b) { return best[b] - best[a]; }).slice(0, 6);
     var days = [], byDay = {}; rs.forEach(function (r) { if (!byDay[r.d]) { byDay[r.d] = []; days.push(r.d); } byDay[r.d].push(r); });
-    return '<div class="filters">' + rangeSelect('data-shopr', SHOP.range) + '<button class="btn ghost" data-act="csv-sales">' + ic('download') + 'Export</button></div>' +
+    return '<div class="filters">' + fsearch('SHOP:sq', SHOP.sq, 'Search item, stand, guest or staff') + rangeSelect('data-shopr', SHOP.range) + fsel('SHOP:sm', SHOP.sm, [['', 'Paid by: any'], ['cash', 'Cash'], ['card', 'Card'], ['bill', 'On a guest\'s bill']]) + '<button class="btn ghost" data-act="csv-sales">' + ic('download') + 'Export</button></div>' +
       '<div class="kpis">' + tile('Shop sales', money(total), sales.length + ' sale' + (sales.length === 1 ? '' : 's') + (refunds.length ? ' · ' + refunds.length + ' refunded' : '')) + tile('Items sold', items, top[0] ? 'Most sold: ' + esc(top[0]) : '') + tile('Average sale', money(sales.length ? total / sales.length : 0), 'per customer') + tile('Put on guests\' bills', money(onBill), 'paid with their booking') + '</div>' +
-      '<div class="cols"><section class="card flush"><table class="tbl ledger"><thead><tr><th>Time</th><th>Items</th><th>For</th><th>Paid by</th><th class="r">Amount</th></tr></thead><tbody>' +
+      '<div class="cols"><section class="card flush"><table class="tbl ledger" data-sort-key="sales"><thead><tr><th>Time</th><th>Items</th><th>For</th><th>Paid by</th><th class="r">Amount</th></tr></thead><tbody>' +
       (days.length ? days.map(function (d) {
         return '<tr class="day"><td colspan="4">' + dayLabel(d) + '</td><td class="r">' + money(byDay[d].reduce(function (a, r) { return a + r.amt; }, 0)) + '</td></tr>' + byDay[d].map(function (r) {
-          return '<tr data-sale="' + r.sid + '" tabindex="0"><td data-l="Time" class="muted">' + r.t + '</td><td data-l="Items"><b>' + esc(r.summary) + '</b>' + (r.refunded ? ' <span class="tag bad">Refunded</span>' : '') + (r.amt < 0 ? ' <span class="tag bad">Refund</span>' : '') + '<small>by ' + esc(r.by || 'staff') + '</small></td><td data-l="For">' + (r.stand ? esc(r.stand) + (r.guest ? '<small>' + esc(r.guest) + '</small>' : '') : '<span class="muted">Walk-in</span>') + '</td><td data-l="Paid by"><span class="mth pm-' + r.m + '"><i></i>' + saleMethod(r.m) + '</span></td><td data-l="Amount" class="r amt' + (r.amt < 0 ? ' bad-t' : '') + '">' + money(r.amt) + '</td></tr>';
+          return '<tr data-sale="' + r.sid + '" tabindex="0"><td data-l="Time" class="muted" data-s="' + r.d + ' ' + r.t + '">' + r.t + '</td><td data-l="Items"><b>' + esc(r.summary) + '</b>' + (r.refunded ? ' <span class="tag bad">Refunded</span>' : '') + (r.amt < 0 ? ' <span class="tag bad">Refund</span>' : '') + '<small>by ' + esc(r.by || 'staff') + '</small></td><td data-l="For">' + (r.stand ? esc(r.stand) + (r.guest ? '<small>' + esc(r.guest) + '</small>' : '') : '<span class="muted">Walk-in</span>') + '</td><td data-l="Paid by"><span class="mth pm-' + r.m + '"><i></i>' + saleMethod(r.m) + '</span></td><td data-l="Amount" class="r amt' + (r.amt < 0 ? ' bad-t' : '') + '">' + money(r.amt) + '</td></tr>';
         }).join('');
       }).join('') : '<tr><td colspan="5" class="empty">No sales in this period.</td></tr>') + '</tbody></table></section>' +
       '<section class="card"><header class="card-h"><h3>Best sellers</h3><span class="muted small">By money taken</span></header>' + (top.length ? hbars(top.map(function (k) { return { l: k, v: best[k], t: money(best[k]) }; })) : '<p class="empty">No sales yet.</p>') + '</section></div>';
@@ -1070,21 +1087,21 @@
   /* =========================================================
      Products: the shop's catalogue, like Shopify's product list
      ========================================================= */
-  var PROD = { q: '', cat: '' };
+  var PROD = { q: '', cat: '', stock: '' };
   function soldSince(days) { var from = add(TODAY, -days + 1), m = {}; DB.sales.forEach(function (s) { if (s.d >= from && s.pid && s.m) { m[s.pid] = m[s.pid] || { q: 0, v: 0 }; m[s.pid].q += s.qty; m[s.pid].v += s.amt; } }); return m; }
   function vProducts() {
     var items = shopItems(), sold = soldSince(30), q = PROD.q.toLowerCase(), cats = prodCats();
-    var list = items.filter(function (p) { return (!PROD.cat || p.cat === PROD.cat) && (!q || (p.label + ' ' + (p.note || '')).toLowerCase().indexOf(q) >= 0); });
+    var list = items.filter(function (p) { return (!PROD.cat || p.cat === PROD.cat) && (!PROD.stock || (PROD.stock === 'low' ? lowStock(p) : PROD.stock === 'counted' ? p.stock != null : PROD.stock === 'uncounted' ? p.stock == null : PROD.stock === 'hidden' ? p.active === false : p.active !== false)) && (!q || (p.label + ' ' + (p.note || '')).toLowerCase().indexOf(q) >= 0); });
     var low = items.filter(lowStock), sq = 0, sv = 0; Object.keys(sold).forEach(function (k) { sq += sold[k].q; sv += sold[k].v; });
     return '<div class="page-h"><div><h1>Products</h1><p class="muted">Everything the camp shop sells. Enter the cash and EFT price; card payments add ' + cardFee() + '%.</p></div><div class="ph-act"><button class="btn" data-act="prod-add">' + ic('plus') + 'Add product</button></div></div>' +
       '<div class="kpis">' + tile('Products', items.length, items.filter(function (p) { return p.active !== false; }).length + ' showing on the till') + tile('Low on stock', low.length, low.length ? low.map(function (p) { return esc(p.label); }).slice(0, 2).join(', ') : 'All stocked up', null, low.length ? 'warn' : 'ok') + tile('Sold in the last 30 days', sq + ' items', money(sv)) + '</div>' +
-      '<div class="filters"><label class="search">' + ic('search') + '<input type="search" data-prodq placeholder="Search products" value="' + esc(PROD.q) + '" aria-label="Search products"></label></div>' +
+      '<div class="filters"><label class="search">' + ic('search') + '<input type="search" data-prodq placeholder="Search products" value="' + esc(PROD.q) + '" aria-label="Search products"></label>' + fsel('PROD:stock', PROD.stock, [['', 'Any stock level'], ['low', 'Low on stock'], ['counted', 'Stock counted'], ['uncounted', 'Stock not counted'], ['on', 'On the till'], ['hidden', 'Hidden from the till']]) + '</div>' +
       '<div class="chips scroll"><button class="chip' + (!PROD.cat ? ' on' : '') + '" data-prodcat="">All <span>' + items.length + '</span></button>' + cats.map(function (c) { var n = items.filter(function (p) { return p.cat === c; }).length; return n ? '<button class="chip' + (PROD.cat === c ? ' on' : '') + '" data-prodcat="' + esc(c) + '">' + esc(c) + ' <span>' + n + '</span></button>' : ''; }).join('') + '</div>' +
       '<div class="card flush"><table class="tbl prods"><thead><tr><th>Product</th><th>Category</th><th class="r">Price</th><th class="r">In stock</th><th class="r">Sold, 30 days</th><th>Status</th></tr></thead><tbody>' +
       (list.length ? list.map(function (p) {
         var s = sold[p.id] || { q: 0, v: 0 };
         return '<tr data-prod="' + p.id + '" tabindex="0"><td data-l="Product"><b>' + esc(p.label) + '</b>' + (p.note ? '<small>' + esc(p.note) + '</small>' : '') + '</td><td data-l="Category">' + esc(p.cat || '') + '</td><td data-l="Price" class="r">' + money(p.amount) + '<small>Card ' + money(toCard(p.amount)) + '</small></td>' +
-          '<td data-l="In stock" class="r">' + (p.stock == null ? '<span class="muted">Not counted</span>' : lowStock(p) ? '<span class="pill warn"><i></i>' + p.stock + ' left</span>' : p.stock) + '</td><td data-l="Sold" class="r">' + s.q + '<small>' + money(s.v) + '</small></td>' +
+          '<td data-l="In stock" class="r" data-s="' + (p.stock == null ? -1 : p.stock) + '">' + (p.stock == null ? '<span class="muted">Not counted</span>' : lowStock(p) ? '<span class="pill warn"><i></i>' + p.stock + ' left</span>' : p.stock) + '</td><td data-l="Sold" class="r" data-s="' + s.q + '">' + s.q + '<small>' + money(s.v) + '</small></td>' +
           '<td data-l="Status">' + (p.active === false ? '<span class="pill muted"><i></i>Hidden</span>' : '<span class="pill ok"><i></i>On the till</span>') + '</td></tr>';
       }).join('') : '<tr><td colspan="6" class="empty">No products match.</td></tr>') + '</tbody></table></div>' +
       '<p class="demo-note">' + ic('info') + 'Click a product to change its price, stock or category. In the live version these prices also show on the website\'s Rates page.</p>';
@@ -1124,26 +1141,27 @@
   /* =========================================================
      Game drives: a schedule, like an activity booking system
      ========================================================= */
-  var SLOTS = { am: 'Morning · 06:00', pm: 'Afternoon · 15:30' }, SEATS = 10, GUIDES = ['Devon', 'Kyran'];
+  var SLOTS = { am: 'Morning · 06:00', pm: 'Afternoon · 15:30' }, SEATS = 10, GUIDES = ['Devon', 'Kyran'], GD = { guide: '', slot: '' };
   function drivePrice(n) { return n >= 3 ? n * num('Game drives', 'Game drive 3 or more people per person', 400) : n === 2 ? 2 * num('Game drives', 'Game drive 2 people per person', 450) : n === 1 ? num('Game drives', 'Game drive 1 person', 900) : 0; }
   function vDrives() {
     var all = DB.bookings.filter(function (b) { return live(b) && b.extras && b.extras.gd; });
     var need = all.filter(function (b) { return !b.drive && b.co >= TODAY; }).sort(function (a, b) { return a.ci < b.ci ? -1 : 1; });
-    var sched = all.filter(function (b) { return b.drive && b.drive.d >= TODAY; });
+    var sched = all.filter(function (b) { return b.drive && b.drive.d >= TODAY && (!GD.guide || b.drive.guide === GD.guide) && (!GD.slot || b.drive.slot === GD.slot); });
     var wk = sched.filter(function (b) { return b.drive.d <= add(TODAY, 6); }), slotsWk = {}; wk.forEach(function (b) { slotsWk[b.drive.d + b.drive.slot] = 1; });
     var month = TODAY.slice(0, 7), inc = all.filter(function (b) { return (b.drive ? b.drive.d : b.ci).slice(0, 7) === month; }).reduce(function (a, b) { return a + drivePrice(b.extras.gd); }, 0);
     var days = []; for (var i = 0; i < 14; i++) days.push(add(TODAY, i));
     return '<div class="page-h"><div><h1>Game drives</h1><p class="muted">Guided drives with a Kyleu guide. ' + money(num('Game drives', 'Game drive 3 or more people per person', 400)) + ' per person for 3 or more, ' + money(num('Game drives', 'Game drive 2 people per person', 450)) + ' each for 2, ' + money(num('Game drives', 'Game drive 1 person', 900)) + ' for one person.</p></div><div class="ph-act"><button class="btn" data-act="drive-add">' + ic('plus') + 'Add a game drive</button></div></div>' +
       '<div class="kpis">' + tile('Drives in the next 7 days', Object.keys(slotsWk).length, wk.reduce(function (a, b) { return a + b.extras.gd; }, 0) + ' guests going') + tile('Waiting for a time', need.length, need.length ? 'Pick a time and a guide' : 'Everything is scheduled', null, need.length ? 'warn' : 'ok') + tile('Drive income this month', money(inc), 'at EFT prices') + '</div>' +
       (need.length ? '<section class="card"><header class="card-h"><h3>Waiting for a time</h3><span class="muted small">Booked with the stay, time not set yet</span></header>' + need.map(function (b) { return '<div class="brow"><span class="brow-st">' + b.extras.gd + ' ' + (b.extras.gd === 1 ? 'person' : 'people') + '</span><span class="brow-g" data-open="' + b.ref + '"><b>' + esc(guestName(b)) + '</b><small>' + esc(standById(b.stand).name) + ' · staying ' + fd(b.ci) + ' to ' + fd(b.co) + '</small></span><button class="btn sm" data-act="drive-set" data-ref="' + b.ref + '">' + ic('clock') + 'Set a time</button></div>'; }).join('') + '</section>' : '') +
-      '<section class="card"><header class="card-h"><h3>The next two weeks</h3><span class="muted small">' + SEATS + ' seats per vehicle</span></header>' + days.map(function (d) {
+      '<section class="card"><header class="card-h"><h3>The next two weeks</h3><div class="ph-act">' + fsel('GD:guide', GD.guide, [['', 'All guides']].concat(GUIDES.map(function (g) { return [g, 'Guide: ' + g]; }))) + fsel('GD:slot', GD.slot, [['', 'Morning and afternoon'], ['am', 'Mornings only'], ['pm', 'Afternoons only']]) + '</div></header>' + days.map(function (d) {
         var any = sched.some(function (b) { return b.drive.d === d; });
+        if (!any && (GD.guide || GD.slot)) return '';
         return '<div class="gd-day' + (any ? '' : ' quiet') + '"><div class="gd-date"><b>' + fd(d, { weekday: 'short', day: 'numeric', month: 'short' }) + '</b><small>' + (d === TODAY ? 'Today' : rel(d)) + '</small></div><div class="gd-slots">' + ['am', 'pm'].map(function (s) {
           var ps = sched.filter(function (b) { return b.drive.d === d && b.drive.slot === s; }), n = ps.reduce(function (a, b) { return a + b.extras.gd; }, 0);
           if (!n) return '<div class="gd-slot empty"><b>' + SLOTS[s] + '</b><span class="muted small">No one booked</span></div>';
           return '<div class="gd-slot"><div class="gd-top"><b>' + SLOTS[s] + '</b><span class="small">Guide: <b>' + esc(ps[0].drive.guide || 'not set') + '</b></span></div><div class="seats' + (n > SEATS ? ' over' : '') + '"><span style="width:' + Math.min(100, n / SEATS * 100) + '%"></span></div><small class="' + (n > SEATS ? 'bad-t' : 'muted') + '">' + n + ' of ' + SEATS + ' seats' + (n > SEATS ? ': needs a second vehicle' : '') + '</small>' +
             '<ul>' + ps.map(function (b) { return '<li><button data-act="drive-set" data-ref="' + b.ref + '"><b>' + esc(guestName(b)) + '</b> · ' + b.extras.gd + (b.extras.gd === 1 ? ' person' : ' people') + ' · ' + esc(standById(b.stand).name) + '</button></li>'; }).join('') + '</ul></div>';
-        }).join('') + '</div></div>';
+        }).filter(function (h, si) { return !GD.slot || ['am', 'pm'][si] === GD.slot; }).join('') + '</div></div>';
       }).join('') + '</section>';
   }
   // set (or change) the time, the guide and how many people; the price on the booking follows
@@ -1457,7 +1475,7 @@
     rpTimer = setTimeout(function () {
       var body = $('[data-rp-body]'); if (!body) return;
       RP_CH = []; RP_FIG = []; rpDelay = 0;
-      body.innerHTML = rpBody();
+      body.innerHTML = rpBody(); applyTables();
       rpDrawCharts(false); rpCountUp(body);
     }, instant ? 0 : 450);
   }
@@ -1565,7 +1583,7 @@
     return h + rpHow();
   }
 
-  var SET = 'staff';
+  var SET = 'staff', LOGF = { q: '', by: '' };
   function vSettings() {
     var tabs = [['staff', 'Staff & access'], ['payments', 'Payments'], ['emails', 'Email templates'], ['data', 'Data & privacy']];
     var body = '';
@@ -1577,8 +1595,63 @@
     if (SET === 'emails') body = '<div class="tpl-grid">' + Object.keys(TEMPLATES).map(function (k) { var t = TEMPLATES[k]; return '<section class="card"><header class="card-h"><h3>' + t.t + '</h3><span class="muted small">' + ({ confirm: 'Sent when a booking is made', eft: 'Sent 3 days after an unpaid EFT invoice', balance: 'Sent 10 days before arrival', arrival: 'Sent 3 days before arrival', thanks: 'Sent the day after departure' })[k] + '</span></header><p class="small"><b>' + esc(t.s) + '</b></p><pre class="tpl">' + esc(t.b({})) + '</pre></section>'; }).join('') + '</div><p class="demo-note">' + ic('info') + 'Words in {curly brackets} are filled in for each guest. In the live version these send automatically.</p>';
     if (SET === 'data') body = '<div class="cols"><section class="card"><header class="card-h"><h3>Privacy (POPIA)</h3></header><p class="small">Guest details are only used to manage bookings. Guests can ask for their details to be removed; deleting a guest keeps the booking for tax records but removes their contact details.</p><p class="small">Only staff with an account can open this admin, and every change is logged.</p></section>' +
       '<section class="card"><header class="card-h"><h3>Demo data</h3></header><p class="small">Everything in this admin is made-up demo data kept only in this browser. Bookings you make on the website demo show up here too.</p><div class="row-btns"><button class="btn ghost" data-act="export-json">' + ic('download') + 'Download a backup</button><button class="btn ghost danger-t" data-act="reset">Reset demo data</button></div></section></div>' +
-      '<section class="card"><header class="card-h"><h3>Activity log</h3></header><ul class="feed">' + DB.log.slice(0, 25).map(function (l) { return '<li' + (l.ref ? ' data-open="' + l.ref + '"' : '') + '><span>' + esc(l.text) + '</span><small>' + esc(l.by) + ' · ' + esc(l.at) + '</small></li>'; }).join('') + '</ul></section>';
+      '<section class="card"><header class="card-h"><h3>Activity log</h3><div class="ph-act">' + fsearch('LOGF:q', LOGF.q, 'Search the log') + fsel('LOGF:by', LOGF.by, [['', 'Everyone']].concat(STAFF.map(function (x) { return [x.name, x.name]; })).concat([['Website', 'Website']])) + '</div></header><ul class="feed">' + DB.log.filter(function (l) { return (!LOGF.by || l.by === LOGF.by) && (!LOGF.q || (l.text + ' ' + l.by + ' ' + l.at).toLowerCase().indexOf(LOGF.q.toLowerCase()) >= 0); }).slice(0, 60).map(function (l) { return '<li' + (l.ref ? ' data-open="' + l.ref + '"' : '') + '><span>' + esc(l.text) + '</span><small>' + esc(l.by) + ' · ' + esc(l.at) + '</small></li>'; }).join('') + '</ul></section>';
     return '<div class="page-h"><div><h1>Settings</h1></div></div><div class="chips">' + tabs.map(function (t) { return '<button class="chip' + (SET === t[0] ? ' on' : '') + '" data-set="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div>' + body;
+  }
+
+
+  /* =========================================================
+     Every table: click a heading to sort (a picker on phones),
+     25 rows a page. Filters: <select data-fk="OBJ:key">, <input data-q="OBJ:key">
+     ========================================================= */
+  var SORT = {}, TPG = {}, PG_SIZE = 25;
+  function FO(n) { return { F: F, IN: IN, GF: GF, SHOP: SHOP, PROD: PROD, CAL: CAL, STF: STF, GD: GD, LOGF: LOGF, PAYF: PAYF }[n]; }
+  function fsel(fk, cur, opts, label) { return '<select data-fk="' + fk + '" aria-label="' + esc(label || opts[0][1]) + '"' + (cur ? ' class="on"' : '') + '>' + opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (String(o[0]) === String(cur) ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select>'; }
+  function fsearch(fk, cur, ph) { return '<label class="search">' + ic('search') + '<input type="search" data-q="' + fk + '" placeholder="' + esc(ph) + '" value="' + esc(cur) + '" aria-label="' + esc(ph) + '"></label>'; }
+  function fclear(obj, keys) { var n = keys.filter(function (k) { return FO(obj)[k]; }).length; return n ? '<button class="btn ghost sm" data-fclear="' + obj + ':' + keys.join(',') + '">' + ic('x') + 'Clear ' + n + ' filter' + (n > 1 ? 's' : '') + '</button>' : ''; }
+  function resetPages() { var v = route() + '|'; Object.keys(TPG).forEach(function (k) { if (k.indexOf(v) === 0) delete TPG[k]; }); }
+  function dataRow(r) { return !r.classList.contains('day') && r.cells.length > 1; }
+  function cellVal(td) {
+    if (!td) return '';
+    if (td.dataset.s != null) { var ds = td.dataset.s; return /^-?\d+(\.\d+)?$/.test(ds) ? +ds : ds.toLowerCase(); }
+    var t = (td.querySelector('b') || td).textContent.trim();
+    var m = t.match(/^(-)?R ?(\d[\d ]*)/); if (m) return (m[1] ? -1 : 1) * parseFloat(m[2].replace(/ /g, ''));
+    if (/^-?\d+(\.\d+)?%?$/.test(t)) return parseFloat(t);
+    return t.toLowerCase();
+  }
+  function cmpV(a, b) { if (typeof a === 'number' && typeof b === 'number') return a - b; if (typeof a === 'number') return -1; if (typeof b === 'number') return 1; return String(a).localeCompare(String(b), 'en', { numeric: true }); }
+  function sortKind(rows, ci) { var td = rows[0] && rows[0].cells[ci]; if (!td) return 'text'; if (td.dataset.s && /^\d{4}-\d{2}-\d{2}/.test(td.dataset.s)) return 'date'; return typeof cellVal(td) === 'number' ? 'num' : 'text'; }
+  function sortLabel(name, kind, dir) { return name + ': ' + (kind === 'date' ? (dir > 0 ? 'earliest first' : 'latest first') : kind === 'num' ? (dir > 0 ? 'lowest first' : 'highest first') : (dir > 0 ? 'A to Z' : 'Z to A')); }
+  function applyTables() {
+    var v = route();
+    $$('#view table.tbl').forEach(function (tb, ti) {
+      if (tb.matches('.perm, .rate-matrix, .rates') || tb.closest('details')) return;
+      var ths = $$('thead th', tb), body = tb.tBodies[0]; if (!ths.length || !body) return;
+      var key = v + '|' + (tb.dataset.sortKey || ti), st = SORT[key], rows = $$(':scope > tr', body), data = rows.filter(dataRow), cols = [];
+      tb.dataset.sortKey = key;
+      ths.forEach(function (th, ci) {
+        var name = th.firstChild ? th.firstChild.textContent.trim() : ''; if (!name) return;
+        var kind = sortKind(data, ci); cols.push({ ci: ci, name: name, kind: kind });
+        th.classList.add('sortable'); th.tabIndex = 0; th.dataset.sortCol = ci; th.title = 'Sort by ' + name.toLowerCase();
+        th.setAttribute('aria-sort', st && st.col === ci ? (st.dir > 0 ? 'ascending' : 'descending') : 'none');
+      });
+      if (st) { data.sort(function (a, b) { return cmpV(cellVal(a.cells[st.col]), cellVal(b.cells[st.col])) * st.dir || 0; }); data.forEach(function (r) { body.appendChild(r); }); tb.classList.add('is-sorted'); }
+      var pages = Math.ceil(data.length / PG_SIZE), pg = Math.min(TPG[key] || 0, Math.max(0, pages - 1)); TPG[key] = pg;
+      if (pages > 1) {
+        data.forEach(function (r, i) { r.hidden = i < pg * PG_SIZE || i >= (pg + 1) * PG_SIZE; });
+        if (!st) { var cur = null, vis = false; $$(':scope > tr', body).forEach(function (r) { if (r.classList.contains('day')) { if (cur) cur.hidden = !vis; cur = r; vis = false; } else if (!r.hidden) vis = true; }); if (cur) cur.hidden = !vis; }
+      }
+      var host = tb.closest('.card') || tb;
+      if (pages > 1) host.insertAdjacentHTML('afterend', '<div class="tpager"><span>' + (pg * PG_SIZE + 1) + ' to ' + Math.min(data.length, (pg + 1) * PG_SIZE) + ' of ' + data.length + '</span><button class="btn ghost sm" data-tpg="' + key + '|-1"' + (pg ? '' : ' disabled') + '>' + ic('chev-l') + 'Previous</button><button class="btn ghost sm" data-tpg="' + key + '|1"' + (pg < pages - 1 ? '' : ' disabled') + '>Next' + ic('chev-r') + '</button></div>');
+      if (cols.length && data.length > 1) host.insertAdjacentHTML('beforebegin', '<label class="sort-m">' + ic('list') + '<span>Sort by</span><select data-sortm="' + key + '"><option value="">Default order</option>' + cols.map(function (c) { return [1, -1].map(function (d) { return '<option value="' + c.ci + '|' + d + '"' + (st && st.col === c.ci && st.dir === d ? ' selected' : '') + '>' + esc(sortLabel(c.name, c.kind, d)) + '</option>'; }).join(''); }).join('') + '</select></label>');
+    });
+  }
+  // dashboard widgets: a page at a time
+  var DP = { tab: 'arr', arr: 0, dep: 0, in: 0, attn: 0, act: 0 };
+  function pageOf(list, key, size) {
+    var pages = Math.max(1, Math.ceil(list.length / size)); if (DP[key] >= pages) DP[key] = pages - 1;
+    var p = DP[key];
+    return { items: list.slice(p * size, p * size + size), bar: pages > 1 ? '<div class="pager"><span>' + (p * size + 1) + ' to ' + Math.min(list.length, p * size + size) + ' of ' + list.length + '</span><button class="icon-btn sm" data-pg="' + key + '|-1"' + (p ? '' : ' disabled') + ' aria-label="Previous page">' + ic('chev-l') + '</button><button class="icon-btn sm" data-pg="' + key + '|1"' + (p < pages - 1 ? '' : ' disabled') + ' aria-label="Next page">' + ic('chev-r') + '</button></div>' : '' };
   }
 
   var VIEWS = { dashboard: vDashboard, bookings: vBookings, eft: vEft, calendar: vCalendar, guests: vGuests, payments: vPayments, shop: vShop, drives: vDrives, products: vProducts, enquiries: vEnquiries, stands: vStands, rates: vRates, reports: vReports, settings: vSettings };
@@ -1603,6 +1676,7 @@
     var bd = badges();
     $$('[data-nav]').forEach(function (a) { a.classList.toggle('on', a.dataset.nav === v); var em = $('em', a), n = bd[a.dataset.nav]; if (n) { if (!em) { em = document.createElement('em'); a.appendChild(em); } em.textContent = n; } else if (em) em.remove(); });
     el.innerHTML = VIEWS[v]();
+    applyTables();
     if (v === 'reports') rpFill();
     document.title = NAV.filter(function (n) { return n.id === v; })[0].t + ' · Kyleu admin';
   }
@@ -1635,6 +1709,13 @@
     var cal = t.closest('[data-cal]'); if (cal) { var n = +cal.dataset.cal; CAL.start = n ? add(CAL.start, n) : add(TODAY, -2); render(); return; }
     var na = t.closest('[data-newat]'); if (na) { var p = na.dataset.newat.split('|'); actNew({ stand: p[0], ci: p[1], co: add(p[1], 2) }); return; }
     var gr = t.closest('[data-guest]'); if (gr) { openGuest(gr.dataset.guest); return; }
+    if (t.closest('[data-fst],[data-payt],[data-prodcat],[data-gtag],[data-box],[data-paytab],[data-shoptab],[data-pcat]')) resetPages();
+    var sth = t.closest('th.sortable'); if (sth) { var stb = sth.closest('table'), sk = stb.dataset.sortKey, sci = +sth.dataset.sortCol, cur = SORT[sk]; SORT[sk] = !cur || cur.col !== sci ? { col: sci, dir: 1 } : cur.dir === 1 ? { col: sci, dir: -1 } : null; delete TPG[sk]; render(); var nth = $('table[data-sort-key="' + sk + '"] th[data-sort-col="' + sci + '"]'); if (nth) nth.focus({ preventScroll: true }); return; }
+    var tpg = t.closest('[data-tpg]'); if (tpg) { var tp = tpg.dataset.tpg.split('|'), tk = tp[0] + '|' + tp[1]; TPG[tk] = (TPG[tk] || 0) + (+tp[2]); render(); var ttb = $('table[data-sort-key="' + tk + '"]'); if (ttb) { var top = (ttb.closest('.card') || ttb).getBoundingClientRect().top + window.scrollY - 80; if (top < window.scrollY) window.scrollTo({ top: top }); } return; }
+    var dpg = t.closest('[data-pg]'); if (dpg) { var dp = dpg.dataset.pg.split('|'); DP[dp[0]] = Math.max(0, (DP[dp[0]] || 0) + (+dp[1])); render(); return; }
+    var dtab = t.closest('[data-dtab]'); if (dtab) { DP.tab = dtab.dataset.dtab; render(); return; }
+    var gtag = t.closest('[data-gtag]'); if (gtag) { GF.tag = gtag.dataset.gtag; render(); return; }
+    var fcl = t.closest('[data-fclear]'); if (fcl) { var fc = fcl.dataset.fclear.split(':'); fc[1].split(',').forEach(function (k) { FO(fc[0])[k] = ''; }); resetPages(); render(); return; }
     var th = t.closest('[data-thread]'); if (th) { IN.id = th.dataset.thread || null; CMP_ATT = []; var tt = IN.id && thrById(IN.id); if (tt && tt.unread) { tt.unread = false; save(); } render(); window.scrollTo(0, 0); return; }
     var tg = t.closest('[data-thread-go]'); if (tg) { IN.id = tg.dataset.threadGo; IN.box = 'all'; closeDrawer(); location.hash = '#/enquiries'; render(); return; }
     var bx = t.closest('[data-box]'); if (bx) { IN.box = bx.dataset.box; IN.id = null; render(); return; }
@@ -1643,7 +1724,7 @@
     var sa = t.closest('[data-sale]'); if (sa) { openSale(sa.dataset.sale); return; }
     var pr = t.closest('[data-prod]'); if (pr) { actProduct(pr.dataset.prod); return; }
     var pt = t.closest('[data-paytab]'); if (pt) { PAYF.tab = pt.dataset.paytab; render(); return; }
-    var py = t.closest('[data-payt]'); if (py) { PAYF.type = py.dataset.payt; PAYF.lim = 120; render(); return; }
+    var py = t.closest('[data-payt]'); if (py) { PAYF.type = py.dataset.payt; PAYF.lim = 1e9; render(); return; }
     var stb = t.closest('[data-shoptab]'); if (stb) { SHOP.tab = stb.dataset.shoptab; render(); window.scrollTo(0, 0); return; }
     var pcat = t.closest('[data-pcat]'); if (pcat) { SHOP.cat = pcat.dataset.pcat; render(); return; }
     var prc = t.closest('[data-prodcat]'); if (prc) { PROD.cat = prc.dataset.prodcat; render(); return; }
@@ -1707,6 +1788,8 @@
     if (t.matches('[data-f=q]')) { F.q = t.value; var pos = t.selectionStart; render(); var i = $('[data-f=q]'); i.focus(); i.setSelectionRange(pos, pos); return; }
     if (t.matches('[data-gq]')) { GQ = t.value; var p2 = t.selectionStart; render(); var g = $('[data-gq]'); g.focus(); g.setSelectionRange(p2, p2); return; }
     if (t.matches('[data-rate]')) { var sbar = $('[data-savebar]'); if (sbar) sbar.hidden = false; var ex = $('[data-example]'); if (ex) ex.innerHTML = exampleText(); var c = $('[data-cardof="' + t.dataset.rate.replace(/"/g, '\\"') + '"]'), v = parseFloat(t.value); if (c) c.textContent = v ? 'Card ' + money(toCard(v)) : ''; return; }
+    if (t.matches('[data-q]')) { var qk = t.dataset.q, qp = qk.split(':'); FO(qp[0])[qp[1]] = t.value; resetPages(); var qpos = t.selectionStart; render(); var nq = $('[data-q="' + qk + '"]'); if (nq) { nq.focus(); nq.setSelectionRange(qpos, qpos); } return; }
+    if (t.matches('[data-f=q],[data-gq],[data-inq],[data-payq],[data-shopq],[data-prodq]')) resetPages();
     if (t.matches('[data-inq],[data-payq],[data-shopq],[data-prodq]')) { var key = t.matches('[data-inq]') ? 'inq' : t.matches('[data-payq]') ? 'payq' : t.matches('[data-shopq]') ? 'shopq' : 'prodq'; if (key === 'inq') IN.q = t.value; if (key === 'payq') PAYF.q = t.value; if (key === 'shopq') SHOP.q = t.value; if (key === 'prodq') PROD.q = t.value; var ps = t.selectionStart; render(); var ni = $('[data-' + key + ']'); if (ni) { ni.focus(); ni.setSelectionRange(ps, ps); } return; }
     if (t.matches('[data-prod-price]')) { var pv = parseFloat(t.value.replace(/[^\d.]/g, '')), pcard = $('[data-prod-card]'); if (pcard) pcard.value = isNaN(pv) ? '' : money(toCard(pv)); return; }
     if (t.matches('[data-provfee]')) { DB.settings.providerFee = parseFloat(t.value) || 0; save(); return; }
@@ -1727,8 +1810,10 @@
   }
   function onChange(e) {
     var t = e.target;
-    if (t.matches('[data-f=area]')) { F.area = t.value; render(); }
-    if (t.matches('[data-payr]')) { PAYF.range = t.value; PAYF.lim = 120; render(); }
+    if (t.matches('[data-fk]')) { var fk = t.dataset.fk.split(':'); FO(fk[0])[fk[1]] = t.value; if (t.dataset.fk === 'F:area') F.stand = ''; resetPages(); render(); return; }
+    if (t.matches('[data-sortm]')) { var sm = t.value.split('|'); SORT[t.dataset.sortm] = t.value ? { col: +sm[0], dir: +sm[1] } : null; delete TPG[t.dataset.sortm]; render(); return; }
+    if (t.matches('[data-payr],[data-paym],[data-shopr]')) resetPages();
+    if (t.matches('[data-payr]')) { PAYF.range = t.value; PAYF.lim = 1e9; render(); }
     if (t.matches('[data-paym]')) { PAYF.m = t.value; render(); }
     if (t.matches('[data-shopr]')) { SHOP.range = t.value; render(); }
     if (t.matches('[data-who]')) { SHOP.who = t.value; render(); }
@@ -1766,7 +1851,7 @@
     document.addEventListener('mouseover', onOver);
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') { if (!$('#modal') || $('#modal').hidden) { if ($('#drawer') && !$('#drawer').hidden) closeDrawer(); } else closeModal(); }
-      if (e.key === 'Enter' && e.target.matches('tr[data-open],tr[data-guest],tr[data-sale],tr[data-prod]')) e.target.click();
+      if (e.key === 'Enter' && e.target.matches('tr[data-open],tr[data-guest],tr[data-sale],tr[data-prod],th.sortable')) e.target.click();
     });
     document.addEventListener('focusout', function (e) { if (e.target.matches('[data-global]')) setTimeout(function () { var s = $('[data-sugg]'); if (s) s.hidden = true; }, 200); });
     var rsz; window.addEventListener('resize', function () { clearTimeout(rsz); rsz = setTimeout(function () { if ($('[data-rpc]')) rpDrawCharts(true); }, 120); });
