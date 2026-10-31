@@ -7,6 +7,8 @@
 > - Write prices as plain numbers, e.g. `245` or `R245`. Anything after the number (like "per person per night") is shown on the site as the description.
 > - Want to add a brand-new fee? Add a new line under any heading, in the same format. It appears on the Rates page automatically.
 > - Lines that start with `>` (like this one) are notes for you and are not shown on the website.
+> - Enter the NORMAL (EFT) price. The website adds the card fee (see "Card payment fee percentage" under Booking rules)
+>   and shows the card price crossed out next to the EFT price.
 
 Rates year: 2026
 
@@ -54,6 +56,7 @@ Rates year: 2026
 
 ## Booking rules
 > These control how the booking calculator works. Change with care.
+- Card payment fee percentage: 3 · Card prices include the card company's fee. Paying by EFT removes it.
 - Deposit percentage: 50 · % of the total needed to secure a booking
 - Deposit due within days of invoice: 5
 - Balance due days before arrival: 7

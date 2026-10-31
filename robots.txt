@@ -1,6 +1,7 @@
-# Kyleu Bush Camp — everyone (including AI assistants) is welcome to read this site.
+# Kyleu Bush Camp: everyone (including AI assistants) is welcome to read this site.
 User-agent: *
 Allow: /
+Disallow: /admin/
 
 User-agent: GPTBot
 Allow: /

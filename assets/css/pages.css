@@ -523,3 +523,6 @@
 
 /* sticky bars slide up with the header once they are stuck (html has overflow-anchor: none, so the page never jumps) */
 body.header-hidden .searchbar-wrap, body.header-hidden .subnav { top: 0; }
+.sc-price .dual-eft { font-family: var(--font-display); font-size: 1.45rem; font-weight: 700; color: var(--bark); }
+.rate-list .amt .dual-card { color: var(--ink-soft); }
+.pay-opt .amt .dual { justify-content: flex-end; }

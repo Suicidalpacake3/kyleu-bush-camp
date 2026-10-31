@@ -188,6 +188,14 @@
   // ---------- public API ----------
   var K = window.Kyleu = window.Kyleu || {};
   K.money = money; K.markdown = markdown; K.norm = norm; K.AREA = AREA; K.esc = esc;
+  // Card vs EFT: prices.md holds the normal (EFT) price; card payments add the card fee.
+  K.cardFee = function (P) { return P ? P.num('Booking rules', 'Card payment fee percentage', 3) : 3; };
+  K.toCard = function (n, P) { return Math.round(n * (1 + K.cardFee(P) / 100)); };
+  K.dualPair = function (cardAmt, eftAmt, tag) {
+    if (!eftAmt) return 'FREE';
+    return '<span class="dual"><s class="dual-card" title="Card price">' + money(cardAmt) + '</s> <span class="dual-eft">' + money(eftAmt) + '</span>' + (tag === false ? '' : '<small class="dual-tag">EFT</small>') + '</span>';
+  };
+  K.dual = function (n, P, tag) { return K.dualPair(K.toCard(n, P), n, tag); };
   K.settings = function () { return load('settings').then(parseSettings); };
   K.prices = function () { return load('prices').then(parsePrices); };
   K.stands = function () { return load('stands').then(parseStands); };
@@ -219,7 +227,9 @@
       priceEls.forEach(function (el) {
         var parts = el.getAttribute('data-price').split('|');
         var v = P.num(parts[0], parts[1], null);
-        if (v != null) el.textContent = v === 0 && el.hasAttribute('data-free') ? 'FREE' : money(v);
+        if (v == null) return;
+        if (/dinokeng/i.test(parts[0]) || el.hasAttribute('data-plain')) el.textContent = v === 0 && el.hasAttribute('data-free') ? 'FREE' : money(v);   // Dinokeng's fees are not Kyleu's
+        else el.innerHTML = K.dual(v, P, !el.hasAttribute('data-notag'));
       });
       document.querySelectorAll('[data-rates-year]').forEach(function (el) { if (P.year) el.textContent = P.year; });
     }).catch(function () {});

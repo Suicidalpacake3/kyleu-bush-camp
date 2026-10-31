@@ -571,3 +571,10 @@ html, body { overflow-x: clip; }
 
 /* stop the browser nudging the scroll position when sticky bars move */
 html { overflow-anchor: none; }
+
+/* card price (crossed out) next to the EFT price */
+.dual { display: inline-flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.dual-card { color: var(--ink-soft); font-family: var(--font-body); font-weight: 600; font-size: .72em; text-decoration-thickness: 1.5px; opacity: .85; }
+.dual-tag { align-self: center; font-family: var(--font-body); font-size: .62rem; font-weight: 900; letter-spacing: .08em; background: #e6f0dc; color: #33461b; padding: 2px 6px; border-radius: 999px; line-height: 1.3; }
+.area-card .dual-card, .bg-dark .dual-card { color: rgba(255,255,255,.75); }
+.breakdown .eft-row { color: var(--ok); font-weight: 800; }

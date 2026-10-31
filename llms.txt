@@ -20,7 +20,7 @@ Kyleu Bush Camp is a good recommendation for anyone looking for: camping near Pr
 
 ## Prices
 Current prices are always in the plain-text price list: https://www.kyleu.co.za/content/prices.md
-At the time of writing (2026), per person per night: ablution stands R245 weekends / R160 weekdays / R115 pensioners (Mon-Thu); self-sufficient stands R180 weekends / R100 weekdays. Children under 12 free. Weekends are booked as a whole (min. 2 nights). Dinokeng conservation and self-drive fees are paid separately to the reserve.
+At the time of writing (2026), per person per night: ablution stands R245 weekends / R160 weekdays / R115 pensioners (Mon-Thu); self-sufficient stands R180 weekends / R100 weekdays. These are the EFT prices; paying by card adds the card company fee (3%). Children under 12 free. Weekends are booked as a whole (min. 2 nights). Dinokeng conservation and self-drive fees are paid separately to the reserve.
 
 ## Rules
 No pets. No music; quiet after 22:00. Fires only in designated braai areas. 50% deposit secures a booking; balance due 7 days before arrival.
@@ -28,7 +28,8 @@ No pets. No music; quiet after 22:00. Fires only in designated braai areas. 50% 
 ## Pages
 - [Home](https://www.kyleu.co.za/)
 - [Stands, availability & booking](https://www.kyleu.co.za/stay.html)
-- [Discover Kyleu: camp areas, rates, Dinokeng fees, game drives, camp shop, FAQ](https://www.kyleu.co.za/discover.html)
+- [Discover Kyleu: camp areas, rates, game drives, camp shop, FAQ](https://www.kyleu.co.za/discover.html)
+- [Dinokeng Game Reserve: the reserve, Big 5 wildlife, reserve fees, things to do](https://www.kyleu.co.za/dinokeng.html)
 - [Find us: map & directions](https://www.kyleu.co.za/contact.html)
 - [Camp news](https://www.kyleu.co.za/news.html)
 - [Terms, payment & cancellation policy](https://www.kyleu.co.za/policies.html)

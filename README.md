@@ -8,12 +8,16 @@ A fast, static website (plain HTML, CSS and JavaScript) for Kyleu Bush Camp in t
 
 | Page | What's on it |
 |---|---|
-| `index.html` | Home: hero slideshow with quick-book bar, family story, camp areas, scroll-animated "day at Kyleu", wildlife, gallery, news, FAQ |
+| `index.html` | Home (kept calm on purpose): hero, family story, camp areas, scroll-animated "day at Kyleu", what campers love, FAQ |
 | `stay.html` | Stands & booking: search, filters, stand cards with photos, interactive site map, stand details, 4-step checkout |
-| `discover.html` | Everything from the old "Discover Kyleu" menu on one page, with sticky shortcuts: camp areas, site layout, rates, Dinokeng fees, game drives, camp shop, explore Dinokeng, plan & FAQ |
+| `discover.html` | Everything from the old "Discover Kyleu" menu on one page, with sticky shortcuts: camp areas, site layout, rates, game drives, camp shop, plan & FAQ |
+| `dinokeng.html` | Everything about the reserve, kept apart from Kyleu: what Dinokeng is, Big 5 wildlife, reserve fees, things to do |
 | `contact.html` | Map (no API key needed), turn-by-turn directions, contact details, message form |
 | `news.html` | Blog / camp news (list plus single post via `news.html?post=…`) |
 | `policies.html` | Terms, payment & cancellation, privacy (POPIA), PAIA manual |
+| `admin/` | Staff admin MOCK-UP (kyleu.co.za/admin): dashboard, bookings, EFT payments queue, calendar, guests, payments, shop & game drives, enquiries, stands & blocks, rates, reports, settings. Uses made-up demo data saved only in the browser; bookings made in the website demo show up here too. Hidden from search engines. |
+
+**Card and EFT prices:** `content/prices.md` holds the normal (EFT) price. The website adds the card fee ("Card payment fee percentage" under Booking rules, now 3%) and shows the card price crossed out next to the EFT price. Paying by card charges the card price; EFT pays the normal price.
 
 ## For the Kyleu team: updating the site
 

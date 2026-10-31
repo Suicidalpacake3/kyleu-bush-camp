@@ -132,10 +132,10 @@
         <p class="muted">Choose how you'd like to pay.</p>
         <div class="demo-flag"><svg><use href="#i-info"/></svg><span>Demo mode: this is a mock-up. No card is charged and nothing is sent. Use the "fill test card" link to try it.</span></div>
         <div class="pay-opts">
-          <label class="pay-opt" data-pay="deposit"><input type="radio" name="pay" value="deposit"><span><b>Pay the deposit now by card</b><small>Balance due 7 days before arrival</small></span><span class="amt">R0</span></label>
-          <label class="pay-opt" data-pay="full"><input type="radio" name="pay" value="full"><span><b>Pay in full by card</b><small>All done, nothing more to pay before you arrive</small></span><span class="amt">R0</span></label>
-          <label class="pay-opt" data-pay="eft"><input type="radio" name="pay" value="eft"><span><b>Instant EFT</b><small>Pay securely from your banking app, confirmed immediately</small></span><span class="amt">R0</span></label>
-          <label class="pay-opt" data-pay="invoice"><input type="radio" name="pay" value="invoice"><span><b>Send me an invoice (EFT / bank deposit)</b><small>Pay within 5 days to keep your booking</small></span><span class="amt">R0</span></label>
+          <label class="pay-opt" data-pay="deposit"><input type="radio" name="pay" value="deposit"><span><b>Pay the deposit now by card</b><small>Card price (includes the card company's fee). Balance due 7 days before arrival</small></span><span class="amt">R0</span></label>
+          <label class="pay-opt" data-pay="full"><input type="radio" name="pay" value="full"><span><b>Pay in full by card</b><small>Card price (includes the card company's fee). Nothing more to pay before you arrive</small></span><span class="amt">R0</span></label>
+          <label class="pay-opt" data-pay="eft"><input type="radio" name="pay" value="eft"><span><b>Instant EFT</b><small>No card fee: you pay the normal price. Confirmed immediately</small></span><span class="amt">R0</span></label>
+          <label class="pay-opt" data-pay="invoice"><input type="radio" name="pay" value="invoice"><span><b>Send me an invoice (EFT / bank deposit)</b><small>No card fee: you pay the normal price. Pay within 5 days</small></span><span class="amt">R0</span></label>
         </div>
         <div data-card>
           <div class="card-box">
@@ -154,7 +154,7 @@
         <div data-eft hidden>
           <div class="eft-box"><b>How it works</b><p class="muted" style="margin:6px 0 0">You'll get your invoice with Kyleu's banking details and your booking reference by email. Please send proof of payment to <a href="mailto:info@kyleu.co.za">info@kyleu.co.za</a>.</p></div>
         </div>
-        <div class="mc-actions"><button class="btn btn-ghost" type="button" data-back>Back</button><button class="btn" type="button" data-pay><span data-pay-btn-label>Pay </span><span data-pay-amount>R0</span></button></div>
+        <div class="mc-actions"><button class="btn btn-ghost" type="button" data-back>Back</button><button class="btn" type="button" data-pay-now><span data-pay-btn-label>Pay </span><span data-pay-amount>R0</span></button></div>
       </div>
 
       <div class="mc-step" data-step="4"><div data-success></div></div>

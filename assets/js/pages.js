@@ -62,7 +62,7 @@
           return '<article class="rate-card ' + (dk ? 'dark' : (/self/i.test(s.title) ? 'green' : '')) + (wide ? ' rates-full' : '') + '" data-reveal>' +
             '<header><h3>' + K.esc(s.title) + '</h3>' + (dk ? '<p>Paid to Dinokeng Game Reserve at the gate or online, not part of your Kyleu booking.</p>' : '') + '</header>' +
             '<ul class="rate-list"' + (wide && mode !== 'dinokeng' ? ' style="columns:2;column-gap:40px"' : '') + '>' + s.items.map(function (it) {
-              return '<li style="break-inside:avoid"><span class="lbl"><b>' + K.esc(it.label) + '</b>' + (it.note ? '<small>' + K.esc(it.note) + '</small>' : '') + '</span><span class="amt">' + (isNaN(it.amount) ? '' : (it.amount === 0 ? 'FREE' : K.money(it.amount))) + '</span></li>';
+              return '<li style="break-inside:avoid"><span class="lbl"><b>' + K.esc(it.label) + '</b>' + (it.note ? '<small>' + K.esc(it.note) + '</small>' : '') + '</span><span class="amt">' + (isNaN(it.amount) ? '' : (it.amount === 0 ? 'FREE' : dk ? K.money(it.amount) : K.dual(it.amount, P))) + '</span></li>';
             }).join('') + '</ul></article>';
         }).join('');
         box.innerHTML = html; K.reveal(box);
@@ -78,7 +78,7 @@
           stands: r[0],
           info: function (st) {
             var from = st.area === 'self-sufficient' ? P.num('Self-sufficient', 'Weekday per person per night', 100) : P.num('Ablution stands', 'Weekday per person per night', 160);
-            return { free: null, price: 'from ' + K.money(from), sub: 'per person / night' };
+            return { free: null, price: 'from ' + K.dual(from, P, false), sub: 'per person / night (EFT)' };
           },
           onOpen: function (st) { location.href = 'stay.html#stand=' + st.id; }
         });
