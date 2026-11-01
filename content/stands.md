@@ -26,7 +26,7 @@
 - Area: Fenced
 - Status: open
 - Folder: fenced-2
-- Photos: 1.jpg, 2.jpg, 3.jpg, 4.jpg
+- Photos: 1.jpg, 2.jpg, 3.jpg, 4.jpg, 5.jpg
 - Guests: 8
 - Setups: 1-2 trailers or tents
 - Feel: Intimate with a spruit view
@@ -98,7 +98,7 @@
 - Area: Unfenced
 - Status: open
 - Folder: unfenced-1
-- Photos: 1.jpg, 2.jpg, 3.jpg
+- Photos: 1.jpg, 2.jpg, 3.jpg, 4.jpg
 - Guests: 8
 - Setups: 3-4 trailers
 - Feel: Spacious
@@ -110,7 +110,7 @@
 - Area: Unfenced
 - Status: open
 - Folder: unfenced-2
-- Photos: 1.jpg, 2.jpg, 3.jpg, 4.jpg
+- Photos: 1.jpg, 2.jpg, 3.jpg, 4.jpg, 5.jpg
 - Guests: 10
 - Setups: 4-5 trailers
 - Feel: Very large, great for groups
@@ -122,7 +122,7 @@
 - Area: Unfenced
 - Status: open
 - Folder: unfenced-3
-- Photos: 1.jpg, 2.jpg, 3.jpg
+- Photos: 1.jpg, 2.jpg, 3.jpg, 4.jpg
 - Guests: 8
 - Setups: 3-4 trailers
 - Feel: Spacious
@@ -134,7 +134,7 @@
 - Area: Unfenced
 - Status: open
 - Folder: unfenced-4
-- Photos: 1.jpg, 2.jpg, 3.jpg, 4.jpg
+- Photos: 1.jpg, 2.jpg, 3.jpg, 4.jpg, 5.jpg
 - Guests: 8
 - Setups: 1-2 trailers
 - Feel: Intimate
@@ -158,7 +158,7 @@
 - Area: Unfenced
 - Status: open
 - Folder: unfenced-6
-- Photos: 1.jpg, 2.jpg, 3.jpg, 4.jpg
+- Photos: 1.jpg, 2.jpg, 3.jpg, 4.jpg, 5.jpg, 6.jpg
 - Guests: 10
 - Setups: 4-5 trailers
 - Feel: Very large, great for groups
@@ -170,7 +170,7 @@
 - Area: Unfenced
 - Status: open
 - Folder: unfenced-7
-- Photos: 1.jpg, 2.jpg, 3.jpg
+- Photos: 1.jpg, 2.jpg, 3.jpg, 4.jpg, 5.jpg
 - Guests: 8
 - Setups: 1-2 trailers
 - Feel: Deep in the bush
@@ -182,7 +182,7 @@
 - Area: Unfenced
 - Status: open
 - Folder: unfenced-8
-- Photos: 1.jpg, 2.jpg
+- Photos: 1.jpg, 2.jpg, 3.jpg
 - Guests: 8
 - Setups: 2-3 trailers
 - Feel: Spacious
@@ -206,7 +206,7 @@
 - Area: Unfenced
 - Status: open
 - Folder: unfenced-10
-- Photos: 1.jpg, 2.jpg
+- Photos: 1.jpg, 2.jpg, 3.jpg
 - Guests: 8
 - Setups: 2-3 trailers
 - Feel: Spacious
@@ -230,7 +230,7 @@
 - Area: Self-sufficient
 - Status: open
 - Folder: self-sufficient-2
-- Photos: 1.jpg, 2.jpg, 3.jpg
+- Photos: 1.jpg, 2.jpg, 3.jpg, 4.jpg, 5.jpg
 - Guests: 12
 - Setups: 4-5 trailers
 - Feel: Large, great for groups
@@ -266,7 +266,7 @@
 - Area: Self-sufficient
 - Status: open
 - Folder: self-sufficient-5
-- Photos: 1.jpg
+- Photos: 1.jpg, 2.jpg
 - Guests: 6
 - Setups: 1-2 trailers
 - Feel: Intimate and private

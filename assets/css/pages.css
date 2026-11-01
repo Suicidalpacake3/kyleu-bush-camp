@@ -607,3 +607,6 @@ body.header-hidden .searchbar-wrap, body.header-hidden .subnav { top: 0; }
 .vr-msg.ok { color: #3f7d3a; } .vr-msg.bad { color: var(--bad); }
 
 #game-drives .photo-stack .polaroid:first-child { z-index: 2; }
+/* keep every stand photo box the same shape, whatever the photo size */
+.sc-media { overflow: hidden; }
+.sc-media > .sc-track { position: absolute; inset: 0; height: auto; }
