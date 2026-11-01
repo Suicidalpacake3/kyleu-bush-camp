@@ -76,4 +76,6 @@ Shared header/footer and page bodies live in `_source/`. Rebuild with `python _s
 
 - Kyleu photos and logo: Kyleu Bush Camp (old website and Q2B listing). Stand photos were cleaned up: white borders and the stamped logo cropped off, then upscaled and sharpened.
 - Wildlife photos in `assets/img/wildlife/` are from [Unsplash](https://unsplash.com) under the free Unsplash License.
+- Brown hyena photo (`assets/img/wildlife/brown-hyena.jpg`): Bernard Dupont, via [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Brown_Hyena_(Hyaena_brunnea)_(50915393781).jpg), CC BY-SA 2.0, cropped. The credit also shows on its card.
+- Guest photos (zebra at the gate, rainbow, jackal, cheetahs): Geoff Gregson and Kyleu guests, shared by the owner.
 - Fonts: Fraunces, Nunito Sans and Caveat (Google Fonts).

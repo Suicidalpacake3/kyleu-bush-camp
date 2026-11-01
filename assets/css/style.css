@@ -597,8 +597,18 @@ html { overflow-anchor: none; }
 .area-more { display: inline-flex; align-items: center; gap: 8px; background: var(--sun); color: #fff; font-weight: 800; font-size: .86rem; padding: 10px 14px 10px 16px; border-radius: 999px; transition: gap .2s, filter .2s; white-space: nowrap; }
 .area-more svg { width: 18px; height: 18px; }
 .area-card:hover .area-more { gap: 12px; filter: brightness(1.08); }
-.foot-dgr { display: inline-block; margin-top: 14px; }
+.foot-dgr { display: inline-block; }
 .foot-dgr img { height: 46px; width: auto; display: block; background: rgba(255,255,255,.95); border-radius: 10px; padding: 5px 8px; }
 /* photographer credit on a page header */
 .page-hero .photo-credit { position: absolute; right: 16px; bottom: 14px; z-index: 3; font-size: .72rem; font-weight: 600; color: rgba(255,255,255,.72); text-shadow: 0 1px 2px rgba(0,0,0,.6); }
+/* footer: Kyleu logo and the Dinokeng partner badge side by side */
+.foot-logos { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.foot-logos > img { margin: 0; }
+/* Find Us header: taller, with the zebras in clear view below the text */
+.page-hero.hero-zebra { padding-bottom: clamp(230px, 26vw, 360px); }
+.page-hero.hero-zebra::after { background: linear-gradient(180deg, rgba(18,10,4,.74) 0%, rgba(18,10,4,.52) 42%, rgba(18,10,4,.06) 76%, rgba(18,10,4,.22) 100%); }
 
+.foot-logos { margin-bottom: 14px; }
+.foot-logos .foot-dgr img { height: 52px; margin: 0; }
+/* rare animal tag on the wildlife cards */
+.animal .big5.rare { background: var(--ember); color: #fff; }
