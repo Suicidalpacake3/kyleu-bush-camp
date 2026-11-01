@@ -310,8 +310,8 @@ section { position: relative; }
 .features { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
 .feature { background: var(--paper); border-radius: var(--radius); padding: 26px 22px; border: 1px solid var(--line); transition: transform .3s var(--ease), box-shadow .3s; }
 .feature:hover { transform: translateY(-6px); box-shadow: var(--shadow); }
-.feature .ic { width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; background: linear-gradient(135deg, var(--sun-2), var(--ember)); color: #fff; margin-bottom: 16px; box-shadow: 0 10px 20px -10px var(--ember); }
-.feature .ic svg { width: 28px; height: 28px; }
+.feature .ic { display: block; color: var(--ember); margin-bottom: 14px; line-height: 0; }
+.feature .ic svg { width: 44px; height: 44px; }
 .feature h3 { font-size: 1.15rem; margin-bottom: 6px; }
 .feature p { font-size: .93rem; color: var(--ink-soft); margin: 0; }
 
