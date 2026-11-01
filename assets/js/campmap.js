@@ -76,12 +76,12 @@
     var lx = POOLR[0] - 40, ly = POOLR[1] - 8;
     o.push('<ellipse cx="' + r1(lx) + '" cy="' + r1(ly + 6) + '" rx="' + r1(52) + '" ry="' + r1(30) + '" fill="#8fae5e" opacity=".95"/>');
     o.push('<rect width="' + W + '" height="' + H + '" fill="#a8a26a" filter="url(#cm-grain)" opacity=".9"/>');
-    // spruit (stream) along the bottom with green banks
+    // spruit along the bottom: green banks and a dry, sandy bed (it barely flows, so no water is drawn)
     if (SPRUIT.length) {
       var sp = smooth(SPRUIT);
       o.push('<path d="' + sp + '" fill="none" stroke="#7e9a52" stroke-width="40" stroke-linecap="round" opacity=".55"/>');
-      o.push('<path id="cm-spruit" d="' + sp + '" fill="none" stroke="url(#cm-water)" stroke-width="9" stroke-linecap="round"/>');
-      o.push('<path d="' + sp + '" fill="none" stroke="#bfe0e6" stroke-width="2" stroke-dasharray="8 14" stroke-linecap="round" opacity=".8"><animate attributeName="stroke-dashoffset" from="0" to="-44" dur="3s" repeatCount="indefinite"/></path>');
+      o.push('<path id="cm-spruit" d="' + sp + '" fill="none" stroke="#cdb48a" stroke-width="9" stroke-linecap="round"/>');
+      o.push('<path d="' + sp + '" fill="none" stroke="#a88e64" stroke-width="2" stroke-dasharray="2 9" stroke-linecap="round" opacity=".7"/>');
     }
     // stand clearings (worn red-earth patches at each campsite)
     var spots = [];
@@ -140,9 +140,9 @@
       '<text x="' + r1(gate[0] + 8) + '" y="13" class="cm-small" text-anchor="start">↑ Kaallaagte Rd · Tau Gate</text>' +
       '<g transform="translate(' + gate[0] + ' ' + gate[1] + ')"><rect x="-15" y="-6" width="30" height="12" rx="6" fill="#2a1b12"/><text y="3.5" class="cm-tag" text-anchor="middle">GATE</text></g>' +
       '<text x="' + sc([136, 0])[0] + '" y="' + sc([0, 190])[1] + '" class="cm-small" text-anchor="end">Reception</text>' +
-      '<text x="' + sc([262, 0])[0] + '" y="' + sc([0, 216])[1] + '" class="cm-small" text-anchor="end">Pool &amp; lapa</text>' +
+      '<text x="' + sc([262, 0])[0] + '" y="' + sc([0, 216])[1] + '" class="cm-small" text-anchor="end">Pool area</text>' +
       '<text x="' + r1(sc([135, 262])[0]) + '" y="' + r1(sc([135, 262])[1]) + '" class="cm-area" text-anchor="middle">FENCED</text>' +
-      '<text x="' + r1(sc([1035, 75])[0]) + '" y="' + r1(sc([1035, 75])[1]) + '" class="cm-area" text-anchor="middle">OPEN BUSH CAMP · UNFENCED</text>' +
+      '<text x="' + r1(sc([1035, 75])[0]) + '" y="' + r1(sc([1035, 75])[1]) + '" class="cm-area" text-anchor="middle">OPEN (UNFENCED) BUSH CAMP</text>' +
       (SPRUIT.length ? '<text class="cm-water"><textPath href="#cm-spruit" xlink:href="#cm-spruit" startOffset="60%">Kaallaagte Spruit</textPath></text>' : '') +
       '<text x="' + r1(sc([1230, 520])[0]) + '" y="' + r1(sc([1230, 520])[1]) + '" class="cm-area cm-ss" text-anchor="middle">SELF-SUFFICIENT</text>' +
       '</g>');
@@ -219,12 +219,12 @@
   // opts: { stands, info(st) → {free, price, sub}, onOpen(st), area() → '' | areaKey }
   K.campMap = function (host, opts) {
     host.classList.add('campmap');
-    host.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Illustrated map of Kyleu Bush Camp: the fenced camp with Inside 1-7 on the left, open unfenced stands 1-10 on the right and self-sufficient stands S1-S6 along the Kaallaagte spruit">' + terrain(opts.stands) +
+    host.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Illustrated map of Kyleu Bush Camp: the fenced camp with Inside 1-7 on the left, open (unfenced) stands 1-10 on the right and self-sufficient stands S1-S6 along the Kaallaagte spruit">' + terrain(opts.stands) +
       '<g class="cm-wildlife">' + herdsSVG() + '</g></svg><div class="map-bubble" hidden></div>';
     var svg = host.querySelector('svg'), bubble = host.querySelector('.map-bubble'), pins = [], current = null, hideT, lastPointer = 'mouse';
     startWildlife(svg, host);
 
-    function label(st) { var n = st.name.replace(/[^0-9]/g, ''); return (st.area === 'self-sufficient' ? 'S' : '') + (n || '•'); }
+    function label(st) { var n = st.name.replace(/[^0-9]/g, ''); return (st.area === 'self-sufficient' ? 'R' : '') + (n || '•'); }
     function showBubble(st, pin) {
       clearTimeout(hideT); current = st;
       pins.forEach(function (p) { p.el.classList.toggle('on', p.st === st); });
@@ -301,6 +301,6 @@
     var st = stands.filter(function (s) { return s.id === id; })[0]; if (!st || !st.map) return '';
     var p = standXY(st), w = 340, h = 190, x = Math.min(Math.max(p[0] - w / 2, 0), W - w), y = Math.min(Math.max(p[1] - h / 2, 0), H - h);
     return '<svg viewBox="' + r1(x) + ' ' + r1(y) + ' ' + w + ' ' + h + '" role="img" aria-label="Where ' + K.esc(st.name) + ' is in the camp">' + terrain(stands) +
-      '<g transform="translate(' + r1(p[0]) + ' ' + r1(p[1]) + ')"><circle r="14" fill="none" stroke="#e8731c" stroke-width="3"><animate attributeName="r" values="12;26;12" dur="2s" repeatCount="indefinite"/><animate attributeName="opacity" values="1;0;1" dur="2s" repeatCount="indefinite"/></circle><circle r="11" fill="#e8731c" stroke="#fff" stroke-width="3"/><text y="4" text-anchor="middle" class="cm-pinlabel">' + ((st.area === 'self-sufficient' ? 'S' : '') + st.name.replace(/[^0-9]/g, '')) + '</text></g></svg>';
+      '<g transform="translate(' + r1(p[0]) + ' ' + r1(p[1]) + ')"><circle r="14" fill="none" stroke="#e8731c" stroke-width="3"><animate attributeName="r" values="12;26;12" dur="2s" repeatCount="indefinite"/><animate attributeName="opacity" values="1;0;1" dur="2s" repeatCount="indefinite"/></circle><circle r="11" fill="#e8731c" stroke="#fff" stroke-width="3"/><text y="4" text-anchor="middle" class="cm-pinlabel">' + ((st.area === 'self-sufficient' ? 'R' : '') + st.name.replace(/[^0-9]/g, '')) + '</text></g></svg>';
   };
 })();

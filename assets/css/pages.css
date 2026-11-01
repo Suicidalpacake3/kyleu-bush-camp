@@ -415,7 +415,7 @@
 .campmap .cm-ss { fill: #1e4a46; }
 .campmap .cm-small { font-family: var(--font-hand); font-size: 17px; font-weight: 700; fill: #3b2a1a; paint-order: stroke; stroke: rgba(255,248,230,.85); stroke-width: 4px; }
 .campmap .cm-tag { font-family: var(--font-body); font-weight: 900; font-size: 8px; letter-spacing: .12em; fill: #fff; }
-.campmap .cm-water { font-family: var(--font-hand); font-size: 18px; font-weight: 700; fill: #1f5563; paint-order: stroke; stroke: rgba(230,245,248,.8); stroke-width: 4px; }
+.campmap .cm-water { font-family: var(--font-hand); font-size: 18px; font-weight: 700; fill: #5a4528; paint-order: stroke; stroke: rgba(245,236,220,.85); stroke-width: 4px; }
 .cm-pinlabel { font-family: var(--font-body); font-weight: 900; font-size: 10px; fill: #fff; }
 .campmap .cm-animal { cursor: help; }
 .campmap .pin { z-index: 3; box-shadow: 0 4px 12px rgba(0,0,0,.35), 0 0 0 3px rgba(255,255,255,.0); background: var(--ok); }
@@ -554,3 +554,56 @@ body.header-hidden .searchbar-wrap, body.header-hidden .subnav { top: 0; }
 .pop-found.ok { background: #eef4e4; color: #33461b; border: 1px solid #cddcb5; }
 .pop-found.warn { background: #fdf3e2; color: #6b4a12; border: 1px solid #f0d9ae; }
 @media (max-width: 860px) { .pop-grid { grid-template-columns: 1fr; } }
+
+/* ---------- Experience Kyleu: guest stories ---------- */
+.social-btns { display: flex; gap: 10px; flex-wrap: wrap; }
+.social-btns svg { width: 18px; height: 18px; }
+.stories { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.story { display: flex; align-items: center; gap: 14px; padding: 16px 18px; background: var(--paper); border: 1px solid var(--line); border-radius: 16px; color: var(--ink); text-decoration: none; transition: transform .25s, box-shadow .25s; }
+.story:hover { transform: translateY(-3px); box-shadow: var(--shadow-sm); color: var(--ink); }
+.story > span:nth-child(2) { flex: 1; min-width: 0; }
+.story b { display: block; line-height: 1.3; }
+.story small { color: var(--ink-soft); }
+.story-ic { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; flex: none; background: var(--sun); color: #fff; }
+.story-ic.ig { background: linear-gradient(135deg, #f58529, #dd2a7b 55%, #8134af); }
+.story-ic.fb { background: #1877f2; }
+.story-ic svg { width: 22px; height: 22px; }
+
+/* ---------- Our stands: photo gallery cards ---------- */
+.gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 22px; }
+.gallery-card .sc-track { cursor: zoom-in; }
+.gallery-card .gc-desc { font-size: .92rem; color: var(--ink-soft); margin: 4px 0 0; }
+.gallery-card .gc-hl { list-style: none; padding: 0; margin: 10px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.gallery-card .gc-hl li { font-size: .78rem; font-weight: 700; background: var(--paper); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; }
+.gallery-card .sc-foot { justify-content: flex-end; }
+.gallery-card .map-tag { position: absolute; top: 10px; left: 10px; background: rgba(42,27,18,.85); color: #fff; }
+.gallery-card .sc-photo-count { border: 0; cursor: pointer; }
+
+/* game drives: keep the photo stack clear of the text next to it */
+#game-drives .split { align-items: center; gap: clamp(40px, 6vw, 80px); }
+#game-drives .photo-stack { max-width: 520px; width: 100%; margin-inline: auto; }
+@media (max-width: 900px) { #game-drives .photo-stack { margin-bottom: 30px; } }
+
+/* Dinokeng: partner code note */
+.voucher-note { display: flex; gap: 14px; align-items: flex-start; margin: 18px 0 0; padding: 16px 18px; }
+.voucher-note svg { width: 26px; height: 26px; color: var(--sun); flex: none; margin-top: 2px; }
+.voucher-note p { margin: 0; }
+.page-hero .dgr-badge { margin-top: 20px; }
+
+/* Book now: ask for dates first */
+.date-first { grid-column: 1 / -1; text-align: center; padding: 50px 20px; background: var(--paper); border: 1px dashed var(--line); border-radius: var(--radius); }
+.date-first svg { width: 44px; height: 44px; color: var(--sun); }
+.date-first h3 { margin: 10px 0 6px; }
+.date-first .btn { margin-top: 10px; }
+
+/* checkout: voucher code */
+.voucher-row { margin: 4px 0 18px; display: grid; gap: 6px; }
+.voucher-row label { font-size: .82rem; font-weight: 800; color: var(--bark-2); }
+.voucher-row label .opt { font-weight: 600; color: var(--ink-soft); }
+.vr-in { display: flex; gap: 8px; }
+.vr-in input { flex: 1; min-width: 0; padding: 11px 13px; border: 1.5px solid rgba(74,52,36,.22); border-radius: 12px; font-size: 1rem; text-transform: uppercase; font-weight: 700; letter-spacing: .04em; }
+.vr-in input:focus { outline: none; border-color: var(--sun); box-shadow: 0 0 0 4px rgba(232,115,28,.16); }
+.vr-msg { font-size: .85rem; font-weight: 700; }
+.vr-msg.ok { color: #3f7d3a; } .vr-msg.bad { color: var(--bad); }
+
+#game-drives .photo-stack .polaroid:first-child { z-index: 2; }

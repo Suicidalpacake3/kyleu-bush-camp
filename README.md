@@ -1,4 +1,4 @@
-# Kyleu Bush Camp — website (mock-up)
+# Kyleu Bush Camp: website (mock-up)
 
 A fast, static website (plain HTML, CSS and JavaScript) for Kyleu Bush Camp in the Dinokeng Big 5 Game Reserve. It needs no database or build step, and it runs on GitHub Pages, any normal web hosting, or next to WordPress.
 
@@ -8,8 +8,10 @@ A fast, static website (plain HTML, CSS and JavaScript) for Kyleu Bush Camp in t
 
 | Page | What's on it |
 |---|---|
-| `index.html` | Home (kept calm on purpose): hero, family story, camp areas, scroll-animated "day at Kyleu", what campers love, FAQ |
-| `stay.html` | Stands & booking: search, filters, stand cards with photos, interactive site map, stand details, 4-step checkout |
+| `index.html` | Home (kept calm on purpose): one slowly drifting photo, intro, DGR certified partner badge, family story, camp areas (each links to its stand photos), why campers come back, FAQ |
+| `experience.html` | Experience Kyleu: scroll-animated "day at Kyleu" map, what campers love, guest stories (links in `content/settings.md` under "Guest stories"), camp news (only shows when there are posts) |
+| `stands.html` | Our stands: photos and details of every stand, grouped by area, each with "Book this stand" |
+| `stay.html` | Book now: guests choose dates first, then only the free stands show; site map, stand details, checkout with an optional voucher code (EFT invoice while "Online payments" is off in settings) |
 | `discover.html` | Everything from the old "Discover Kyleu" menu on one page, with sticky shortcuts: camp areas, site layout, rates, game drives, camp shop, plan & FAQ |
 | `dinokeng.html` | Everything about the reserve, kept apart from Kyleu: what Dinokeng is, Big 5 wildlife, reserve fees, things to do |
 | `contact.html` | Map (no API key needed), turn-by-turn directions, contact details, message form |
@@ -18,7 +20,11 @@ A fast, static website (plain HTML, CSS and JavaScript) for Kyleu Bush Camp in t
 | `admin/` | Staff admin MOCK-UP (kyleu.co.za/admin), grouped like hotel software: Front desk (dashboard, bookings, calendar, inbox with full email threads, guests), Money (EFT payments with proof of payment, payments ledger and money still owed, reports), Shop & activities (till with sales history and refunds, game drive schedule, products with stock), Setup (stands with photos, rates & fees in tabs, settings). Uses made-up demo data saved only in the browser; bookings and proof of payment sent from the website demo show up here too. Hidden from search engines. |
 | `pop.html` | "Send proof of payment" page: guests who paid by EFT upload their bank proof with their booking reference, and it lands on the booking in the admin (no emailing needed). Demo: kept in the browser only. |
 
-**Card and EFT prices:** `content/prices.md` holds the normal (EFT) price. The website adds the card fee ("Card payment fee percentage" under Booking rules, now 3%) and shows the card price crossed out next to the EFT price. Paying by card charges the card price; EFT pays the normal price.
+**One price for everyone:** `content/prices.md` holds the price. "Card payment fee percentage" is kept at 0, so guests never pay the card company's fee. Guests pay by EFT for now; when a payment provider is connected, set "Online payments: on" in `content/settings.md` and the prices stay the same.
+
+**Dinokeng:** the reserve's fees (effective 1 July 2026) are in `content/prices.md`. Kyleu is a Dinokeng Certified Partner: create the partner code under Vouchers in the admin and it is emailed to each guest in the week of their stay.
+
+**Cancellations:** no refunds; what the guest paid is kept as a credit (the admin records it and offers it on the guest's next booking).
 
 ## For the Kyleu team: updating the site
 

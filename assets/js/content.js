@@ -69,11 +69,12 @@
 
   // ---------- settings ----------
   function parseSettings(md) {
-    var map = {};
+    var map = {}, secs = {};
     sections(md).forEach(function (sec) {
-      bullets(sec.lines).forEach(function (it) { map[norm(it.label)] = it.value; });
+      var items = bullets(sec.lines); if (sec.title) secs[norm(sec.title)] = items;
+      items.forEach(function (it) { map[norm(it.label)] = it.value; });
     });
-    return { raw: map, get: function (k, d) { var v = map[norm(k)]; return (v === undefined || v === '') ? d : v; } };
+    return { raw: map, list: function (title) { return secs[norm(title)] || []; }, get: function (k, d) { var v = map[norm(k)]; return (v === undefined || v === '') ? d : v; } };
   }
 
   // ---------- prices ----------
@@ -193,6 +194,7 @@
   K.toCard = function (n, P) { return Math.round(n * (1 + K.cardFee(P) / 100)); };
   K.dualPair = function (cardAmt, eftAmt, tag) {
     if (!eftAmt) return 'FREE';
+    if (cardAmt === eftAmt) return money(eftAmt);   // no card fee: one price for everyone
     return '<span class="dual"><s class="dual-card" title="Card price">' + money(cardAmt) + '</s> <span class="dual-eft">' + money(eftAmt) + '</span>' + (tag === false ? '' : '<small class="dual-tag">EFT</small>') + '</span>';
   };
   K.dual = function (n, P, tag) { return K.dualPair(K.toCard(n, P), n, tag); };
@@ -241,7 +243,7 @@
         if (h === 'tel') el.href = 'tel:' + S.get('Phone', '').replace(/[^\d+]/g, '').replace(/^0/, '+27');
         if (h === 'mail') el.href = 'mailto:' + S.get('Email', '');
         if (h === 'wa') el.href = 'https://wa.me/' + S.get('WhatsApp number', '') + (el.dataset.waText ? '?text=' + encodeURIComponent(el.dataset.waText) : '');
-        if (h && !/^(tel|mail|wa)$/.test(h)) { var u = S.get(h); if (u) el.href = u; else if (el.hasAttribute('data-hide-empty')) el.hidden = true; }
+        if (h && !/^(tel|mail|wa)$/.test(h)) { var u = S.get(h); if (u) { el.href = u; if (el.hasAttribute('data-hide-empty')) el.hidden = false; } else if (el.hasAttribute('data-hide-empty')) el.hidden = true; }
       });
     }).catch(function () {});
   });

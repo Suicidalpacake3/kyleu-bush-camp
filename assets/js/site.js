@@ -136,7 +136,12 @@
 
     /* ---------- hero slideshow ---------- */
     var slides = $$('.hero-slide');
-    if (slides.length) {
+    if (slides.length === 1) {
+      // one photo that drifts slowly (no slideshow)
+      var small1 = window.matchMedia('(max-width: 700px)').matches, s1 = slides[0], u1 = (small1 && s1.dataset.bgM) || s1.dataset.bg;
+      if (u1) s1.style.backgroundImage = "url('" + u1 + "')";
+      s1.classList.add('on', 'single');
+    } else if (slides.length) {
       // pick the phone or desktop version of each header photo
       var small = window.matchMedia('(max-width: 700px)').matches;
       slides.forEach(function (sl) { var u = (small && sl.dataset.bgM) || sl.dataset.bg; if (u) sl.style.backgroundImage = "url('" + u + "')"; });

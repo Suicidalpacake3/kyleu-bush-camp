@@ -36,6 +36,7 @@
   }
   function cardFee() { return num('Booking rules', 'Card payment fee percentage', 3); }
   function toCard(n) { return Math.round(n * (1 + cardFee() / 100)); }
+  function hasFee() { return cardFee() > 0; }
   function depPct() { return num('Booking rules', 'Deposit percentage', 50); }
   function standById(id) { return STANDS.filter(function (s) { return s.id === id; })[0] || (DB && DB.gone && DB.gone[id]) || { id: id, name: id, area: 'fenced', guests: 8, photos: [] }; }
   var AREA_SHORT = { fenced: 'Fenced', unfenced: 'Unfenced', 'self-sufficient': 'Self-sufficient' };
@@ -80,7 +81,7 @@
   function balanceDue(b) { return add(b.ci, -num('Booking rules', 'Balance due days before arrival', 7)); }
   function guestName(b) { return b.guest.first + ' ' + b.guest.last; }
   function people(b) { return b.adults + b.pens + b.kids; }
-  function methodLabel(m) { return m === 'card' ? 'Card' : m === 'cash' ? 'Cash' : 'EFT'; }
+  function methodLabel(m) { return m === 'card' ? 'Card' : m === 'cash' ? 'Cash' : m === 'credit' ? 'Credit' : 'EFT'; }
   function stateOf(b) {
     if (b.status === 'cancelled') return { k: 'cancelled', t: 'Cancelled', tone: 'muted' };
     if (b.status === 'out') return { k: 'out', t: 'Departed', tone: 'muted' };
@@ -112,7 +113,7 @@
   var SOURCES = ['Website', 'Website', 'Website', 'Website', 'WhatsApp', 'WhatsApp', 'Phone', 'Q2B', 'Website', 'Phone'];
   function seed() {
     var r = rng(2611), pick = function (a) { return a[Math.floor(r() * a.length)]; };
-    var db = { v: 3, seeded: TODAY, gone: {}, threads: [], hol: { add: {}, del: {} }, popSeen: {}, bookings: [], blocks: [], sales: [], log: [], rates: {}, closed: {}, settings: { providerFee: 2.95 }, readEnq: {} };
+    var db = { v: 4, seeded: TODAY, vouchers: [], credits: [], gone: {}, threads: [], hol: { add: {}, del: {} }, popSeen: {}, bookings: [], blocks: [], sales: [], log: [], rates: {}, closed: {}, settings: { providerFee: 2.95 }, readEnq: {} };
     var guests = [];
     for (var i = 0; i < 420; i++) {
       var f = pick(FIRST), l = pick(LAST);
@@ -225,6 +226,18 @@
       T('t7', 'Lost item', 'Anika Botha', 'anika.botha@icloud.com', '079 880 6612', 'closed', false, [G(y6 + ' 07:51', 'Hi,\n\nWe left a blue camping chair at Stand 3 last weekend. Did anyone find it?\n\nAnika'), St('Leuan', y6 + ' 09:02', 'Hi Anika,\n\nYes! Our team found a blue chair at Stand 3. It is safe at reception, so you can collect it any day between 08:00 and 17:00.'), G(y6 + ' 10:15', 'Thank you so much! We will fetch it on Saturday.')])
     ];
     if (mailB) db.threads.push(T('t3', 'Proof of payment ' + mailB.ref, guestName(mailB), mailB.guest.email, mailB.guest.phone, 'open', true, [G(TODAY + ' 06:58', 'Good morning,\n\nPlease find attached proof of payment for booking ' + mailB.ref + '.\n\nRegards,\n' + mailB.guest.first, [{ name: 'FNB-proof-of-payment-' + mailB.ref + '.pdf', size: 86214, type: 'application/pdf' }])], mailB.ref));
+    // vouchers: the Dinokeng partner code goes to every guest; a few discount codes with different rules
+    var yr = TODAY.slice(0, 4), past = db.bookings.filter(function (b) { return live(b) && b.ci < TODAY && b.ci >= add(TODAY, -40) && b.status !== 'pending'; });
+    var ret = []; db.bookings.forEach(function (b) { if (ret.indexOf(b.guest.email) < 0 && db.bookings.filter(function (x) { return x.guest.email === b.guest.email; }).length > 1) ret.push(b.guest.email); });
+    var fut = db.bookings.filter(function (b) { return live(b) && b.ci > add(TODAY, 20); });
+    db.vouchers = [
+      { id: 'v1', code: 'KYLEU-DGR' + yr.slice(2), name: 'Dinokeng partner rate ' + yr, kind: 'dgr', value: 0, unit: 'pct', who: 'all', refs: [], emails: [], stayFrom: '', stayTo: '', max: 0, from: yr + '-01-01', to: yr + '-12-31', active: true, auto: true, uses: past.concat(db.bookings.filter(function (b) { return live(b) && b.status !== 'pending' && b.ci >= TODAY && b.ci <= add(TODAY, 7); }).slice(0, -2)).map(function (b) { var at = add(b.ci, -7); return { ref: b.ref, at: (at > TODAY ? TODAY : at) + ' 08:00', by: 'Automatic' }; }) },
+      { id: 'v2', code: 'WELCOMEBACK10', name: '10% off for returning guests', kind: 'discount', value: 10, unit: 'pct', who: 'guests', refs: [], emails: ret.slice(0, 4), stayFrom: '', stayTo: '', max: 4, from: add(TODAY, -10), to: add(TODAY, 80), active: true, auto: false, uses: [] },
+      { id: 'v3', code: 'VENTER-GROUP', name: 'Group discount: Venter families', kind: 'discount', value: 200, unit: 'rand', who: 'refs', refs: fut.slice(0, 2).map(function (b) { return b.ref; }), emails: [], stayFrom: '', stayTo: '', max: 2, from: TODAY, to: add(TODAY, 60), active: true, auto: false, uses: [] },
+      { id: 'v4', code: 'WINTER25', name: 'Winter weekday special', kind: 'discount', value: 25, unit: 'pct', who: 'dates', refs: [], emails: [], stayFrom: yr + '-06-01', stayTo: yr + '-08-31', max: 30, from: yr + '-05-01', to: yr + '-08-31', active: true, auto: false, uses: db.bookings.filter(function (b) { return b.ci >= yr + '-06-01' && b.ci <= yr + '-08-31'; }).slice(0, 9).map(function (b) { return { ref: b.ref, at: b.created, by: 'Website' }; }) }
+    ];
+    var cx = db.bookings.filter(function (b) { return b.status === 'cancelled'; })[0];
+    if (cx) db.credits.push({ id: 'c1', email: (cx.guest.email || '').toLowerCase(), name: guestName(cx), amt: 650, used: 0, from: cx.ref, d: add(TODAY, -12) });
     var recent = db.bookings.filter(function (b) { return b.created.slice(0, 10) >= add(TODAY, -3); }).slice(-6);
     recent.forEach(function (b) { db.log.push({ at: b.created, by: b.source === 'Website' ? 'Website' : 'Sherri', text: 'New booking ' + b.ref + ' for ' + guestName(b) + ' (' + standById(b.stand).name + ')', ref: b.ref }); });
     db.log.sort(function (a, b) { return a.at < b.at ? 1 : -1; });
@@ -233,7 +246,8 @@
   function save() { try { localStorage.setItem(KEY, JSON.stringify(DB)); return true; } catch (e) { return false; } }
   function loadDB() {
     try { DB = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { DB = null; }
-    if (!DB || DB.v !== 3) { DB = seed(); save(); }
+    if (!DB || DB.v !== 4) { DB = seed(); save(); }
+    DB.vouchers = DB.vouchers || []; DB.credits = DB.credits || [];
     DB.gone = DB.gone || {};
     if (DB.stands) STANDS = DB.stands;   // stands added or changed in this admin
     if (!DB.products) DB.products = defaultProducts();
@@ -269,6 +283,8 @@
       var b = { ref: w.ref, created: w.created, source: 'Website', guest: { first: w.first, last: w.last, email: w.email, phone: w.phone, consent: !!w.consent }, stand: w.stand, ci: w.ci, co: w.co, adults: w.adults, pens: w.pens, kids: w.kids, vehicles: 1, setup: w.setup || '', extras: w.extras || {},
         method: card ? 'card' : 'eft', eft: w.eft, card: w.card, total: card ? w.card : w.eft, payments: [], status: nowPaid ? 'confirmed' : 'pending', notes: w.notes ? [{ at: w.created, by: 'Guest', text: w.notes }] : [], pop: false, isNew: true };
       if (nowPaid) b.payments.push({ d: w.created.slice(0, 10), amt: nowPaid, m: card ? 'card' : 'eft', type: w.pay === 'full' ? 'Full payment' : 'Deposit', ref: card ? 'Card (website)' : 'Instant EFT' });
+      if (w.voucher) { var wv = DB.vouchers.filter(function (x) { return x.code === w.voucher; })[0]; if (wv) wv.uses.push({ ref: b.ref, at: w.created, by: 'Website' }); b.notes.push({ at: w.created, by: 'Website', text: 'Voucher ' + w.voucher + ' used: ' + money(w.discount || 0) + ' off.' }); }
+      if (b.extras) delete b.extras.__voucher;
       DB.bookings.push(b); added++;
       DB.log.unshift({ at: w.created, by: 'Website', text: 'New website booking ' + b.ref + ' for ' + guestName(b), ref: b.ref });
     });
@@ -284,9 +300,9 @@
     { id: 'leuan', name: 'Leuan', role: 'Front desk', email: 'leuan@kyleu.co.za' }
   ];
   var ROLES = {
-    Owner: ['dashboard', 'bookings', 'calendar', 'enquiries', 'guests', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'rates', 'settings'],
-    Manager: ['dashboard', 'bookings', 'calendar', 'enquiries', 'guests', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands'],
-    'Front desk': ['dashboard', 'bookings', 'calendar', 'enquiries', 'guests', 'shop', 'drives']
+    Owner: ['dashboard', 'bookings', 'calendar', 'enquiries', 'guests', 'vouchers', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'rates', 'settings'],
+    Manager: ['dashboard', 'bookings', 'calendar', 'enquiries', 'guests', 'vouchers', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands'],
+    'Front desk': ['dashboard', 'bookings', 'calendar', 'enquiries', 'guests', 'vouchers', 'shop', 'drives']
   };
   var NAV = [
     { id: 'dashboard', t: 'Dashboard', i: 'home', g: '' },
@@ -294,6 +310,7 @@
     { id: 'calendar', t: 'Calendar', i: 'cal', g: 'Front desk' },
     { id: 'enquiries', t: 'Inbox', i: 'mail', g: 'Front desk' },
     { id: 'guests', t: 'Guests', i: 'users', g: 'Front desk' },
+    { id: 'vouchers', t: 'Vouchers', i: 'gift', g: 'Front desk' },
     { id: 'eft', t: 'EFT payments', i: 'bank', g: 'Money' },
     { id: 'payments', t: 'Payments', i: 'card', g: 'Money' },
     { id: 'reports', t: 'Reports', i: 'chart', g: 'Money' },
@@ -374,6 +391,7 @@
       (b.status === 'confirmed' && bal ? '<p class="note">' + ic('clock') + '<span>Balance of <b>' + money(bal) + '</b> is due by <b>' + fd(balanceDue(b)) + '</b> (' + rel(balanceDue(b)) + ').</span></p>' : '') +
       ((b.pops || []).length ? '<h5>Proof of payment</h5>' + popChips(b) : '') +
       '<h5>Payments</h5>' + ((b.payments || []).length ? '<ul class="timeline">' + b.payments.map(function (p) { return '<li><span class="dot ' + (p.amt < 0 ? 'bad' : 'pm-' + p.m) + '"></span><div><b>' + money(p.amt) + '</b> ' + esc(p.type) + ' · ' + methodLabel(p.m) + '<div class="muted small">' + fd(p.d, { day: 'numeric', month: 'short', year: 'numeric' }) + ' · ' + esc(p.ref || '') + '</div></div></li>'; }).join('') + '</ul>' : '<p class="muted small">No payments yet.</p>') + '</section>' +
+      (function () { var v = bookingDgr(b), u = v && v.uses.filter(function (x) { return x.ref === b.ref; })[0]; if (b.status === 'cancelled') return ''; return '<section class="d-sec"><h4>Dinokeng partner code</h4>' + (v ? '<p class="small"><b class="code">' + esc(v.code) + '</b> sent ' + esc(u.at) + '</p><button class="btn ghost sm" data-act="v-send" data-ref="' + b.ref + '">' + ic('send') + 'Send it again</button>' : '<p class="muted small">Not sent yet. It goes out in the week before arrival.</p>' + (dgrFor(b) ? '<button class="btn sm" data-act="v-send" data-ref="' + b.ref + '">' + ic('send') + 'Send ' + esc(dgrFor(b).code) + ' now</button>' : '<p class="small">No active Dinokeng code fits this booking. <a href="#/vouchers" data-dclose>Create one</a>.</p>')) + (creditLeft(b.guest.email) ? '<p class="small" style="margin-top:10px">' + ic('info') + ' This guest has <b>' + money(creditLeft(b.guest.email)) + '</b> credit from a cancelled booking.</p>' : '') + '</section>'; })() +
       (function () { var ts = DB.threads.filter(function (t) { return t.ref === b.ref || t.email === b.guest.email; }); return '<section class="d-sec"><h4>Emails</h4>' + (ts.length ? '<div class="list">' + ts.map(function (t) { return '<button type="button" class="brow" data-thread-go="' + t.id + '"><span class="brow-g"><b>' + esc(t.subject) + '</b><small>' + t.msgs.length + ' email' + (t.msgs.length > 1 ? 's' : '') + ' · last ' + when(lastMsg(t).at) + '</small></span>' + ic('chev-r') + '</button>'; }).join('') + '</div>' : '<p class="muted small">No emails yet.</p>') + '</section>'; })() +
       '<section class="d-sec"><h4>Notes</h4>' + (b.notes.length ? '<ul class="notes">' + b.notes.map(function (n) { return '<li><p>' + esc(n.text) + '</p><span class="muted small">' + esc(n.by) + ' · ' + esc(n.at) + '</span></li>'; }).join('') + '</ul>' : '<p class="muted small">No notes yet.</p>') +
       '<form class="note-form" data-note="' + b.ref + '"><input name="t" placeholder="Add a note for the team" aria-label="Add a note"><button class="btn ghost" type="submit">Add</button></form></section>' +
@@ -412,12 +430,13 @@
   var TEMPLATES = {
     eft: { t: 'EFT deposit reminder', s: 'Your Kyleu booking: deposit reminder', b: function (b) { return 'Hi {first},\n\nThank you for booking {stand} from {ci} to {co}. To secure your stand please pay the deposit of {deposit} by {depdue} using reference {ref}.\n\nBank: FNB · Account: Kyleu Bush Camp · Acc no: 62000000000 · Branch: 250655\n\nUpload your proof of payment at www.kyleu.co.za/pop.html, or reply to this email with it attached.\n\nSee you in the bush!\nThe Kyleu team'; } },
     balance: { t: 'Balance reminder', s: 'Your Kyleu stay is coming up', b: function (b) { return 'Hi {first},\n\nYour stay at {stand} starts on {ci}. The balance of {balance} is due by {baldue}. Pay by EFT with reference {ref}, or reply and we will send a card payment link.\n\nThe Kyleu team'; } },
-    arrival: { t: 'Pre-arrival information', s: 'Getting to Kyleu Bush Camp', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}.\n\nDirections: enter Dinokeng at Tau Gate, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km.\n\nDinokeng conservation and self-drive fees are paid to the reserve (not to Kyleu): https://dinokeng.plnktn.io/south\n\nCheck-in from 12:00. Gate questions: 060 458 4478.\n\nThe Kyleu team'; } },
+    arrival: { t: 'Pre-arrival information', s: 'Getting to Kyleu Bush Camp', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}.\n\nDirections: enter Dinokeng at Tau Gate, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km.\n\nYour Dinokeng partner code is {voucher}. Use it when you pay your conservation and self-drive fees online (https://dinokeng.plnktn.io/south) or show it at the gate, to get the partner rate.\n\nCheck-in from 12:00. Gate questions: 060 458 4478.\n\nThe Kyleu team'; } },
     thanks: { t: 'Thank you & review', s: 'Thanks for staying at Kyleu', b: function (b) { return 'Hi {first},\n\nThank you for camping with us at {stand}. We hope you loved the bush! If you have a minute, a Google review helps our small family camp a lot.\n\nThe Kyleu team'; } },
     confirm: { t: 'Booking confirmation', s: 'Booking confirmed: {ref}', b: function (b) { return 'Hi {first},\n\nYour booking {ref} is confirmed: {stand}, {ci} to {co}.\nTotal {total}, paid {paid}, balance {balance} due by {baldue}.\n\nThe Kyleu team'; } }
   };
   function fill(t, b) {
-    var map = { first: b.guest.first, stand: standById(b.stand).name, ci: fd(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }), co: fd(b.co, { weekday: 'long', day: 'numeric', month: 'long' }), deposit: money(deposit(b)), depdue: fd(depositDue(b), { day: 'numeric', month: 'long' }), ref: b.ref, balance: money(balance(b)), baldue: fd(balanceDue(b), { day: 'numeric', month: 'long' }), total: money(b.total), paid: money(paid(b)) };
+    var dv = b.guest ? dgrFor(b) : null;
+    var map = { voucher: dv ? dv.code : '{voucher}', first: b.guest.first, stand: standById(b.stand).name, ci: fd(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }), co: fd(b.co, { weekday: 'long', day: 'numeric', month: 'long' }), deposit: money(deposit(b)), depdue: fd(depositDue(b), { day: 'numeric', month: 'long' }), ref: b.ref, balance: money(balance(b)), baldue: fd(balanceDue(b), { day: 'numeric', month: 'long' }), total: money(b.total), paid: money(paid(b)) };
     return t.replace(/\{(\w+)\}/g, function (_, k) { return map[k] != null ? map[k] : _; });
   }
   function actRemind(ref) {
@@ -429,25 +448,31 @@
       'Send', function (f) {
         var via = $('[name=via]:checked', f).value;
         if (via === 'wa') window.open('https://wa.me/27' + b.guest.phone.replace(/\D/g, '').replace(/^0/, '') + '?text=' + encodeURIComponent(f.elements.b.value), '_blank', 'noopener');
+        if (/\{voucher\}|partner code/i.test(f.elements.b.value)) { var vv = dgrFor(b); if (vv && !vv.uses.some(function (u) { return u.ref === b.ref; })) vv.uses.push({ ref: b.ref, at: nowStamp(), by: ME.name }); }
         if (via === 'wa') b.notes.push({ at: nowStamp(), by: ME.name, text: 'Sent "' + f.elements.s.value + '" by WhatsApp.' });
         else logEmail(b, f.elements.s.value, f.elements.b.value);
         log('Message sent to ' + guestName(b), b.ref); save(); refresh(); toast(via === 'wa' ? 'WhatsApp opened with the message' : 'Email sent (demo: nothing was actually sent)');
       }, { wide: true, onOpen: function (f) { var set = function () { var t = TEMPLATES[f.elements.tpl.value]; f.elements.s.value = fill(t.s, b); f.elements.b.value = fill(t.b(b), b); }; f.elements.tpl.addEventListener('change', set); set(); }, noFocus: true });
   }
   function actCancel(ref) {
-    var b = byRef(ref), days = diff(TODAY, b.ci), pd = paid(b);
-    var charge = days <= 2 ? b.total : days <= 14 ? Math.min(deposit(b), b.total) : 0, refund = Math.max(0, pd - charge);
+    var b = byRef(ref), pd = paid(b);
     modal('Cancel ' + esc(b.ref) + '?', '<p>' + esc(guestName(b)) + ' · ' + esc(standById(b.stand).name) + ' · arriving ' + fdw(b.ci) + ' (' + rel(b.ci) + ').</p>' +
-      '<div class="callout ' + (charge ? 'warn' : '') + '"><b>Cancellation policy</b><br>' + (days <= 2 ? 'Within 48 hours of arrival: 100% is charged.' : days <= 14 ? 'Within 14 days of arrival: 50% (the deposit) is charged.' : 'More than 14 days before arrival: no cancellation charge.') + ' Offer to move the booking to another date first.</div>' +
-      '<div class="lines"><div class="ln"><span>Paid so far</span><span>' + money(pd) + '</span></div><div class="ln"><span>Kept by Kyleu</span><span>' + money(Math.min(pd, charge)) + '</span></div><div class="ln tot"><span>Refund to guest</span><span>' + money(refund) + '</span></div></div>' +
+      '<div class="callout"><b>Cancellation policy</b><br>No refunds. What the guest has paid is kept as a credit to use on another date that suits Kyleu and the guest. Offer to move the booking first.</div>' +
+      '<div class="lines"><div class="ln"><span>Paid so far</span><span>' + money(pd) + '</span></div><div class="ln tot"><span>Credit for ' + esc(b.guest.first) + '</span><span data-credit-amt>' + money(pd) + '</span></div></div>' +
+      (pd > 0 ? '<label class="check"><input type="checkbox" name="refund"><span>Refund the money instead (a management decision)</span></label>' : '') +
       '<label class="fld"><span>Reason</span><input name="why" placeholder="e.g. Guest emailed, family emergency"></label>',
       'Cancel booking', function (f) {
+        var refund = pd > 0 && fval(f, 'refund');
         b.status = 'cancelled'; b.pop = false;
-        if (refund) b.payments.push({ d: TODAY, amt: -refund, m: b.payments.length ? b.payments[0].m : 'eft', type: 'Refund', ref: 'Refund ' + b.ref });
-        b.notes.push({ at: nowStamp(), by: ME.name, text: 'Cancelled. ' + (fval(f, 'why') || '') + (refund ? ' Refund ' + money(refund) + '.' : '') });
-        log('Booking ' + b.ref + ' cancelled', b.ref); save(); refresh(); toast('Booking cancelled. The stand is free again.');
-      }, { danger: true });
+        if (pd > 0 && refund) b.payments.push({ d: TODAY, amt: -pd, m: b.payments.length ? b.payments[0].m : 'eft', type: 'Refund', ref: 'Refund ' + b.ref });
+        else if (pd > 0) DB.credits.push({ id: uid('c'), email: (b.guest.email || '').toLowerCase(), name: guestName(b), amt: pd, used: 0, from: b.ref, d: TODAY });
+        b.notes.push({ at: nowStamp(), by: ME.name, text: 'Cancelled. ' + (fval(f, 'why') || '') + (pd > 0 ? (refund ? ' Refunded ' + money(pd) + '.' : ' ' + money(pd) + ' kept as credit for another stay.') : '') });
+        log('Booking ' + b.ref + ' cancelled', b.ref); save(); refresh();
+        toast('Booking cancelled. ' + (pd > 0 && !refund ? money(pd) + ' kept as credit for ' + esc(b.guest.first) + '.' : 'The stand is free again.'));
+      }, { danger: true, onOpen: function (f) { var c = f.elements.refund; if (c) c.addEventListener('change', function () { $('[data-credit-amt]', f).textContent = c.checked ? money(0) : money(pd); }); } });
   }
+  function creditsFor(email) { email = (email || '').toLowerCase(); return email ? DB.credits.filter(function (c) { return c.email === email && c.amt - c.used > 0; }) : []; }
+  function creditLeft(email) { return creditsFor(email).reduce(function (a, c) { return a + c.amt - c.used; }, 0); }
   function actMove(ref) {
     var b = byRef(ref);
     modal('Change dates or stand', '<div class="grid2"><label class="fld"><span>Arrive</span><input type="date" name="ci" value="' + b.ci + '"></label><label class="fld"><span>Depart</span><input type="date" name="co" value="' + b.co + '"></label></div>' +
@@ -477,7 +502,7 @@
       '<div class="grid3"><label class="fld"><span>Adults</span><input type="number" min="0" max="12" name="adults" value="2"></label><label class="fld"><span>Pensioners</span><input type="number" min="0" max="12" name="pens" value="0"></label><label class="fld"><span>Kids under 12</span><input type="number" min="0" max="12" name="kids" value="0"></label></div>' +
       '<div class="grid2"><label class="fld"><span>Booked via</span><select name="source"><option>Phone</option><option>WhatsApp</option><option>Email</option><option>Walk-in</option></select></label><label class="fld"><span>Game drive (people)</span><input type="number" min="0" max="10" name="gd" value="0"></label></div>' +
       '<span class="fld-l">How will they pay?</span><div class="seg"><label><input type="radio" name="m" value="eft" checked><span>EFT</span></label><label><input type="radio" name="m" value="card"><span>Card</span></label><label><input type="radio" name="m" value="cash"><span>Cash</span></label></div>' +
-      '<div class="quote-box" data-q></div>',
+      '<div class="quote-box" data-q></div><div data-credit-box></div>',
       'Create booking', function (f) {
         var g = { adults: +fval(f, 'adults') || 0, pens: +fval(f, 'pens') || 0, kids: +fval(f, 'kids') || 0 }, sid = fval(f, 'stand'), a = fval(f, 'ci'), z = fval(f, 'co'), m = $('[name=m]:checked', f).value;
         if (!fval(f, 'first') || !fval(f, 'last')) { toast('Add the guest\'s name'); return false; }
@@ -487,6 +512,7 @@
         var ex = { gd: +fval(f, 'gd') || 0 }, q = quote(sid, a, z, g, ex);
         var b = { ref: 'KY' + a.slice(2, 4) + '-' + Math.random().toString(36).slice(2, 6).toUpperCase(), created: nowStamp(), source: fval(f, 'source'), guest: { first: fval(f, 'first'), last: fval(f, 'last'), email: fval(f, 'email'), phone: fval(f, 'phone'), consent: false }, stand: sid, ci: a, co: z, adults: g.adults, pens: g.pens, kids: g.kids, vehicles: 1, setup: '', extras: ex, method: m, eft: q.eft, card: q.card, total: m === 'card' ? q.card : q.eft, payments: [], status: 'pending', notes: [], pop: false };
         if (m !== 'eft') b.status = 'confirmed';
+        if (fval(f, 'usecredit')) { var need = b.total; creditsFor(b.guest.email).forEach(function (c) { var take = Math.min(need, c.amt - c.used); if (take <= 0) return; c.used += take; need -= take; b.payments.push({ d: TODAY, amt: take, m: 'credit', type: 'Credit', ref: 'Credit from ' + c.from }); }); if (paid(b) >= deposit(b)) b.status = 'confirmed'; }
         DB.bookings.push(b); DB.bookings.sort(function (x, y) { return x.ci < y.ci ? -1 : 1; });
         log('New ' + b.source.toLowerCase() + ' booking ' + b.ref + ' for ' + guestName(b), b.ref); save(); render(); openBooking(b.ref);
         toast('Booking ' + b.ref + ' created' + (m === 'eft' ? '. Invoice emailed (demo)' : ''));
@@ -496,8 +522,10 @@
           if (z <= a) { box.innerHTML = '<span class="bad-t">Departure must be after arrival.</span>'; return; }
           var q = quote(sid, a, z, g, { gd: +fval(f, 'gd') || 0 }), free = !overlaps(sid, a, z), st = standById(sid);
           box.innerHTML = (free ? '<span class="pill ok"><i></i>Stand free</span>' : '<span class="pill bad"><i></i>Stand not free</span>') + (g.adults + g.pens + g.kids > st.guests ? ' <span class="pill warn"><i></i>Over ' + st.guests + ' guests</span>' : '') +
-            '<div class="qb-row"><span>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + '</span><span class="price-pair">' + (m === 'card' ? '<b>' + money(q.card) + '</b> <small>card price</small>' : '<s>' + money(q.card) + '</s> <b>' + money(q.eft) + '</b> <small>' + methodLabel(m) + '</small>') + '</span></div>' +
+            '<div class="qb-row"><span>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + '</span><span class="price-pair">' + (!hasFee() ? '<b>' + money(q.eft) + '</b>' : m === 'card' ? '<b>' + money(q.card) + '</b> <small>card price</small>' : '<s>' + money(q.card) + '</s> <b>' + money(q.eft) + '</b> <small>' + methodLabel(m) + '</small>') + '</span></div>' +
             '<div class="muted small">Deposit ' + depPct() + '%: ' + money(Math.round((m === 'card' ? q.card : q.eft) * depPct() / 100)) + '</div>';
+          var cl = creditLeft(fval(f, 'email')), cb = $('[data-credit-box]', f), was = f.elements.usecredit ? f.elements.usecredit.checked : true;
+          cb.innerHTML = cl ? '<label class="check credit-use"><input type="checkbox" name="usecredit"' + (was ? ' checked' : '') + '><span>Use <b>' + money(cl) + '</b> credit from a cancelled booking</span></label>' : '';
         };
         $$('input,select', f).forEach(function (x) { x.addEventListener('input', u); x.addEventListener('change', u); }); u();
       } });
@@ -590,7 +618,7 @@
     var list = base.filter(function (b) { return bucket(b)[F.st]; });
     var srcs = []; DB.bookings.forEach(function (b) { if (srcs.indexOf(b.source) < 0) srcs.push(b.source); }); srcs.sort();
     if (F.st === 'past' || F.st === 'cancelled' || F.st === 'all') list = list.slice().reverse();
-    return '<div class="page-h"><div><h1>Bookings</h1><p class="muted">' + list.length + ' shown · card prices include the ' + cardFee() + '% card fee, EFT prices do not</p></div><div class="ph-act"><button class="btn ghost" data-act="csv-bookings">' + ic('download') + 'Export</button><button class="btn" data-act="new">' + ic('plus') + 'New booking</button></div></div>' +
+    return '<div class="page-h"><div><h1>Bookings</h1><p class="muted">' + list.length + ' shown' + (hasFee() ? ' · card prices include the ' + cardFee() + '% card fee, EFT prices do not' : '') + '</p></div><div class="ph-act"><button class="btn ghost" data-act="csv-bookings">' + ic('download') + 'Export</button><button class="btn" data-act="new">' + ic('plus') + 'New booking</button></div></div>' +
       '<div class="filters"><label class="search">' + ic('search') + '<input type="search" placeholder="Search name, ref, phone or stand" value="' + esc(F.q) + '" data-f="q" aria-label="Search bookings"></label>' +
       '</div><div class="filter-row">' + fsel('F:area', F.area, [['', 'All areas']].concat(Object.keys(AREA_SHORT).map(function (a) { return [a, AREA_SHORT[a]]; }))) +
       fsel('F:stand', F.stand, [['', 'All stands']].concat(STANDS.filter(function (x) { return !F.area || x.area === F.area; }).map(function (x) { return [x.id, x.name]; }))) +
@@ -602,7 +630,7 @@
         var st = standById(b.stand);
         return '<tr data-open="' + b.ref + '" tabindex="0"><td data-l="Guest"><b>' + esc(guestName(b)) + '</b>' + (b.isNew ? ' <span class="new">New</span>' : '') + '<small>' + esc(b.ref) + ' · ' + esc(b.source) + '</small></td><td data-l="Stand">' + esc(st.name) + '<small>' + AREA_SHORT[st.area] + '</small></td>' +
           '<td data-l="Dates" data-s="' + b.ci + '">' + fd(b.ci) + ' to ' + fd(b.co) + '<small>' + diff(b.ci, b.co) + ' nights · ' + rel(b.ci) + '</small></td><td data-l="Guests">' + people(b) + '</td>' +
-          '<td data-l="Total" class="r">' + money(b.total) + '<small>' + methodLabel(b.method) + (b.method !== 'card' ? ' · card ' + money(b.card) : '') + '</small></td><td data-l="Balance" class="r">' + (balance(b) ? money(balance(b)) : '<span class="muted">0</span>') + '</td><td data-l="Status">' + pill(stateOf(b)) + '</td></tr>';
+          '<td data-l="Total" class="r">' + money(b.total) + '<small>' + methodLabel(b.method) + (b.method !== 'card' && hasFee() ? ' · card ' + money(b.card) : '') + '</small></td><td data-l="Balance" class="r">' + (balance(b) ? money(balance(b)) : '<span class="muted">0</span>') + '</td><td data-l="Status">' + pill(stateOf(b)) + '</td></tr>';
       }).join('') : '<tr><td colspan="7" class="empty">No bookings match.</td></tr>') + '</tbody></table></div>';
   }
 
@@ -612,12 +640,12 @@
     var bal = DB.bookings.filter(function (b) { return b.status === 'confirmed' && b.method !== 'card' && balance(b) > 0 && diff(TODAY, balanceDue(b)) <= 14; }).sort(function (a, b) { return a.ci < b.ci ? -1 : 1; });
     function card(b, kind) {
       var amt = kind === 'bal' ? balance(b) : deposit(b), due = kind === 'bal' ? balanceDue(b) : depositDue(b), left = diff(TODAY, due);
-      return '<article class="eft-card ' + kind + '"><div class="eft-top" data-open="' + b.ref + '"><div><b>' + esc(guestName(b)) + '</b><small>' + esc(b.ref) + ' · ' + esc(standById(b.stand).name) + ' · ' + fd(b.ci) + ' to ' + fd(b.co) + '</small></div><div class="eft-amt"><b>' + money(amt) + '</b><small>' + (kind === 'bal' ? 'balance' : depPct() + '% deposit') + ' · card ' + money(kind === 'bal' ? b.card - paid(b) : Math.round(b.card * depPct() / 100)) + '</small></div></div>' +
+      return '<article class="eft-card ' + kind + '"><div class="eft-top" data-open="' + b.ref + '"><div><b>' + esc(guestName(b)) + '</b><small>' + esc(b.ref) + ' · ' + esc(standById(b.stand).name) + ' · ' + fd(b.ci) + ' to ' + fd(b.co) + '</small></div><div class="eft-amt"><b>' + money(amt) + '</b><small>' + (kind === 'bal' ? 'balance' : depPct() + '% deposit') + (hasFee() ? ' · card ' + money(kind === 'bal' ? b.card - paid(b) : Math.round(b.card * depPct() / 100)) : '') + '</small></div></div>' +
         '<div class="eft-due ' + (left < 0 ? 'bad-t' : left <= 1 ? 'warn-t' : '') + '">' + ic('clock') + (left < 0 ? 'Overdue by ' + -left + ' day' + (-left > 1 ? 's' : '') : 'Due ' + fd(due) + ' (' + rel(due) + ')') + (b.pop ? '<span class="info-t pop-line">' + ic('note') + 'Proof of payment received' + ((b.pops || []).length ? ' ' + whenSaid(b.pops[b.pops.length - 1].at) + ', check the bank:' : ': check the bank') + '</span>' + popChips(b) : '') + '</div>' +
         '<div class="eft-act"><button class="btn sm" data-act="pay" data-ref="' + b.ref + '">' + ic('check') + 'Money is in</button><button class="btn sm ghost" data-act="remind" data-ref="' + b.ref + '">' + ic('send') + 'Remind</button>' + (kind === 'over' ? '<button class="btn sm ghost danger-t" data-act="release" data-ref="' + b.ref + '">' + ic('x') + 'Release stand</button>' : '') + '</div></article>';
     }
     var sec = function (title, sub, list, kind) { return '<section class="eft-sec"><h3>' + title + ' <span class="count">' + list.length + '</span></h3><p class="muted small">' + sub + '</p>' + (list.length ? '<div class="eft-grid">' + list.map(function (b) { return card(b, kind); }).join('') + '</div>' : '<p class="empty">Nothing here.</p>') + '</section>'; };
-    return '<div class="page-h"><div><h1>EFT payments</h1><p class="muted">Guests who chose EFT pay the normal price (no ' + cardFee() + '% card fee). Match their payments here.</p></div></div>' +
+    return '<div class="page-h"><div><h1>EFT payments</h1><p class="muted">' + (hasFee() ? 'Guests who chose EFT pay the normal price (no ' + cardFee() + '% card fee). ' : 'Guests pay by EFT. Proof of payment from the website lands here. ') + 'Match their payments here.</p></div></div>' +
       '<div class="card match"><label class="search big">' + ic('search') + '<input data-match placeholder="Paste the reference from the bank statement, e.g. KY26-4F2K" aria-label="Bank reference"></label><div data-match-out class="muted small">Tip: guests use their booking reference when they pay, so you can paste it straight from the bank app.</div></div>' +
       sec('Proof of payment received', 'The guest says they paid. Check the bank, then confirm.', pop, 'pop') +
       sec('Waiting for the deposit', 'Invoice sent. The deposit secures the booking within ' + num('Booking rules', 'Deposit due within days of invoice', 5) + ' days.', wait, 'wait') +
@@ -672,7 +700,7 @@
       '<div class="chips scroll">' + GTAGS.map(function (t) { return '<button class="chip' + (GF.tag === t[0] ? ' on' : '') + '" data-gtag="' + t[0] + '">' + t[1] + ' <span>' + all.filter(t[2]).length + '</span></button>'; }).join('') + '</div>' +
       '<div class="card flush"><table class="tbl"><thead><tr><th>Guest</th><th>Contact</th><th class="r">Stays</th><th class="r">Nights</th><th class="r">Spent</th><th>Last / next visit</th><th>Tags</th></tr></thead><tbody>' +
       list.map(function (g) {
-        var tags = (g.stays > 1 ? '<span class="tag">Returning</span>' : '') + (g.pens ? '<span class="tag">Pensioner</span>' : '') + (g.gd ? '<span class="tag">Game drives</span>' : '') + (g.consent ? '<span class="tag ok">Mailing list</span>' : '');
+        var tags = (g.stays > 1 ? '<span class="tag">Returning</span>' : '') + (g.pens ? '<span class="tag">Pensioner</span>' : '') + (g.gd ? '<span class="tag">Game drives</span>' : '') + (g.consent ? '<span class="tag ok">Mailing list</span>' : '') + (creditLeft(g.email) ? '<span class="tag">Credit ' + money(creditLeft(g.email)) + '</span>' : '');
         return '<tr data-guest="' + esc(g.email) + '" tabindex="0"><td data-l="Guest"><b>' + esc(g.name) + '</b></td><td data-l="Contact">' + esc(g.phone) + '<small>' + esc(g.email) + '</small></td><td data-l="Stays" class="r">' + g.stays + '</td><td data-l="Nights" class="r">' + g.nights + '</td><td data-l="Spent" class="r">' + money(g.spent) + '</td><td data-l="Visits" data-s="' + (g.next || g.last || '') + '">' + (g.last ? fd(g.last, { day: 'numeric', month: 'short', year: 'numeric' }) : '<span class="muted">None yet</span>') + (g.next ? '<small>Next: ' + fd(g.next) + '</small>' : '') + '</td><td data-l="Tags">' + (tags || '<span class="muted">None</span>') + '</td></tr>';
       }).join('') + '</tbody></table></div>';
   }
@@ -681,6 +709,7 @@
     var bs = DB.bookings.filter(function (b) { return b.guest.email === email; });
     modal(esc(g.name), '<div class="chips"><a class="chip" href="tel:' + esc(g.phone.replace(/\s/g, '')) + '">' + ic('phone') + esc(g.phone) + '</a><a class="chip" href="mailto:' + esc(g.email) + '">' + ic('mail') + esc(g.email) + '</a></div>' +
       '<div class="mini-kpis"><div><b>' + g.stays + '</b><span>stays</span></div><div><b>' + g.nights + '</b><span>nights</span></div><div><b>' + money(g.spent) + '</b><span>spent</span></div></div>' +
+      (creditLeft(g.email) ? '<p class="callout"><b>' + money(creditLeft(g.email)) + ' credit</b> from a cancelled booking. Use it on their next booking.</p>' : '') +
       '<label class="check"><input type="checkbox" name="consent"' + (g.consent ? ' checked' : '') + '><span>Agreed to receive news and specials (POPIA consent)</span></label>' +
       '<h5>Bookings</h5><div class="list">' + bs.map(function (b) { return '<button type="button" class="brow" data-open="' + b.ref + '"><span class="brow-st">' + esc(standById(b.stand).name) + '</span><span class="brow-g"><b>' + fd(b.ci, { day: 'numeric', month: 'short', year: 'numeric' }) + '</b><small>' + diff(b.ci, b.co) + ' nights · ' + money(b.total) + '</small></span>' + pill(stateOf(b)) + '</button>'; }).join('') + '</div>',
       'Save', function (f) { var c = fval(f, 'consent'); DB.bookings.forEach(function (b) { if (b.guest.email === email) b.guest.consent = c; }); save(); render(); toast('Guest updated'); }, { noFocus: true });
@@ -840,7 +869,7 @@
   // every rand in or out: booking payments, refunds and shop sales (sales put on a guest's bill are paid with the booking)
   function allTx() {
     var out = [], fee = function (a) { return Math.round(a - a / (1 + cardFee() / 100)); };
-    DB.bookings.forEach(function (b) { (b.payments || []).forEach(function (p) { out.push({ d: p.d, t: '', kind: p.amt < 0 ? 'refund' : 'booking', type: p.amt < 0 ? 'Refund' : p.type, who: guestName(b), what: standById(b.stand).name + ' · ' + b.ref, m: p.m, amt: p.amt, ref: b.ref, fee: p.m === 'card' && p.amt > 0 ? fee(p.amt) : 0, note: p.ref || '' }); }); });
+    DB.bookings.forEach(function (b) { (b.payments || []).forEach(function (p) { if (p.m === 'credit') return; out.push({ d: p.d, t: '', kind: p.amt < 0 ? 'refund' : 'booking', type: p.amt < 0 ? 'Refund' : p.type, who: guestName(b), what: standById(b.stand).name + ' · ' + b.ref, m: p.m, amt: p.amt, ref: b.ref, fee: p.m === 'card' && p.amt > 0 ? fee(p.amt) : 0, note: p.ref || '' }); }); });
     receipts().forEach(function (r) { if (r.m === 'bill') return; out.push({ d: r.d, t: r.t, kind: r.amt < 0 ? 'refund' : 'shop', type: r.amt < 0 ? 'Shop refund' : 'Shop sale', who: r.stand ? r.stand + (r.guest ? ' · ' + r.guest : '') : 'Walk-in', what: r.summary, m: r.m, amt: r.amt, sid: r.sid, fee: r.m === 'card' && r.amt > 0 ? fee(r.amt) : 0 }); });
     return out.sort(function (a, b) { return (a.d + (a.t || '99')) < (b.d + (b.t || '99')) ? 1 : -1; });
   }
@@ -977,7 +1006,7 @@
     var dayTot = {}; list.forEach(function (x) { dayTot[x.d] = (dayTot[x.d] || 0) + x.amt; });
     return head +
       '<section class="card sum-card"><div class="sum-grid"><div><span>Money in</span><b>' + money(gross) + '</b><small>' + inRange.filter(function (x) { return x.amt > 0; }).length + ' payments and sales</small></div><div><span>Refunds</span><b class="' + (refunds ? 'bad-t' : '') + '">' + money(-refunds) + '</b><small>' + inRange.filter(function (x) { return x.amt < 0; }).length + ' refunds</small></div><div><span>Net</span><b>' + money(gross - refunds) + '</b><small>' + PAY_RANGES.filter(function (o) { return o[0] === PAYF.range; })[0][1].toLowerCase() + '</small></div>' +
-      '<div><span>Card fee covered</span><b class="' + (feeIn >= prov ? 'ok-t' : 'warn-t') + '">' + money(feeIn) + '</b><small>The card company charges about ' + money(prov) + '</small></div></div>' +
+      (hasFee() ? '<div><span>Card fee covered</span><b class="' + (feeIn >= prov ? 'ok-t' : 'warn-t') + '">' + money(feeIn) + '</b><small>The card company charges about ' + money(prov) + '</small></div>' : '<div><span>Still to come in</span><b>' + money(owedTot) + '</b><small>' + owed.length + ' bookings owe a deposit or balance</small></div>') + '</div>' +
       '<div class="split" role="img" aria-label="Card ' + money(byM.card) + ', EFT ' + money(byM.eft) + ', cash ' + money(byM.cash) + '"><span class="card-s" style="width:' + pct(byM.card) + '%"></span><span class="eft-s" style="width:' + pct(byM.eft) + '%"></span><span class="cash-s" style="width:' + pct(byM.cash) + '%"></span></div>' +
       '<div class="split-key"><span><i class="mth-i pm-card"></i>Card <b>' + money(byM.card) + '</b> ' + Math.round(pct(byM.card)) + '%</span><span><i class="mth-i pm-eft"></i>EFT <b>' + money(byM.eft) + '</b> ' + Math.round(pct(byM.eft)) + '%</span><span><i class="mth-i pm-cash"></i>Cash <b>' + money(byM.cash) + '</b> ' + Math.round(pct(byM.cash)) + '%</span></div></section>' +
       '<div class="filters"><label class="search">' + ic('search') + '<input type="search" data-payq placeholder="Search name, booking ref or amount" value="' + esc(PAYF.q) + '" aria-label="Search payments"></label>' +
@@ -1025,12 +1054,12 @@
       '<div class="chips scroll"><button class="chip' + (!SHOP.cat ? ' on' : '') + '" data-pcat="">All</button>' + cats.map(function (c) { return '<button class="chip' + (SHOP.cat === c ? ' on' : '') + '" data-pcat="' + esc(c) + '">' + esc(c) + '</button>'; }).join('') + '</div>' +
       '<div class="pos">' + shown.map(function (p) {
         var left = p.stock == null ? null : p.stock - (CART[p.id] || 0), out = left !== null && left <= 0;
-        return '<button class="pos-it' + (CART[p.id] ? ' on' : '') + '" data-add="' + p.id + '"' + (out ? ' disabled' : '') + '><b>' + esc(p.label) + '</b><span class="pos-p">' + money(p.amount) + '<small>Card ' + money(toCard(p.amount)) + '</small></span>' + (left !== null ? '<span class="pos-stock' + (left <= (p.lowAt || 5) ? ' low' : '') + '">' + (out ? 'Sold out' : left + ' left') + '</span>' : '') + (CART[p.id] ? '<em>' + CART[p.id] + '</em>' : '') + '</button>';
+        return '<button class="pos-it' + (CART[p.id] ? ' on' : '') + '" data-add="' + p.id + '"' + (out ? ' disabled' : '') + '><b>' + esc(p.label) + '</b><span class="pos-p">' + money(p.amount) + (hasFee() ? '<small>Card ' + money(toCard(p.amount)) + '</small>' : '') + '</span>' + (left !== null ? '<span class="pos-stock' + (left <= (p.lowAt || 5) ? ' low' : '') + '">' + (out ? 'Sold out' : left + ' left') + '</span>' : '') + (CART[p.id] ? '<em>' + CART[p.id] + '</em>' : '') + '</button>';
       }).join('') + (shown.length ? '' : '<p class="empty">No products match.</p>') + '</div></section>' +
       '<aside class="card pos-sale"><header class="card-h"><h3>Current sale</h3>' + (lines.length ? '<button class="btn ghost sm" data-act="cart-clear">Clear</button>' : '') + '</header>' +
       (lines.length ? '<div class="sale-lines">' + lines.map(function (id) { var p = prodBy(id); return '<div class="sl"><div class="sl-n"><b>' + esc(p.label) + '</b><small>' + money(p.amount) + ' each</small></div><div class="qty"><button class="icon-btn sm" data-rem="' + id + '" aria-label="One less">' + ic('minus') + '</button><span>' + CART[id] + '</span><button class="icon-btn sm" data-add="' + id + '" aria-label="One more">' + ic('plus') + '</button></div><b class="sl-t">' + money(p.amount * CART[id]) + '</b></div>'; }).join('') + '</div>' : '<div class="sale-empty">' + ic('cart') + '<p>Tap a product to add it to the sale.</p></div>') +
       '<label class="fld"><span>Who is it for?</span><select data-who><option value="">Walk-in customer (pays now)</option>' + here.map(function (b) { return '<option value="' + b.ref + '"' + (SHOP.who === b.ref ? ' selected' : '') + '>' + esc(standById(b.stand).name + ' · ' + guestName(b)) + '</option>'; }).join('') + '</select></label>' +
-      '<div class="sale-tot"><div><span>Cash or EFT</span><b>' + money(tot(false)) + '</b></div><div class="muted"><span>Card (+' + cardFee() + '%)</span><b>' + money(tot(true)) + '</b></div></div>' +
+      '<div class="sale-tot"><div><span>Cash or EFT</span><b>' + money(tot(false)) + '</b></div>' + (hasFee() ? '<div class="muted"><span>Card (+' + cardFee() + '%)</span><b>' + money(tot(true)) + '</b></div>' : '') + '</div>' +
       '<div class="pay-btns"><button class="btn" data-sell="cash"' + dis + '>' + ic('cash') + 'Cash ' + money(tot(false)) + '</button><button class="btn blue" data-sell="card"' + dis + '>' + ic('card') + 'Card ' + money(tot(true)) + '</button>' + (who ? '<button class="btn ghost full" data-sell="bill"' + dis + '>' + ic('list') + 'Add to ' + esc(standById(who.stand).name) + '\'s bill</button>' : '') + '</div>' +
       (who ? '<p class="muted small">"Add to bill" puts it on ' + esc(guestName(who)) + '\'s booking. They pay it with their balance.</p>' : '') + '</aside></div>' +
       (lines.length ? '<button class="cart-bar" data-act="to-sale">' + ic('cart') + '<span>' + lines.reduce(function (a, id) { return a + CART[id]; }, 0) + ' item' + (lines.reduce(function (a, id) { return a + CART[id]; }, 0) === 1 ? '' : 's') + ' · <b>' + money(tot(false)) + '</b></span><span>View sale</span></button>' : '') +
@@ -1093,14 +1122,14 @@
     var items = shopItems(), sold = soldSince(30), q = PROD.q.toLowerCase(), cats = prodCats();
     var list = items.filter(function (p) { return (!PROD.cat || p.cat === PROD.cat) && (!PROD.stock || (PROD.stock === 'low' ? lowStock(p) : PROD.stock === 'counted' ? p.stock != null : PROD.stock === 'uncounted' ? p.stock == null : PROD.stock === 'hidden' ? p.active === false : p.active !== false)) && (!q || (p.label + ' ' + (p.note || '')).toLowerCase().indexOf(q) >= 0); });
     var low = items.filter(lowStock), sq = 0, sv = 0; Object.keys(sold).forEach(function (k) { sq += sold[k].q; sv += sold[k].v; });
-    return '<div class="page-h"><div><h1>Products</h1><p class="muted">Everything the camp shop sells. Enter the cash and EFT price; card payments add ' + cardFee() + '%.</p></div><div class="ph-act"><button class="btn" data-act="prod-add">' + ic('plus') + 'Add product</button></div></div>' +
+    return '<div class="page-h"><div><h1>Products</h1><p class="muted">Everything the camp shop sells. ' + (hasFee() ? 'Enter the cash and EFT price; card payments add ' + cardFee() + '%.' : 'One price, however the guest pays.') + '</p></div><div class="ph-act"><button class="btn" data-act="prod-add">' + ic('plus') + 'Add product</button></div></div>' +
       '<div class="kpis">' + tile('Products', items.length, items.filter(function (p) { return p.active !== false; }).length + ' showing on the till') + tile('Low on stock', low.length, low.length ? low.map(function (p) { return esc(p.label); }).slice(0, 2).join(', ') : 'All stocked up', null, low.length ? 'warn' : 'ok') + tile('Sold in the last 30 days', sq + ' items', money(sv)) + '</div>' +
       '<div class="filters"><label class="search">' + ic('search') + '<input type="search" data-prodq placeholder="Search products" value="' + esc(PROD.q) + '" aria-label="Search products"></label>' + fsel('PROD:stock', PROD.stock, [['', 'Any stock level'], ['low', 'Low on stock'], ['counted', 'Stock counted'], ['uncounted', 'Stock not counted'], ['on', 'On the till'], ['hidden', 'Hidden from the till']]) + '</div>' +
       '<div class="chips scroll"><button class="chip' + (!PROD.cat ? ' on' : '') + '" data-prodcat="">All <span>' + items.length + '</span></button>' + cats.map(function (c) { var n = items.filter(function (p) { return p.cat === c; }).length; return n ? '<button class="chip' + (PROD.cat === c ? ' on' : '') + '" data-prodcat="' + esc(c) + '">' + esc(c) + ' <span>' + n + '</span></button>' : ''; }).join('') + '</div>' +
       '<div class="card flush"><table class="tbl prods"><thead><tr><th>Product</th><th>Category</th><th class="r">Price</th><th class="r">In stock</th><th class="r">Sold, 30 days</th><th>Status</th></tr></thead><tbody>' +
       (list.length ? list.map(function (p) {
         var s = sold[p.id] || { q: 0, v: 0 };
-        return '<tr data-prod="' + p.id + '" tabindex="0"><td data-l="Product"><b>' + esc(p.label) + '</b>' + (p.note ? '<small>' + esc(p.note) + '</small>' : '') + '</td><td data-l="Category">' + esc(p.cat || '') + '</td><td data-l="Price" class="r">' + money(p.amount) + '<small>Card ' + money(toCard(p.amount)) + '</small></td>' +
+        return '<tr data-prod="' + p.id + '" tabindex="0"><td data-l="Product"><b>' + esc(p.label) + '</b>' + (p.note ? '<small>' + esc(p.note) + '</small>' : '') + '</td><td data-l="Category">' + esc(p.cat || '') + '</td><td data-l="Price" class="r">' + money(p.amount) + (hasFee() ? '<small>Card ' + money(toCard(p.amount)) + '</small>' : '') + '</td>' +
           '<td data-l="In stock" class="r" data-s="' + (p.stock == null ? -1 : p.stock) + '">' + (p.stock == null ? '<span class="muted">Not counted</span>' : lowStock(p) ? '<span class="pill warn"><i></i>' + p.stock + ' left</span>' : p.stock) + '</td><td data-l="Sold" class="r" data-s="' + s.q + '">' + s.q + '<small>' + money(s.v) + '</small></td>' +
           '<td data-l="Status">' + (p.active === false ? '<span class="pill muted"><i></i>Hidden</span>' : '<span class="pill ok"><i></i>On the till</span>') + '</td></tr>';
       }).join('') : '<tr><td colspan="6" class="empty">No products match.</td></tr>') + '</tbody></table></div>' +
@@ -1219,7 +1248,7 @@
         '<section class="card link-card"><div>' + ic('box') + '<div><b>Shop products</b><p class="muted small">Firewood, ice and merchandise have their own page with stock and categories.</p></div></div><a class="btn ghost" href="#/products">Go to Products</a></section>';
     }
     if (RT.tab === 'rules') {
-      var R = [['Card payment fee percentage', '%', 'Card fee', 'Added to every price when a guest pays by card. EFT and cash pay the normal price. Your card provider charges about ' + (DB.settings.providerFee || 2.95) + '%.'],
+      var R = [['Card payment fee percentage', '%', 'Card fee', 'Keep at 0: there is one price for everyone and Kyleu covers the card company\'s fee (about ' + (DB.settings.providerFee || 2.95) + '%). Only change this if Kyleu decides to pass that fee on.'],
         ['Deposit percentage', '%', 'Deposit', 'How much of the total secures a booking.'],
         ['Deposit due within days of invoice', 'days', 'Deposit deadline', 'EFT guests must pay the deposit within this many days, or the stand can be released.'],
         ['Balance due days before arrival', 'days', 'Balance deadline', 'The rest is due this many days before arrival.'],
@@ -1233,7 +1262,7 @@
         '<form class="hol-add" data-hol-add><input type="date" name="d" aria-label="Date" required><input name="n" placeholder="Name, e.g. Heritage Day" aria-label="Name"><button class="btn" type="submit">' + ic('plus') + 'Add date</button></form>' +
         '<ul class="feed hol">' + hol.map(function (d) { return '<li><span><b>' + fd(d, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }) + '</b> · ' + esc(P.holidays[d]) + '</span><button class="btn sm ghost" data-hol-del="' + d + '">Remove</button></li>'; }).join('') + '</ul></section>';
     }
-    return '<div class="page-h"><div><h1>Rates & fees</h1><p class="muted">Enter the <b>normal price</b> that EFT and cash guests pay. Card prices add the card fee by themselves. Dinokeng\'s fees belong to the reserve, so they are not here.</p></div></div>' +
+    return '<div class="page-h"><div><h1>Rates & fees</h1><p class="muted">Enter the price guests pay. There is one price for everyone, however they pay. Dinokeng\'s fees belong to the reserve, so they are not here.</p></div></div>' +
       '<div class="rp-tabs page-tabs">' + tabs.map(function (t) { return '<button class="' + (RT.tab === t[0] ? 'on' : '') + '" data-ratetab="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div>' + body +
       '<div class="savebar" data-savebar hidden><span>' + ic('info') + 'You have unsaved changes</span><button class="btn ghost" data-act="rates-discard">Discard</button><button class="btn" data-act="save-rates">Save changes</button></div>';
   }
@@ -1286,7 +1315,7 @@
     DB.bookings.forEach(function (b) {
       var st = standById(b.stand);
       (b.payments || []).forEach(function (p) {
-        if (!inR(p.d)) return;
+        if (!inR(p.d) || p.m === 'credit') return;
         if (p.amt < 0) { S.refunds -= p.amt; return; }
         var i = at(p.d); S.received += p.amt; S.nPay++; S[p.m] += p.amt; if (p.m === 'card') S.fee += fee(p.amt);
         S.byArea[st.area] = (S.byArea[st.area] || 0) + p.amt;
@@ -1519,7 +1548,7 @@
         k({ label: 'Shop sales', v: c.shop, p: p.shop, kind: 'money', spark: c.s.shop, note: c.shopQ + ' items sold' }) + '</div>';
       h += rpNow();
       h += main('Money received', { labels: labels, tips: tips, kind: 'money', label: 'Money received per ' + per, series: series('This period', c.s.received, p.s.received) }, RP.compare ? 'Bars: this period · outline: the period before' : 'Paid in, per ' + per);
-      h += '<div class="rp-grid2">' + rpCard('How it was paid', rpDonut(payRows(c), 'money', 'received'), { sub: 'Card prices include the ' + cardFee() + '% card fee' }) +
+      h += '<div class="rp-grid2">' + rpCard('How it was paid', rpDonut(payRows(c), 'money', 'received'), { sub: hasFee() ? 'Card prices include the ' + cardFee() + '% card fee' : 'Same price however guests pay' }) +
         rpCard('Where bookings come from', rpHBars(Object.keys(c.src).map(function (s) { return { l: s, v: c.src[s] }; }), 'count', { u: ' bookings' }), { sub: 'Bookings made in this period' }) + '</div>';
     }
 
@@ -1600,12 +1629,87 @@
   }
 
 
+
+  /* =========================================================
+     Vouchers: Dinokeng partner codes and discount codes, with rules
+     ========================================================= */
+  var VKIND = { dgr: 'Dinokeng partner code', discount: 'Discount on a stay' };
+  var VWHO = { all: 'Every guest', dates: 'Guests staying between dates', refs: 'Only these bookings', guests: 'Only these guests' };
+  var VF = { q: '', kind: '' };
+  function vById(id) { return DB.vouchers.filter(function (v) { return v.id === id; })[0]; }
+  function vState(v) {
+    if (!v.active) return { t: 'Switched off', tone: 'muted' };
+    if (v.to && v.to < TODAY) return { t: 'Expired', tone: 'muted' };
+    if (v.max && v.uses.length >= v.max) return { t: 'Used up', tone: 'warn' };
+    if (v.from && v.from > TODAY) return { t: 'Starts ' + fd(v.from), tone: 'info' };
+    return { t: 'Active', tone: 'ok' };
+  }
+  function vAllows(v, b) {
+    if (vState(v).tone !== 'ok' || v.uses.some(function (u) { return u.ref === b.ref; })) return false;
+    if (v.who === 'refs') return v.refs.indexOf(b.ref) >= 0;
+    if (v.who === 'guests') return v.emails.indexOf((b.guest.email || '').toLowerCase()) >= 0;
+    if (v.who === 'dates') return (!v.stayFrom || b.ci >= v.stayFrom) && (!v.stayTo || b.ci <= v.stayTo);
+    return true;
+  }
+  function vWho(v) { return v.who === 'refs' ? v.refs.length + ' booking' + (v.refs.length === 1 ? '' : 's') : v.who === 'guests' ? v.emails.length + ' guest' + (v.emails.length === 1 ? '' : 's') : v.who === 'dates' ? 'Staying ' + (v.stayFrom ? fd(v.stayFrom) : 'any time') + ' to ' + (v.stayTo ? fd(v.stayTo) : 'any time') : 'Every guest'; }
+  function vValue(v) { return v.kind === 'dgr' ? 'Partner rate at Dinokeng' : v.unit === 'pct' ? v.value + '% off' : money(v.value) + ' off'; }
+  function bookingDgr(b) { return DB.vouchers.filter(function (v) { return v.kind === 'dgr' && v.uses.some(function (u) { return u.ref === b.ref; }); })[0]; }
+  function dgrFor(b) { return bookingDgr(b) || DB.vouchers.filter(function (v) { return v.kind === 'dgr' && vAllows(v, b); })[0]; }
+  function sendDgr(b) {
+    var v = dgrFor(b); if (!v) return null;
+    if (!v.uses.some(function (u) { return u.ref === b.ref; })) v.uses.push({ ref: b.ref, at: nowStamp(), by: ME.name });
+    logEmail(b, 'Your Dinokeng partner code', 'Hi ' + b.guest.first + ',\n\nWe look forward to welcoming you on ' + fd(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }) + '.\n\nYour Dinokeng partner code is: ' + v.code + '\n\nKyleu is a Dinokeng Certified Partner, so with this code you pay the reserve\'s partner rate. Use it when you pay your conservation fees online (dinokeng.plnktn.io/south), or show it at the gate.\n\nSee you in the bush!\nThe Kyleu team');
+    b.notes.push({ at: nowStamp(), by: ME.name, text: 'Dinokeng partner code ' + v.code + ' sent.' });
+    return v;
+  }
+  function vVouchers() {
+    var q = VF.q.toLowerCase(), list = DB.vouchers.filter(function (v) { return (!VF.kind || v.kind === VF.kind) && (!q || (v.code + ' ' + v.name).toLowerCase().indexOf(q) >= 0); });
+    var week = DB.bookings.filter(function (b) { return live(b) && b.status !== 'pending' && b.ci >= TODAY && diff(TODAY, b.ci) <= 7; }).sort(function (a, b) { return a.ci < b.ci ? -1 : 1; });
+    var noCode = week.filter(function (b) { return !bookingDgr(b); }), month = TODAY.slice(0, 7);
+    var usedMonth = DB.vouchers.reduce(function (a, v) { return a + v.uses.filter(function (u) { return u.at.slice(0, 7) === month; }).length; }, 0);
+    return '<div class="page-h"><div><h1>Vouchers</h1><p class="muted">Dinokeng partner codes for your guests, and discount codes guests can use when they book. Set who may use each one and how often.</p></div><div class="ph-act"><button class="btn" data-act="v-new">' + ic('plus') + 'Create voucher</button></div></div>' +
+      '<div class="kpis">' + tile('Active vouchers', DB.vouchers.filter(function (v) { return vState(v).tone === 'ok'; }).length, DB.vouchers.length + ' in total') + tile('Arriving this week without a Dinokeng code', noCode.length, noCode.length ? 'Send them below' : 'Everyone has their code', null, noCode.length ? 'warn' : 'ok') + tile('Used or sent this month', usedMonth, 'all vouchers') + '</div>' +
+      (noCode.length ? '<section class="card"><header class="card-h"><h3>Arriving this week: Dinokeng code not sent yet</h3><button class="btn sm" data-act="v-send-all">' + ic('send') + 'Send to all ' + noCode.length + '</button></header>' + noCode.map(function (b) { return '<div class="brow"><span class="brow-st">' + fd(b.ci) + '</span><span class="brow-g" data-open="' + b.ref + '"><b>' + esc(guestName(b)) + '</b><small>' + esc(b.ref) + ' · ' + esc(standById(b.stand).name) + '</small></span><button class="btn sm ghost" data-act="v-send" data-ref="' + b.ref + '">' + ic('send') + 'Send code</button></div>'; }).join('') + '<p class="demo-note">' + ic('info') + 'With "Send automatically" on, the live system emails each guest their code 7 days before they arrive.</p></section>' : '') +
+      '<div class="filters">' + fsearch('VF:q', VF.q, 'Search code or name') + fsel('VF:kind', VF.kind, [['', 'All types'], ['dgr', 'Dinokeng partner codes'], ['discount', 'Discounts']]) + '</div>' +
+      '<div class="card flush"><table class="tbl vouchers"><thead><tr><th>Code</th><th>Type</th><th>Who can use it</th><th class="r">Used</th><th>Valid</th><th>Status</th></tr></thead><tbody>' +
+      (list.length ? list.map(function (v) { var st = vState(v); return '<tr data-voucher="' + v.id + '" tabindex="0"><td data-l="Code"><b class="code">' + esc(v.code) + '</b><small>' + esc(v.name) + '</small></td><td data-l="Type">' + VKIND[v.kind] + '<small>' + vValue(v) + '</small></td><td data-l="Who">' + vWho(v) + '</td><td data-l="Used" class="r" data-s="' + v.uses.length + '">' + v.uses.length + (v.max ? ' of ' + v.max : '') + '</td><td data-l="Valid" data-s="' + (v.to || '9999') + '">' + (v.from ? fd(v.from) : 'Now') + ' to ' + (v.to ? fd(v.to, { day: 'numeric', month: 'short', year: 'numeric' }) : 'no end') + '</td><td data-l="Status">' + pill(st) + '</td></tr>'; }).join('') : '<tr><td colspan="6" class="empty">No vouchers yet.</td></tr>') + '</tbody></table></div>';
+  }
+  function newCode(prefix) { var c = ''; for (var i = 0; i < 5; i++) c += 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)]; return (prefix || 'KYL') + '-' + c; }
+  function actVoucher(id) {
+    var v = id ? vById(id) : null, d = v || { code: newCode(), name: '', kind: 'dgr', value: 10, unit: 'pct', who: 'all', refs: [], emails: [], stayFrom: '', stayTo: '', max: 0, from: TODAY, to: '', active: true, auto: true, uses: [] };
+    var sel = function (n, cur, opts, attr) { return '<select name="' + n + '"' + (attr || '') + '>' + Object.keys(opts).map(function (k) { return '<option value="' + k + '"' + (k === cur ? ' selected' : '') + '>' + opts[k] + '</option>'; }).join('') + '</select>'; };
+    modal(v ? 'Voucher ' + esc(v.code) : 'Create voucher',
+      '<div class="grid2"><label class="fld"><span>Code</span><input name="code" value="' + esc(d.code) + '" autocomplete="off" style="text-transform:uppercase;font-weight:800"></label><label class="fld"><span>Name (for staff)</span><input name="name" value="' + esc(d.name) + '" placeholder="e.g. Dinokeng partner rate 2026"></label></div>' +
+      '<label class="fld"><span>Type</span>' + sel('kind', d.kind, VKIND, ' data-vkind') + '</label>' +
+      '<div class="grid2" data-vk="discount"' + (d.kind === 'discount' ? '' : ' hidden') + '><label class="fld"><span>Discount</span><input name="value" inputmode="decimal" value="' + (d.value || '') + '"></label><label class="fld"><span>As</span>' + sel('unit', d.unit || 'pct', { pct: '% off the stay', rand: 'Rand off the stay' }) + '</label></div>' +
+      '<label class="fld"><span>Who can use it?</span>' + sel('who', d.who, VWHO, ' data-vwho') + '</label>' +
+      '<div class="grid2" data-vw="dates"' + (d.who === 'dates' ? '' : ' hidden') + '><label class="fld"><span>Arriving from</span><input type="date" name="stayFrom" value="' + d.stayFrom + '"></label><label class="fld"><span>Arriving until</span><input type="date" name="stayTo" value="' + d.stayTo + '"></label></div>' +
+      '<label class="fld" data-vw="refs"' + (d.who === 'refs' ? '' : ' hidden') + '><span>Booking references, separated by commas</span><textarea name="refs" rows="2" placeholder="KY26-4F2K, KY26-9QWE">' + esc(d.refs.join(', ')) + '</textarea></label>' +
+      '<label class="fld" data-vw="guests"' + (d.who === 'guests' ? '' : ' hidden') + '><span>Guest email addresses, separated by commas</span><textarea name="emails" rows="2" placeholder="guest@example.com">' + esc(d.emails.join(', ')) + '</textarea></label>' +
+      '<h5>Limits</h5><div class="grid3"><label class="fld"><span>Most uses (blank = no limit)</span><input name="max" inputmode="numeric" value="' + (d.max || '') + '"></label><label class="fld"><span>Valid from</span><input type="date" name="from" value="' + d.from + '"></label><label class="fld"><span>Valid until</span><input type="date" name="to" value="' + d.to + '"></label></div>' +
+      '<label class="check"><input type="checkbox" name="active"' + (d.active ? ' checked' : '') + '><span>Voucher is switched on</span></label>' +
+      '<label class="check" data-vk="dgr"' + (d.kind === 'dgr' ? '' : ' hidden') + '><input type="checkbox" name="auto"' + (d.auto ? ' checked' : '') + '><span>Email it automatically to each guest it applies to, 7 days before they arrive</span></label>' +
+      (v ? '<h5>Used by (' + v.uses.length + ')</h5>' + (v.uses.length ? '<div class="list">' + v.uses.slice().reverse().slice(0, 30).map(function (u) { var b = byRef(u.ref); return '<button type="button" class="brow" data-open="' + u.ref + '"><span class="brow-st">' + esc(u.ref) + '</span><span class="brow-g"><b>' + esc(b ? guestName(b) : u.ref) + '</b><small>' + (v.kind === 'dgr' ? 'Sent ' : 'Used ') + esc(u.at) + ' · ' + esc(u.by) + '</small></span></button>'; }).join('') + '</div>' : '<p class="muted small">Not used yet.</p>') +
+        '<div class="m-extra"><button type="button" class="btn ghost sm danger-t" data-act="v-del" data-ref="' + v.id + '">Delete voucher</button></div>' : ''),
+      v ? 'Save' : 'Create voucher', function (f) {
+        var code = fval(f, 'code').toUpperCase().replace(/\s+/g, '');
+        if (!code) { toast('Give the voucher a code'); return false; }
+        if (DB.vouchers.some(function (x) { return x !== v && x.code === code; })) { toast('There is already a voucher with that code'); return false; }
+        var split = function (t) { return t.split(/[,\s]+/).map(function (x) { return x.trim(); }).filter(Boolean); };
+        var row = { code: code, name: fval(f, 'name') || code, kind: fval(f, 'kind'), value: parseFloat(fval(f, 'value')) || 0, unit: fval(f, 'unit'), who: fval(f, 'who'), refs: split(fval(f, 'refs')).map(function (x) { return x.toUpperCase(); }), emails: split(fval(f, 'emails')).map(function (x) { return x.toLowerCase(); }), stayFrom: fval(f, 'stayFrom'), stayTo: fval(f, 'stayTo'), max: parseInt(fval(f, 'max'), 10) || 0, from: fval(f, 'from'), to: fval(f, 'to'), active: fval(f, 'active'), auto: fval(f, 'auto') };
+        if (row.kind === 'discount' && !row.value) { toast('Enter the discount'); return false; }
+        if (row.who === 'refs' && !row.refs.length) { toast('Add at least one booking reference'); return false; }
+        if (row.who === 'guests' && !row.emails.length) { toast('Add at least one guest email'); return false; }
+        if (v) Object.keys(row).forEach(function (k) { v[k] = row[k]; }); else { row.id = uid('v'); row.uses = []; DB.vouchers.unshift(row); }
+        log((v ? 'Updated voucher ' : 'Created voucher ') + code); save(); render(); toast('Voucher ' + esc(code) + (v ? ' saved' : ' created'));
+      }, { wide: true, noFocus: !!v });
+  }
   /* =========================================================
      Every table: click a heading to sort (a picker on phones),
      25 rows a page. Filters: <select data-fk="OBJ:key">, <input data-q="OBJ:key">
      ========================================================= */
   var SORT = {}, TPG = {}, PG_SIZE = 25;
-  function FO(n) { return { F: F, IN: IN, GF: GF, SHOP: SHOP, PROD: PROD, CAL: CAL, STF: STF, GD: GD, LOGF: LOGF, PAYF: PAYF }[n]; }
+  function FO(n) { return { VF: VF, F: F, IN: IN, GF: GF, SHOP: SHOP, PROD: PROD, CAL: CAL, STF: STF, GD: GD, LOGF: LOGF, PAYF: PAYF }[n]; }
   function fsel(fk, cur, opts, label) { return '<select data-fk="' + fk + '" aria-label="' + esc(label || opts[0][1]) + '"' + (cur ? ' class="on"' : '') + '>' + opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (String(o[0]) === String(cur) ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select>'; }
   function fsearch(fk, cur, ph) { return '<label class="search">' + ic('search') + '<input type="search" data-q="' + fk + '" placeholder="' + esc(ph) + '" value="' + esc(cur) + '" aria-label="' + esc(ph) + '"></label>'; }
   function fclear(obj, keys) { var n = keys.filter(function (k) { return FO(obj)[k]; }).length; return n ? '<button class="btn ghost sm" data-fclear="' + obj + ':' + keys.join(',') + '">' + ic('x') + 'Clear ' + n + ' filter' + (n > 1 ? 's' : '') + '</button>' : ''; }
@@ -1654,7 +1758,7 @@
     return { items: list.slice(p * size, p * size + size), bar: pages > 1 ? '<div class="pager"><span>' + (p * size + 1) + ' to ' + Math.min(list.length, p * size + size) + ' of ' + list.length + '</span><button class="icon-btn sm" data-pg="' + key + '|-1"' + (p ? '' : ' disabled') + ' aria-label="Previous page">' + ic('chev-l') + '</button><button class="icon-btn sm" data-pg="' + key + '|1"' + (p < pages - 1 ? '' : ' disabled') + ' aria-label="Next page">' + ic('chev-r') + '</button></div>' : '' };
   }
 
-  var VIEWS = { dashboard: vDashboard, bookings: vBookings, eft: vEft, calendar: vCalendar, guests: vGuests, payments: vPayments, shop: vShop, drives: vDrives, products: vProducts, enquiries: vEnquiries, stands: vStands, rates: vRates, reports: vReports, settings: vSettings };
+  var VIEWS = { dashboard: vDashboard, bookings: vBookings, eft: vEft, calendar: vCalendar, guests: vGuests, payments: vPayments, shop: vShop, drives: vDrives, products: vProducts, vouchers: vVouchers, enquiries: vEnquiries, stands: vStands, rates: vRates, reports: vReports, settings: vSettings };
   function route() { var v = (location.hash.match(/^#\/(\w+)/) || [])[1] || 'dashboard'; return VIEWS[v] && can(v) ? v : 'dashboard'; }
 
   /* ---------- shell ---------- */
@@ -1722,6 +1826,7 @@
     var at_ = t.closest('[data-att]'); if (at_) { viewAtt(at_.dataset.att); return; }
     var cd = t.closest('[data-cmp-del]'); if (cd) { CMP_ATT.splice(+cd.dataset.cmpDel, 1); cmpRefresh(); return; }
     var sa = t.closest('[data-sale]'); if (sa) { openSale(sa.dataset.sale); return; }
+    var vr = t.closest('[data-voucher]'); if (vr) { actVoucher(vr.dataset.voucher); return; }
     var pr = t.closest('[data-prod]'); if (pr) { actProduct(pr.dataset.prod); return; }
     var pt = t.closest('[data-paytab]'); if (pt) { PAYF.tab = pt.dataset.paytab; render(); return; }
     var py = t.closest('[data-payt]'); if (py) { PAYF.type = py.dataset.payt; PAYF.lim = 1e9; render(); return; }
@@ -1760,6 +1865,10 @@
     if (act === 'cart-clear') { CART = {}; render(); return; }
     if (act === 'to-sale') { var ps = $('.pos-sale'); if (ps) window.scrollTo({ top: ps.getBoundingClientRect().top + window.scrollY - 70, behavior: 'smooth' }); return; }
     if (act === 'mail-new') return actNewMail();
+    if (act === 'v-new') return actVoucher(null);
+    if (act === 'v-del') { var vd = vById(ref); closeModal(); modal('Delete voucher ' + esc(vd.code) + '?', '<p>Guests can no longer use it. Its history is removed too.</p>', 'Delete voucher', function () { DB.vouchers.splice(DB.vouchers.indexOf(vd), 1); log('Deleted voucher ' + vd.code); save(); render(); toast('Voucher deleted'); }, { danger: true }); return; }
+    if (act === 'v-send') { var vb = byRef(ref), sv = sendDgr(vb); if (!sv) { toast('No active Dinokeng code fits this booking. Create one under Vouchers.'); return; } save(); refresh(); toast('Dinokeng code ' + esc(sv.code) + ' emailed to ' + esc(vb.guest.first) + ' (demo)'); return; }
+    if (act === 'v-send-all') { var n = 0; DB.bookings.filter(function (b) { return live(b) && b.status !== 'pending' && b.ci >= TODAY && diff(TODAY, b.ci) <= 7 && !bookingDgr(b); }).forEach(function (b) { if (sendDgr(b)) n++; }); save(); render(); toast(n + ' guest' + (n === 1 ? '' : 's') + ' emailed their Dinokeng code (demo)'); return; }
     if (act === 'th-close' || act === 'th-open') { var tc = thrById(ref); tc.status = act === 'th-close' ? 'closed' : 'open'; tc.unread = false; save(); render(); toast(act === 'th-close' ? 'Marked as done' : 'Reopened'); return; }
     if (act === 'att-pop') { var ka = ref.split(':'), ta = thrById(ka[1]), aa = attFrom(ref), ba = byRef(ta.ref); ba.pops = ba.pops || []; ba.pops.push({ name: aa.name, size: aa.size, type: aa.type, data: aa.data || '', at: ta.msgs[+ka[2]].at, via: 'Email' }); if (ba.status === 'pending') ba.pop = true; aa.linked = true; log('Proof of payment from email added to ' + ba.ref, ba.ref); save(); render(); toast('Added to ' + ba.ref + '. Check the bank, then confirm it under EFT payments.'); return; }
     if (act === 'pay-more') { PAYF.lim += 200; render(); return; }
@@ -1820,6 +1929,8 @@
     if (t.matches('[data-quick]')) { var qi = QUICK[+t.value], ta = t.form && t.form.elements.r; if (qi && ta) { var txt = qi[1](); ta.value = ta.value.replace(/\s*$/, '') + (ta.value.trim() ? '\n\n' : '') + txt; ta.focus(); } t.value = ''; }
     if (t.matches('[data-cmp-file]')) { Array.prototype.slice.call(t.files || []).forEach(function (fl) { CMP_ATT.push({ name: fl.name, size: fl.size, type: fl.type }); }); t.value = ''; cmpRefresh(); }
     if (t.matches('[data-catsel]')) { var nc = $('[data-newcat]'); if (nc) nc.hidden = t.value !== '__new'; }
+    if (t.matches('[data-vkind]')) { $$('[data-vk]').forEach(function (x) { x.hidden = x.dataset.vk !== t.value; }); }
+    if (t.matches('[data-vwho]')) { $$('[data-vw]').forEach(function (x) { x.hidden = x.dataset.vw !== t.value; }); }
     if (t.matches('[data-track]')) { var sf = $('[data-stockf]'); if (sf) sf.hidden = !t.checked; }
     if (t.matches('[data-rp-range]')) { RP.range = t.value; rpSave(); render(); }
     if (t.matches('[data-rp-cmp]')) { RP.compare = t.checked; rpSave(); rpInstant = true; render(); }
@@ -1851,7 +1962,7 @@
     document.addEventListener('mouseover', onOver);
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') { if (!$('#modal') || $('#modal').hidden) { if ($('#drawer') && !$('#drawer').hidden) closeDrawer(); } else closeModal(); }
-      if (e.key === 'Enter' && e.target.matches('tr[data-open],tr[data-guest],tr[data-sale],tr[data-prod],th.sortable')) e.target.click();
+      if (e.key === 'Enter' && e.target.matches('tr[data-open],tr[data-guest],tr[data-sale],tr[data-prod],tr[data-voucher],th.sortable')) e.target.click();
     });
     document.addEventListener('focusout', function (e) { if (e.target.matches('[data-global]')) setTimeout(function () { var s = $('[data-sugg]'); if (s) s.hidden = true; }, 200); });
     var rsz; window.addEventListener('resize', function () { clearTimeout(rsz); rsz = setTimeout(function () { if ($('[data-rpc]')) rpDrawCharts(true); }, 120); });

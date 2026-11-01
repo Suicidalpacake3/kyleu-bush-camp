@@ -222,9 +222,9 @@
 - Guests: 6
 - Setups: 1-2 trailers
 - Feel: Intimate and private
-- Highlights: On the spruit, Extremely tranquil, No facilities (bring everything), Porta potty available
+- Highlights: On the spruit, Extremely tranquil, Braai & boma on the stand, No ablution or water, Porta potty available
 - Map position: 77.6, 87.4
-- Description: Intimate and private, right on the Kaallaagte spruit. No facilities at all: just you, the trees and the animals that love this quiet corner of the reserve.
+- Description: Intimate and private, right on the Kaallaagte spruit. No ablution or water, just a braai and boma, the trees and the animals that love this quiet corner of the reserve.
 
 ## Self-Sufficient 2
 - Area: Self-sufficient
@@ -234,9 +234,9 @@
 - Guests: 12
 - Setups: 4-5 trailers
 - Feel: Large, great for groups
-- Highlights: On the spruit, Room for large groups, No facilities (bring everything), Porta potty available
+- Highlights: On the spruit, Room for large groups, Braai & boma on the stand, No ablution or water, Porta potty available
 - Map position: 69.1, 90.9
-- Description: Our largest spot on the spruit, with room for 4-5 trailers and up to 12 guests. Completely self-sufficient and wonderfully quiet.
+- Description: Our largest spot on the spruit, with room for 4-5 trailers and up to 12 guests. Bring your own water and toilet. There is a braai and boma on the stand. Wonderfully quiet.
 
 ## Self-Sufficient 3
 - Area: Self-sufficient
@@ -246,7 +246,7 @@
 - Guests: 8
 - Setups: 1-2 trailers
 - Feel: Intimate yet spacious
-- Highlights: On the spruit, Extremely tranquil, No facilities (bring everything), Porta potty available
+- Highlights: On the spruit, Extremely tranquil, Braai & boma on the stand, No ablution or water, Porta potty available
 - Map position: 59.3, 89.6
 - Description: Intimate yet spacious, on the spruit with lots of trees and greenery. Bring everything you need. The bush provides the rest.
 
@@ -258,7 +258,7 @@
 - Guests: 6
 - Setups: 1-2 trailers
 - Feel: Intimate and private
-- Highlights: On the spruit, Extremely tranquil, No facilities (bring everything), Porta potty available
+- Highlights: On the spruit, Extremely tranquil, Braai & boma on the stand, No ablution or water, Porta potty available
 - Map position: 45.5, 88.5
 - Description: Intimate and private on the spruit, an extremely tranquil spot the animals just love.
 
@@ -270,7 +270,7 @@
 - Guests: 6
 - Setups: 1-2 trailers
 - Feel: Intimate and private
-- Highlights: On the spruit, Extremely tranquil, No facilities (bring everything), Porta potty available
+- Highlights: On the spruit, Extremely tranquil, Braai & boma on the stand, No ablution or water, Porta potty available
 - Map position: 88.9, 77.8
 - Description: Intimate and private on the spruit, for the avid bush camper who wants nothing but the sounds of the veld.
 
@@ -282,6 +282,6 @@
 - Guests: 6
 - Setups: 1-2 trailers
 - Feel: Intimate and private
-- Highlights: Brand-new stand, On the spruit, No facilities (bring everything), Porta potty available
+- Highlights: Brand-new stand, On the spruit, Braai & boma on the stand, No ablution or water, Porta potty available
 - Map position: 79.7, 72.1
 - Description: Our newest stand on the spruit: intimate, private and completely self-sufficient. Photos coming soon!

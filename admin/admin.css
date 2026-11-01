@@ -988,3 +988,13 @@ select.on, input.on { border-color: var(--sun) !important; background: #fff7ee !
   .card-h .ph-act > * { flex: 1; min-width: 0; }
 }
 @media (min-width: 701px) { .card.flush { overflow-x: auto; } .card.flush > .tbl { min-width: 640px; } }
+.code { font-family: ui-monospace, 'SFMono-Regular', Consolas, monospace; letter-spacing: .04em; background: #f4ecdf; border-radius: 6px; padding: 1px 7px; }
+.tbl.vouchers td small { margin-top: 2px; }
+.credit-use { background: var(--ok-bg); border-radius: 10px; padding: 10px 12px; }
+@media (max-width: 700px) {
+  .tbl.vouchers td[data-l="Code"] { grid-column: 1; grid-row: 1; }
+  .tbl.vouchers td[data-l="Status"] { grid-column: 2; grid-row: 1; text-align: right; }
+  .tbl.vouchers td[data-l="Type"], .tbl.vouchers td[data-l="Who"], .tbl.vouchers td[data-l="Used"], .tbl.vouchers td[data-l="Valid"] { grid-column: 1 / -1; font-size: .82rem; }
+  .tbl.vouchers td small { display: inline; margin-left: 6px; }
+}
+

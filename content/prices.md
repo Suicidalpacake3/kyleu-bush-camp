@@ -7,8 +7,8 @@
 > - Write prices as plain numbers, e.g. `245` or `R245`. Anything after the number (like "per person per night") is shown on the site as the description.
 > - Want to add a brand-new fee? Add a new line under any heading, in the same format. It appears on the Rates page automatically.
 > - Lines that start with `>` (like this one) are notes for you and are not shown on the website.
-> - Enter the NORMAL (EFT) price. The website adds the card fee (see "Card payment fee percentage" under Booking rules)
->   and shows the card price crossed out next to the EFT price.
+> - There is ONE price for everyone. Guests pay by EFT for now. When online card payments are switched on later
+>   (content/settings.md, "Online payments"), the prices stay the same: keep "Card payment fee percentage" at 0.
 
 Rates year: 2026
 
@@ -42,21 +42,23 @@ Rates year: 2026
 - Vehicle sticker: R20
 
 ## Dinokeng Game Reserve fees (paid to Dinokeng, not to Kyleu)
-> These are charged by the reserve at the gate or online, not included in your Kyleu booking. Effective 15 May 2025.
-- Conservation fee adult per night: R75
+> Charged by the reserve online or at the gate, not part of your Kyleu booking. Effective 1 July 2026 (dinokengreserve.co.za/visit-us).
+> Kyleu is a Dinokeng Certified Partner, so our overnight guests pay the partner rate below with the code we send them.
+- Conservation fee adult per night: R85 · Partner rate with your Kyleu code (R100 without it)
 - Conservation fee child 2-12 per night: R50
-- Conservation fee pensioner per night: R75 · RSA pensioners, Mon to Thu
-- Conservation fee foreign adult per night: R150
-- Conservation fee foreign child per night: R100
-- Conservation fee cap per person per stay: R300 · Overnight conservation fees are capped per person per stay
-- Self-drive permit per vehicle per stay: R250 · Once-off for the duration of your stay
-- Self-drive permit pensioner per vehicle: R150 · RSA pensioners, Mon to Thu
-- Day visitor conservation fee adult: R75 · Valid for the day of purchase
-- Day visitor self-drive per vehicle: R250
+- Conservation fee pensioner per night: R85 · RSA pensioners, Mon to Thu, at the gate only
+- Conservation fee international adult per night: R200
+- Conservation fee international child per night: R100
+- Conservation fee cap per person per stay: R340 · Overnight conservation fees are capped per person per stay
+- Self-drive permit per vehicle per stay: R250 · Self-Drive Route permit, once-off for your stay
+- Self-drive permit pensioner per vehicle: R125 · RSA pensioners, Mon to Thu, at the gate only
+- Day visitor conservation fee adult: R100 · Valid for the day of purchase
+- Day visitor conservation fee child 2-12: R50
+- Restaurant visitors per vehicle: R50 · Up to 3 hours, with a valid restaurant receipt
 
 ## Booking rules
 > These control how the booking calculator works. Change with care.
-- Card payment fee percentage: 3 · Card prices include the card company's fee. Paying by EFT removes it.
+- Card payment fee percentage: 0 · Kept at 0: guests never pay the card company's fee
 - Deposit percentage: 50 · % of the total needed to secure a booking
 - Deposit due within days of invoice: 5
 - Balance due days before arrival: 7

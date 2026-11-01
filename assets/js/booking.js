@@ -72,6 +72,10 @@
       var v = x.price(q, nights.length);
       exLines.push({ t: x.label(q, nights.length), v: v });
     });
+    if (ex.__voucher) {
+      var vv = ex.__voucher, disc = vv.unit === 'pct' ? Math.round(acc * vv.value / 100) : Math.min(vv.value, acc);
+      if (disc > 0) exLines.push({ t: 'Voucher ' + vv.code + (vv.unit === 'pct' ? ' (' + vv.value + '% off)' : ''), v: -disc, c: -disc, voucher: true });
+    }
     var exTotal = exLines.reduce(function (a, l) { return a + l.v; }, 0);
     // card price = normal (EFT) price + the card company's fee; EFT takes it off again
     lines.concat(exLines).forEach(function (l) { if (l.c === undefined) l.c = K.toCard(l.v, P); });
@@ -96,6 +100,9 @@
     var wood = P.num('Camp shop', 'Sekelbos firewood 6kg bag', 25), lwood = P.num('Camp shop', 'Long-burning wood 20kg', 40), ice = P.num('Camp shop', 'Ice per bag', 15), fl = P.num('Camp shop', 'Firelighters pack of 10', 25), pp = P.num('Self-sufficient', 'Porta potty hire per night', 100);
     var gd3 = P.num('Game drives', 'Game drive 3 or more people per person', 400), gd2 = P.num('Game drives', 'Game drive 2 people per person', 450), gd1 = P.num('Game drives', 'Game drive 1 person', 900);
     EXTRAS = [
+      { id: 'pp', only: 'self-sufficient', img: 'assets/img/photos/ablution-bathroom.jpg', name: 'Porta potty hire', sub: K.money(pp) + ' per night incl. cleaning', unit: 'toggle', max: 1, price: function (q, n) { return q * n * pp; }, label: function (q, n) { return 'Porta potty · ' + n + ' night' + (n > 1 ? 's' : ''); } }
+    ];
+    var OLD_EXTRAS = [
       { id: 'gd', img: 'assets/img/photos/game-drive-vehicle.jpg', name: 'Guided game drive', sub: K.money(gd3) + ' pp (3+), ' + K.money(gd2) + ' pp (2), ' + K.money(gd1) + ' (1) · kids over 5', unit: 'people', max: 10, price: function (q) { return q >= 3 ? q * gd3 : q === 2 ? 2 * gd2 : gd1; }, label: function (q) { return 'Game drive · ' + q + ' ' + (q > 1 ? 'people' : 'person'); } },
       { id: 'pp', only: 'self-sufficient', img: 'assets/img/photos/ablution-bathroom.jpg', name: 'Porta potty hire', sub: K.money(pp) + ' per night incl. cleaning', unit: 'toggle', max: 1, price: function (q, n) { return q * n * pp; }, label: function (q, n) { return 'Porta potty · ' + n + ' night' + (n > 1 ? 's' : ''); } },
       { id: 'wood', img: 'assets/img/shop/sekelbos-wood.jpg', name: 'Extra sekelbos wood (6 kg)', sub: K.money(wood) + ' a bag · 1 free bag per night on ablution stands', unit: 'bags', max: 20, price: function (q) { return q * wood; }, label: function (q) { return q + ' × extra wood'; } },
@@ -111,7 +118,9 @@
   function cover(st) { return st.photos[0] || ({ fenced: 'assets/img/photos/fenced-camp-lawn.jpg', unfenced: 'assets/img/photos/trailer-unfenced.jpg', 'self-sufficient': 'assets/img/wildlife/tree-sunset.jpg' })[st.area]; }
   function photosOf(st) { return st.photos.length ? st.photos : [cover(st)]; }
   function areaIcon(a) { return a === 'fenced' ? 'i-fence' : a === 'unfenced' ? 'i-paw' : 'i-tree'; }
-  function facilityText(st) { return st.area === 'self-sufficient' ? 'No facilities' : 'Private ablution'; }
+  function facilityText(st) { return st.area === 'self-sufficient' ? 'Braai & boma' : 'Private ablution'; }
+  function onlinePay() { return !!(S && /^(on|yes|true)/i.test(S.get('Online payments', 'off'))); }
+  function noFee(q) { return !q.fee; }
 
   function cardHTML(st) {
     var free = isFree(st, state.ci, state.co), fits = guestsTotal() <= st.guests;
@@ -134,18 +143,26 @@
   function filtered() { return STANDS.filter(function (s) { return !state.area || s.area === state.area; }); }
   function render() {
     var list = filtered();
+    $$('.area-pick').forEach(function (b) { b.classList.toggle('on', b.dataset.area === state.area); });
+    $$('.sb-pills .pill').forEach(function (b) { b.classList.toggle('on', b.dataset.area === state.area); });
+    if (!state.ci || !state.co) {
+      // no dates yet: ask for them first, then show only the stands that are free
+      resultsTitle.textContent = 'Choose your dates';
+      resultsSub.textContent = 'Pick your arrival and departure dates above. We\'ll then show the stands that are free.';
+      grid.innerHTML = '<div class="empty date-first"><svg><use href="#i-cal"/></svg><h3>When would you like to camp?</h3><p class="muted">Choose your arrival and departure dates in the bar above to see which stands are free and what your stay costs.</p><button class="btn" type="button" data-pick-dates>Choose dates <svg><use href="#i-arrow"/></svg></button></div>';
+      var pd = $('[data-pick-dates]', grid); if (pd) pd.onclick = function () { var i = $('#sb-in'); i.focus(); try { i.showPicker(); } catch (e) {} };
+      ruleNote.classList.add('hidden');
+      renderMap();
+      return;
+    }
     var freeList = list.filter(function (s) { return isFree(s, state.ci, state.co); });
-    // available first, then by area order
-    list.sort(function (a, b) { return (isFree(b, state.ci, state.co) - isFree(a, state.ci, state.co)); });
     var n = nightsOf(state.ci, state.co).length;
-    resultsTitle.textContent = freeList.length + ' of ' + list.length + ' stands available';
+    resultsTitle.textContent = freeList.length ? freeList.length + ' stand' + (freeList.length > 1 ? 's' : '') + ' free for your dates' : 'No stands free for these dates';
     resultsSub.textContent = nice(state.ci) + ' → ' + nice(state.co) + ' · ' + n + ' night' + (n > 1 ? 's' : '') + ' · ' + guestsTotal() + ' guest' + (guestsTotal() > 1 ? 's' : '');
-    grid.innerHTML = list.length ? list.map(cardHTML).join('') : '<div class="empty">No stands in this area yet.</div>';
+    grid.innerHTML = freeList.length ? freeList.map(cardHTML).join('') : '<div class="empty date-first"><svg><use href="#i-cal"/></svg><h3>Everything is booked for these dates</h3><p class="muted">Try other dates' + (state.area ? ' or another camp area' : '') + ', or WhatsApp us and we\'ll help you find a gap.</p><a class="btn btn-green" href="https://wa.me/27604584478" target="_blank" rel="noopener"><svg><use href="#i-wa"/></svg>WhatsApp us</a></div>';
     wireCards(); K.reveal(grid);
     renderMap();
     checkWeekendRule();
-    $$('.area-pick').forEach(function (b) { b.classList.toggle('on', b.dataset.area === state.area); });
-    $$('.sb-pills .pill').forEach(function (b) { b.classList.toggle('on', b.dataset.area === state.area); });
     var u = new URL(location.href);
     u.searchParams.set('in', iso(state.ci)); u.searchParams.set('out', iso(state.co)); u.searchParams.set('adults', state.adults);
     if (state.kids) u.searchParams.set('kids', state.kids); else u.searchParams.delete('kids');
@@ -174,6 +191,7 @@
       stands: STANDS,
       area: function () { return state.area; },
       info: function (st) {
+        if (!state.ci || !state.co) { var R = rates(st); return { free: null, price: 'from ' + K.money(R.weekday), sub: 'per person / night · pick dates to check availability' }; }
         var free = isFree(st, state.ci, state.co), q = quote(st, state.ci, state.co);
         return { free: free, price: K.dualPair(q.cardStay, q.stay), sub: q.nights + ' night' + (q.nights > 1 ? 's' : '') + ' · ' + (state.adults + state.pens) + ' adult' + (state.adults + state.pens > 1 ? 's' : '') };
       },
@@ -203,11 +221,11 @@
   var sheet, backdrop, current = null, sel = { ci: null, co: null }, calMonth = null;
   function openSheet(id) {
     var st = STANDS.filter(function (s) { return s.id === id; })[0]; if (!st) return;
-    current = st; sel.ci = state.ci; sel.co = state.co; calMonth = new Date(state.ci.getFullYear(), state.ci.getMonth(), 1);
+    current = st; sel.ci = state.ci; sel.co = state.co; var cm = state.ci || today(); calMonth = new Date(cm.getFullYear(), cm.getMonth(), 1);
     var ph = photosOf(st);
     var hl = st.highlights.map(function (h) { var no = /^no /i.test(h); return '<li class="' + (no ? 'no' : '') + '"><svg><use href="#' + (no ? 'i-x' : 'i-check') + '"/></svg>' + K.esc(h) + '</li>'; }).join('');
     var base = st.area === 'self-sufficient'
-      ? ['No ablution, water or electricity', 'No braai facilities (loose boma for fires)', 'Unfenced: wild animals roam freely']
+      ? ['Braai and boma on the stand', 'Pool area access in the fenced camp', 'No ablution, water or electricity', 'Unfenced: wild animals roam freely']
       : ['Shower, toilet, basin & scullery', 'Hot water (gas geyser) & solar LED lights', 'No electricity at the stand', '1 free bag of firewood per night'];
     base = base.map(function (h) { var no = /^no |unfenced/i.test(h); return '<li class="' + (no ? 'no' : '') + '"><svg><use href="#' + (no ? 'i-info' : 'i-check') + '"/></svg>' + h + '</li>'; }).join('');
     $('.sheet-scroll', sheet).innerHTML =
@@ -266,17 +284,18 @@
   function updateSheetPrice() {
     var bd = $('[data-bd]', sheet), bb = $('.book-box', sheet);
     if (!sel.co) {
-      bd.innerHTML = '<div class="row sub"><span>Now pick your check-out date</span></div>';
+      bd.innerHTML = '<div class="row sub"><span>' + (sel.ci ? 'Now pick your check-out date' : 'Pick your arrival date on the calendar above') + '</span></div>';
       $('.tot', bb).innerHTML = '<b>-</b><small>Select check-out</small>';
       $('[data-reserve]', bb).disabled = true; return;
     }
     var free = isFree(current, sel.ci, sel.co), q = quote(current, sel.ci, sel.co);
     bd.innerHTML = '<div class="row sub"><span>' + nice(sel.ci) + ' → ' + nice(sel.co) + '</span><span>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + '</span></div>' +
       q.lines.map(function (l) { return '<div class="row"><span>' + l.t + '</span><span>' + (l.free ? 'FREE' : K.money(l.c)) + '</span></div>'; }).join('') +
+      (noFee(q) ? '<div class="row total"><span>Total</span><span>' + K.money(q.stay) + '</span></div>' :
       '<div class="row"><span><b>Total</b> (card price, incl. ' + q.fee + '% card fee)</span><span><b>' + K.money(q.cardStay) + '</b></span></div>' +
       '<div class="row eft-row"><span>EFT discount</span><span>-' + K.money(q.cardStay - q.stay) + '</span></div>' +
-      '<div class="row total"><span>Total with EFT</span><span>' + K.money(q.stay) + '</span></div>';
-    $('.tot', bb).innerHTML = '<b>' + K.dualPair(q.cardStay, q.stay) + '</b><small>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + ' · ' + K.money(q.cardStay) + ' by card · ' + (q.payFull ? 'full payment due now' : 'deposit secures it') + '</small>';
+      '<div class="row total"><span>Total with EFT</span><span>' + K.money(q.stay) + '</span></div>');
+    $('.tot', bb).innerHTML = '<b>' + K.dualPair(q.cardStay, q.stay) + '</b><small>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + (noFee(q) ? '' : ' · ' + K.money(q.cardStay) + ' by card') + ' · ' + (q.payFull ? 'full payment due now' : 'deposit secures it') + '</small>';
     var btn = $('[data-reserve]', bb); btn.disabled = !free;
     btn.innerHTML = free ? 'Reserve <svg><use href="#i-arrow"/></svg>' : 'Not available';
   }
@@ -289,12 +308,18 @@
     if (hasFri !== hasSat) { K.toast('Weekend stays need both Friday and Saturday night'); return; }
     if ((S && /q2b/i.test(S.get('Booking mode', 'demo')))) { window.open(S.get('Live availability (Q2B)'), '_blank', 'noopener'); return; }
     booking = { stand: current, ci: sel.ci, co: sel.co, g: { adults: state.adults, pens: state.pens, kids: state.kids } };
-    extras = {};
+    extras = {}; var vi = $('[name=voucher]', modal); if (vi) { vi.value = ''; $('[data-voucher-msg]', modal).textContent = ''; }
     step = 1; renderSide(); renderExtras(); goStep(1);
     modal.classList.add('open'); document.body.classList.add('lock');
-    var payFull = quote(booking.stand, booking.ci, booking.co).payFull;
-    $$('.pay-opt', modal).forEach(function (o) { if (o.dataset.pay === 'deposit') o.hidden = payFull; });
-    $('[name=pay][value=' + (payFull ? 'full' : 'deposit') + ']', modal).checked = true; payChanged();
+    var payFull = quote(booking.stand, booking.ci, booking.co).payFull, online = onlinePay();
+    $$('.pay-opt', modal).forEach(function (o) { o.hidden = online ? (o.dataset.pay === 'deposit' && payFull) : o.dataset.pay !== 'invoice'; });
+    $('[name=pay][value=' + (!online ? 'invoice' : payFull ? 'full' : 'deposit') + ']', modal).checked = true;
+    var s3 = $('.mc-step[data-step="3"]', modal);
+    $('h2', s3).textContent = online ? 'Secure your stand' : 'How to pay';
+    $('h2 + p', s3).textContent = online ? 'Choose how you\'d like to pay.' : 'We\'ll email you an invoice with our banking details. Pay by EFT to secure your stand.';
+    var df = $('.demo-flag span', s3); if (df) df.textContent = online ? 'Demo mode: this is a mock-up. No card is charged and nothing is sent. Use the "fill test card" link to try it.' : 'Demo mode: this is a mock-up. No booking is made and nothing is sent anywhere.';
+    var xw = $('[data-extras-wrap]', modal); if (xw) xw.hidden = !EXTRAS.some(function (x) { return !x.only || x.only === booking.stand.area; });
+    payChanged();
   }
   function closeCheckout() { modal.classList.remove('open'); if (!sheet.classList.contains('open')) document.body.classList.remove('lock'); }
   function goStep(n) {
@@ -313,8 +338,8 @@
       '<div class="ms-dates"><div><small>Check-in</small><b>' + nice(b.ci) + '</b></div><div><small>Check-out</small><b>' + nice(b.co) + '</b></div></div>' +
       '<div class="muted" style="font-size:.88rem;font-weight:700">' + (b.g.adults + b.g.pens) + ' adult' + (b.g.adults + b.g.pens > 1 ? 's' : '') + (b.g.pens ? ' (' + b.g.pens + ' pensioner' + (b.g.pens > 1 ? 's' : '') + ')' : '') + (b.g.kids ? ' · ' + b.g.kids + ' child' + (b.g.kids > 1 ? 'ren' : '') : '') + '</div>' +
       '<div class="breakdown">' + q.lines.map(function (l) { return '<div class="row"><span>' + l.t + '</span><span>' + (l.free ? 'FREE' : K.money(l.c)) + '</span></div>'; }).join('') +
-      q.exLines.map(function (l) { return '<div class="row"><span>' + l.t + '</span><span>' + K.money(l.c) + '</span></div>'; }).join('') +
-      (card
+      q.exLines.map(function (l) { return '<div class="row' + (l.voucher ? ' eft-row' : '') + '"><span>' + l.t + '</span><span>' + (l.c < 0 ? '-' + K.money(-l.c) : K.money(l.c)) + '</span></div>'; }).join('') +
+      (noFee(q) ? '<div class="row total"><span>Total</span><span>' + K.money(q.total) + '</span></div>' : card
         ? '<div class="row total"><span>Total (card)</span><span>' + K.money(q.cardTotal) + '</span></div><div class="row sub"><span>Includes the ' + q.fee + '% card fee. Choose EFT to save ' + K.money(q.cardTotal - q.total) + '.</span></div>'
         : '<div class="row"><span>Card price</span><span><s class="dual-card">' + K.money(q.cardTotal) + '</s></span></div><div class="row eft-row"><span>EFT discount</span><span>-' + K.money(q.cardTotal - q.total) + '</span></div><div class="row total"><span>Total with EFT</span><span>' + K.money(q.total) + '</span></div>') +
       (q.payFull ? '<div class="row sub"><span>Arriving within 7 days: full payment due now</span></div>' : '<div class="row sub"><span>' + q.depPct + '% deposit to secure</span><span>' + K.money(dep) + '</span></div><div class="row sub"><span>Balance due by ' + nice(q.balanceDue, { day: 'numeric', month: 'short' }) + '</span><span>' + K.money(tot - dep) + '</span></div>') +
@@ -360,6 +385,20 @@
     if (!ok) { var first = $('.err input, .err select', stepEl); if (first) first.focus(); K.toast('Please check the highlighted fields'); }
     return ok;
   }
+  // Demo: discount codes are created in the admin demo and kept in this browser. The live site checks them on the server.
+  function findVoucher(code, email, ci) {
+    var db = null; try { db = JSON.parse(localStorage.getItem('kyleu-admin-demo-v1') || 'null'); } catch (e) {}
+    var k = String(code || '').toUpperCase().replace(/\s+/g, ''), t = iso(today());
+    var v = ((db && db.vouchers) || []).filter(function (x) { return x.code === k; })[0];
+    if (!v) return { err: 'We don\'t recognise that code. Please check it and try again.' };
+    if (v.kind === 'dgr') return { err: 'That is your Dinokeng partner code. Use it when you pay the reserve\'s fees, not here.' };
+    if (!v.active || (v.to && v.to < t) || (v.from && v.from > t)) return { err: 'That code is not valid at the moment.' };
+    if (v.max && v.uses.length >= v.max) return { err: 'That code has already been used up.' };
+    if (v.who === 'refs') return { err: 'That code belongs to a specific booking. Send us a message and we\'ll apply it for you.' };
+    if (v.who === 'guests' && v.emails.indexOf(String(email || '').toLowerCase()) < 0) return { err: 'That code is for specific guests. Use the email address we sent it to.' };
+    if (v.who === 'dates' && ((v.stayFrom && iso(ci) < v.stayFrom) || (v.stayTo && iso(ci) > v.stayTo))) return { err: 'That code is only for stays from ' + nice(parse(v.stayFrom), { day: 'numeric', month: 'long' }) + ' to ' + nice(parse(v.stayTo), { day: 'numeric', month: 'long' }) + '.' };
+    return { v: v };
+  }
   function luhn(n) { n = n.replace(/\D/g, ''); if (n.length < 13) return false; var s = 0, alt = false; for (var i = n.length - 1; i >= 0; i--) { var d = +n[i]; if (alt) { d *= 2; if (d > 9) d -= 9; } s += d; alt = !alt; } return s % 10 === 0; }
   function validExp(v) { var m = v.match(/^(\d{2})\s*\/\s*(\d{2})$/); if (!m) return false; var mo = +m[1], yr = 2000 + +m[2]; if (mo < 1 || mo > 12) return false; var now = new Date(); return yr > now.getFullYear() || (yr === now.getFullYear() && mo >= now.getMonth() + 1); }
   function payChanged() {
@@ -369,6 +408,7 @@
     $('[data-card]', modal).hidden = !card; $('[data-eft]', modal).hidden = card;
     $$('[data-card] input', modal).forEach(function (i) { i.required = card; });
     $('[data-pay-btn-label]', modal).textContent = card ? 'Pay ' : v === 'eft' ? 'Continue to bank & pay ' : 'Send booking request · ';
+    var s3t = $('.mc-step[data-step="3"] .eft-box', modal); if (s3t && !onlinePay()) s3t.hidden = false;
     renderSide();
   }
   function confirmBooking() {
@@ -383,7 +423,7 @@
       var saved = JSON.parse(localStorage.getItem('kyleu-web-bookings') || '[]'), now = new Date();
       saved.push({ ref: ref, created: iso(now) + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'), stand: booking.stand.id, ci: iso(booking.ci), co: iso(booking.co),
         adults: booking.g.adults, pens: booking.g.pens, kids: booking.g.kids, extras: extras, first: f('first'), last: f('last'), email: f('email'), phone: f('phone'), setup: f('setup'), notes: f('notes'),
-        pay: pay, paid: paid, eft: q.total, card: q.cardTotal });
+        pay: pay, paid: paid, eft: q.total, card: q.cardTotal, voucher: extras.__voucher ? extras.__voucher.code : '', discount: q.exLines.filter(function (l) { return l.voucher; }).reduce(function (a, l) { return a - l.v; }, 0) });
       localStorage.setItem('kyleu-web-bookings', JSON.stringify(saved.slice(-50)));
     } catch (e) {}
     var box = $('[data-success]', modal);
@@ -396,7 +436,7 @@
       '<ol class="next-steps">' +
       (pay === 'invoice' ? '<li><b>1</b><span>We\'ll email your invoice. Pay the ' + (q.payFull ? 'full amount' : q.depPct + '% deposit (' + K.money(q.deposit) + ') within 5 days') + ' using reference <b>' + ref + '</b>, then <a href="pop.html?ref=' + encodeURIComponent(ref) + '&email=' + encodeURIComponent(f('email')) + '">upload your proof of payment</a>. It goes straight onto your booking.</span></li>' : '') +
       (!q.payFull && pay !== 'full' ? '<li><b>' + (pay === 'invoice' ? 2 : 1) + '</b><span>Balance of ' + K.money(isCard ? q.cardTotal - q.cardDeposit : q.total - q.deposit) + ' is due by ' + nice(q.balanceDue, { day: 'numeric', month: 'long' }) + '. We\'ll send a reminder.</span></li>' : '') +
-      '<li><b>✓</b><span>Pay your Dinokeng conservation &amp; self-drive fees online or at Tau Gate. <a href="https://dinokeng.plnktn.io/south" target="_blank" rel="noopener">Pay Dinokeng fees</a></span></li>' +
+      '<li><b>✓</b><span>Pay your Dinokeng conservation &amp; self-drive fees online or at the gate. In the week of your stay we will email your <b>Dinokeng partner code</b> for the lower partner rate. <a href="dinokeng.html#fees">Dinokeng fees</a></span></li>' +
       '<li><b>✓</b><span>Enter at Dinokeng <b>Tau Gate</b>, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km. <a href="contact.html">Directions</a></span></li></ol>' +
       '<div class="cta-actions"><button class="btn" type="button" data-ics><svg><use href="#i-cal"/></svg>Add to calendar</button><a class="btn btn-green" target="_blank" rel="noopener" href="https://wa.me/27604584478?text=' + encodeURIComponent('Hi Kyleu! My booking reference is ' + ref + ' (' + booking.stand.name + ', ' + iso(booking.ci) + ' to ' + iso(booking.co) + ').') + '"><svg><use href="#i-wa"/></svg>Share with Kyleu</a></div>' +
       '<div class="demo-flag" style="margin:22px 0 0;text-align:left"><svg><use href="#i-info"/></svg><span>Demo mode: this is a mock-up. No booking was made, nothing was charged and no details were sent anywhere. A copy stays in this browser only, so you can see it in the admin demo.</span></div></div>';
@@ -417,8 +457,8 @@
 
   /* ---------- search bar ---------- */
   function syncSearch() {
-    $('#sb-in').value = iso(state.ci); $('#sb-out').value = iso(state.co);
-    $('#sb-in').min = iso(today()); $('#sb-out').min = iso(addDays(state.ci, 1));
+    $('#sb-in').value = state.ci ? iso(state.ci) : ''; $('#sb-out').value = state.co ? iso(state.co) : '';
+    $('#sb-in').min = iso(today()); $('#sb-out').min = iso(addDays(state.ci || today(), 1));
     $('[data-g=adults]').textContent = state.adults; $('[data-g=pens]').textContent = state.pens; $('[data-g=kids]').textContent = state.kids;
     $('#sb-guest-sum').textContent = (state.adults + state.pens) + ' adult' + (state.adults + state.pens > 1 ? 's' : '') + (state.kids ? ', ' + state.kids + ' kid' + (state.kids > 1 ? 's' : '') : '');
   }
@@ -435,9 +475,8 @@
     sheet = $('.sheet'); backdrop = $('.sheet-backdrop'); modal = $('.modal');
 
     var qs = new URLSearchParams(location.search), t = today();
-    var fri = addDays(t, ((5 - t.getDay() + 7) % 7) || 7);
-    state.ci = parse(qs.get('in')) || fri; if (state.ci < t) state.ci = fri;
-    state.co = parse(qs.get('out')) || addDays(state.ci, 2); if (state.co <= state.ci) state.co = addDays(state.ci, 2);
+    state.ci = parse(qs.get('in')); if (state.ci && state.ci < t) state.ci = null;
+    state.co = state.ci ? (parse(qs.get('out')) || addDays(state.ci, 2)) : null; if (state.co && state.co <= state.ci) state.co = addDays(state.ci, 2);
     state.adults = Math.max(0, parseInt(qs.get('adults'), 10) || 2); state.kids = parseInt(qs.get('kids'), 10) || 0; state.pens = parseInt(qs.get('pens'), 10) || 0;
     if (state.adults + state.pens < 1) state.adults = 1;
     state.area = qs.get('area') || '';
@@ -454,8 +493,8 @@
     });
 
     // search controls
-    $('#sb-in').addEventListener('change', function () { var d = parse(this.value); if (!d) return; state.ci = d; if (state.co <= d) state.co = addDays(d, 1); syncSearch(); render(); });
-    $('#sb-out').addEventListener('change', function () { var d = parse(this.value); if (!d || d <= state.ci) { syncSearch(); return; } state.co = d; syncSearch(); render(); });
+    $('#sb-in').addEventListener('change', function () { var d = parse(this.value); if (!d) return; state.ci = d; if (!state.co || state.co <= d) state.co = addDays(d, d.getDay() === 5 ? 2 : 1); syncSearch(); render(); });
+    $('#sb-out').addEventListener('change', function () { var d = parse(this.value); if (!d || (state.ci && d <= state.ci)) { syncSearch(); return; } state.co = d; if (!state.ci) state.ci = addDays(d, -1); syncSearch(); render(); });
     var gp = $('.guest-pop'), gb = $('#sb-guests');
     gb.addEventListener('click', function (e) { e.stopPropagation(); gp.hidden = !gp.hidden; gb.setAttribute('aria-expanded', !gp.hidden); });
     gp.addEventListener('click', function (e) { e.stopPropagation(); });
@@ -482,6 +521,15 @@
     $$('[data-next]', modal).forEach(function (b) { b.addEventListener('click', function () { var cur = $('.mc-step.on', modal); if (validate(cur)) { goStep(step + 1); if (step === 3) renderSide(); } }); });
     $$('[data-back]', modal).forEach(function (b) { b.addEventListener('click', function () { goStep(step - 1); }); });
     $$('[name=pay]', modal).forEach(function (r) { r.addEventListener('change', payChanged); });
+    $('[data-apply-voucher]', modal).addEventListener('click', function () {
+      var inp = $('[name=voucher]', modal), msg = $('[data-voucher-msg]', modal), val = inp.value.trim();
+      if (!val) { delete extras.__voucher; msg.textContent = ''; msg.className = 'vr-msg'; renderSide(); return; }
+      var r = findVoucher(val, ($('[name=email]', modal) || {}).value, booking.ci);
+      if (r.err) { delete extras.__voucher; msg.textContent = r.err; msg.className = 'vr-msg bad'; }
+      else { extras.__voucher = { code: r.v.code, unit: r.v.unit, value: r.v.value }; msg.textContent = 'Voucher applied: ' + (r.v.unit === 'pct' ? r.v.value + '% off your stay' : K.money(r.v.value) + ' off your stay') + '.'; msg.className = 'vr-msg ok'; }
+      renderSide();
+    });
+    $('[name=voucher]', modal).addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); $('[data-apply-voucher]', modal).click(); } });
     $('[name=vehicles]', modal).addEventListener('change', renderSide);
     $('[data-pay-now]', modal).addEventListener('click', function () {
       var cur = $('.mc-step.on', modal); if (!validate(cur)) return;

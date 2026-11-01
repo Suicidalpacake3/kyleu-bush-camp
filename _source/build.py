@@ -23,7 +23,7 @@ LOADER = '''<div class="loader" role="status" aria-label="Loading Kyleu Bush Cam
 def strip(s):
     return re.sub(r'\s+', ' ', html.unescape(re.sub(r'<[^>]+>', '', s))).strip()
 
-for name in ['index', 'stay', 'discover', 'dinokeng', 'news', 'contact', 'policies', 'pop']:
+for name in ['index', 'stay', 'discover', 'dinokeng', 'news', 'contact', 'policies', 'pop', 'experience', 'stands']:
     body = open(os.path.join(SRC, name + '.html'), encoding='utf-8').read()
     m = re.match(r'<!--META\s*(\{.*?\})\s*-->\s*', body, re.S)
     meta = json.loads(m.group(1)); body = body[m.end():]
@@ -47,7 +47,7 @@ for name in ['index', 'stay', 'discover', 'dinokeng', 'news', 'contact', 'polici
         'bodyclass': 'page-' + name, 'loader': LOADER if meta.get('loader') else '',
         'headerclass': meta.get('headerclass', ''), 'footbg': meta.get('footbg', ''), 'tail': '',
     }
-    for n in ['home', 'stay', 'discover', 'dinokeng', 'news', 'contact']:
+    for n in ['home', 'stay', 'discover', 'dinokeng', 'news', 'contact', 'experience']:
         rep['nav_' + n] = 'class="active" aria-current="page"' if meta.get('nav') == n else ''
     for k, v in rep.items():
         page = page.replace('{{' + k + '}}', v)

@@ -18,13 +18,64 @@
 
   document.addEventListener('DOMContentLoaded', function () {
 
-    /* ---------- latest posts (home) ---------- */
+    /* ---------- latest posts (Experience Kyleu): the section only shows when there is news ---------- */
     $$('[data-latest-posts]').forEach(function (el) {
       K.blog().then(function (posts) {
+        if (!posts.length) return;
         el.innerHTML = posts.slice(0, parseInt(el.dataset.latestPosts, 10) || 3).map(function (p) { return postCard(p); }).join('');
+        var sec = el.closest('[data-news-section]'); if (sec) sec.hidden = false;
+        $$('[data-news-link]').forEach(function (a) { a.hidden = false; });
         K.reveal(el);
-      }).catch(function () { el.innerHTML = '<p class="muted">News will appear here.</p>'; });
+      }).catch(function () {});
     });
+
+    /* ---------- guest stories (content/settings.md, "Guest stories") ---------- */
+    $$('[data-guest-stories]').forEach(function (el) {
+      K.settings().then(function (S) {
+        var items = (S.list ? S.list('Guest stories') : []).filter(function (it) { return /^https?:/.test(it.value); });
+        el.innerHTML = items.map(function (it) {
+          var parts = it.value.split(' · '), url = parts[0].trim(), who = (parts[1] || '').trim(), host = url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0];
+          var kind = /instagram/i.test(host) ? 'ig' : /facebook|fb\./i.test(host) ? 'fb' : /youtu/i.test(host) ? 'yt' : 'blog';
+          return '<a class="story" href="' + K.esc(url) + '" target="_blank" rel="noopener" data-reveal><span class="story-ic ' + kind + '"><svg><use href="#' + (kind === 'ig' ? 'i-ig' : kind === 'fb' ? 'i-fb' : 'i-news') + '"/></svg></span><span><b>' + K.esc(it.label) + '</b><small>' + K.esc(who || host) + '</small></span><span class="link-arrow">Read</span></a>';
+        }).join('') || '<p class="muted">Guest stories will appear here.</p>';
+        K.reveal(el);
+      }).catch(function () {});
+    });
+
+    /* ---------- Our stands: photos and details of every stand, per area ---------- */
+    var galleries = $$('[data-stand-gallery]');
+    if (galleries.length) K.stands().then(function (stands) {
+      galleries.forEach(function (box) {
+        var area = box.dataset.standGallery;
+        box.innerHTML = stands.filter(function (s) { return s.area === area; }).map(function (st) {
+          var ph = st.photos.length ? st.photos : ['assets/img/photos/camp-panorama.jpg'];
+          var ss = st.area === 'self-sufficient', label = (ss ? 'R' : '') + (st.name.replace(/[^0-9]/g, '') || '');
+          return '<article class="stand-card gallery-card" data-reveal>' +
+            '<div class="sc-media"><div class="sc-track">' + ph.map(function (p, i) { return '<img src="' + p + '" alt="' + K.esc(st.name) + ' photo ' + (i + 1) + '" loading="lazy">'; }).join('') + '</div>' +
+            (ph.length > 1 ? '<button class="sc-nav prev" type="button" aria-label="Previous photo"><svg><use href="#i-arrow-l"/></svg></button><button class="sc-nav next" type="button" aria-label="Next photo"><svg><use href="#i-arrow"/></svg></button><div class="sc-dots">' + ph.map(function (_, i) { return '<i' + (i ? '' : ' class="on"') + '></i>'; }).join('') + '</div>' : '') +
+            (ss ? '<span class="badge map-tag">' + label + ' on the map</span>' : '') + (st.status === 'new' ? '<span class="badge new" style="position:absolute;bottom:10px;left:10px">New stand</span>' : '') +
+            (st.photos.length ? '<button class="sc-photo-count" type="button" data-all-photos aria-label="See all photos"><svg><use href="#i-camera"/></svg>' + st.photos.length + '</button>' : '') + '</div>' +
+            '<div class="sc-body"><div class="sc-title"><h3>' + K.esc(st.name) + '</h3></div><div class="sc-feel">' + K.esc(st.feel) + '</div>' +
+            '<div class="sc-meta"><span><svg><use href="#i-users"/></svg>Up to ' + st.guests + '</span><span><svg><use href="#i-tent"/></svg>' + K.esc(st.setups) + '</span><span><svg><use href="#' + (ss ? 'i-flame' : 'i-shower') + '"/></svg>' + (ss ? 'Braai &amp; boma' : 'Private ablution') + '</span></div>' +
+            '<p class="gc-desc">' + K.esc(st.description) + '</p>' +
+            (st.highlights.length ? '<ul class="gc-hl">' + st.highlights.slice(0, 4).map(function (h) { return '<li>' + K.esc(h) + '</li>'; }).join('') + '</ul>' : '') +
+            '<div class="sc-foot"><a class="btn btn-sm" href="stay.html#stand=' + st.id + '">Book this stand <svg><use href="#i-arrow"/></svg></a></div></div></article>';
+        }).join('') || '<p class="muted">No stands in this area yet.</p>';
+        $$('.gallery-card', box).forEach(function (card, idx) {
+          var track = $('.sc-track', card), dots = $$('.sc-dots i', card), imgs = $$('.sc-track img', card);
+          if (dots.length) {
+            track.addEventListener('scroll', function () { var i = Math.round(track.scrollLeft / track.clientWidth); dots.forEach(function (d, j) { d.classList.toggle('on', i === j); }); }, { passive: true });
+            $('.sc-nav.prev', card).addEventListener('click', function () { track.scrollBy({ left: -track.clientWidth, behavior: 'smooth' }); });
+            $('.sc-nav.next', card).addEventListener('click', function () { track.scrollBy({ left: track.clientWidth, behavior: 'smooth' }); });
+          }
+          var open = function () { if (!K.lightbox) return; var i = Math.round(track.scrollLeft / Math.max(1, track.clientWidth)); K.lightbox(imgs.map(function (im) { return { src: im.getAttribute('src'), cap: $('h3', card).textContent }; }), i); };
+          track.addEventListener('click', open);
+          var all = $('[data-all-photos]', card); if (all) all.addEventListener('click', open);
+        });
+        K.reveal(box);
+      });
+      if (location.hash) { var t = document.getElementById(location.hash.slice(1)); if (t) setTimeout(function () { t.scrollIntoView({ behavior: 'smooth' }); }, 400); }
+    }).catch(function () { galleries.forEach(function (b) { b.innerHTML = '<p class="muted">Stands load from content/stands.md. Open the site through a web server to see them.</p>'; }); });
 
     /* ---------- "A day at Kyleu" living camp map ---------- */
     $$('.daymap').forEach(function (wrap) {
@@ -78,7 +129,7 @@
           stands: r[0],
           info: function (st) {
             var from = st.area === 'self-sufficient' ? P.num('Self-sufficient', 'Weekday per person per night', 100) : P.num('Ablution stands', 'Weekday per person per night', 160);
-            return { free: null, price: 'from ' + K.dual(from, P, false), sub: 'per person / night (EFT)' };
+            return { free: null, price: 'from ' + K.dual(from, P, false), sub: 'per person / night' };
           },
           onOpen: function (st) { location.href = 'stay.html#stand=' + st.id; }
         });

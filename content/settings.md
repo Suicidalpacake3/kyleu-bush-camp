@@ -18,6 +18,7 @@
 - Google reviews: https://www.google.com/maps/search/?api=1&query=Kyleu+Bush+Camp+Dinokeng
 - Facebook: 
 - Instagram: 
+- Hashtag: #KyleuBushCamp
 - Tracks4Africa feature: https://blog.tracks4africa.co.za/a-weekend-at-dinokengs-kyleu-bush-camp/
 
 ## Highlights
@@ -28,11 +29,18 @@
 
 ## Booking
 > "demo" = the on-site booking form shows a demo confirmation (no data sent).
+> Online payments: "off" = guests get an EFT invoice (for now). "on" = card and instant EFT through the payment provider (same prices).
 > "q2b" = the Book buttons send guests straight to the Q2B booking page instead.
 - Booking mode: demo
+- Online payments: off
 
 ## Blog
 > "markdown" = posts come from content/blog.md (use this for the GitHub preview).
 > "wordpress" = posts come from WordPress (wp-admin → Posts) once the site is on WordPress hosting.
 - Blog source: markdown
 - WordPress site: https://www.kyleu.co.za
+
+## Guest stories
+> Posts, blogs and videos about Kyleu, shown on the Experience Kyleu page. One per line: title, colon, link, then · and who wrote it.
+> Paste a link to a public Instagram or Facebook post here when a guest tags you.
+- A weekend at Dinokeng's Kyleu Bush Camp: https://blog.tracks4africa.co.za/a-weekend-at-dinokengs-kyleu-bush-camp/ · Tracks4Africa
