@@ -36,7 +36,7 @@
         el.innerHTML = items.map(function (it) {
           var parts = it.value.split(' · '), url = parts[0].trim(), who = (parts[1] || '').trim(), host = url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0];
           var kind = /instagram/i.test(host) ? 'ig' : /facebook|fb\./i.test(host) ? 'fb' : /youtu/i.test(host) ? 'yt' : 'blog';
-          return '<a class="story" href="' + K.esc(url) + '" target="_blank" rel="noopener" data-reveal><span class="story-ic ' + kind + '"><svg><use href="#' + (kind === 'ig' ? 'i-ig' : kind === 'fb' ? 'i-fb' : 'i-news') + '"/></svg></span><span><b>' + K.esc(it.label) + '</b><small>' + K.esc(who || host) + '</small></span><span class="link-arrow">Read</span></a>';
+          return '<a class="gstory" href="' + K.esc(url) + '" target="_blank" rel="noopener" data-reveal><span class="story-ic ' + kind + '"><svg><use href="#' + (kind === 'ig' ? 'i-ig' : kind === 'fb' ? 'i-fb' : 'i-news') + '"/></svg></span><span><b>' + K.esc(it.label) + '</b><small>' + K.esc(who || host) + '</small></span><span class="link-arrow">Read</span></a>';
         }).join('') || '<p class="muted">Guest stories will appear here.</p>';
         K.reveal(el);
       }).catch(function () {});
