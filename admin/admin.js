@@ -2520,6 +2520,8 @@
     if (!DB.settings.sigs[st.id]) DB.settings.sigs[st.id] = { name: SIG_NAMES[st.id] || st.name, title: st.role, mobile: '', email: 'info@kyleu.co.za', photo: true, dgr: true, social: true };
     return DB.settings.sigs[st.id];
   }
+  // the DGR Certified Partner logo as Dinokeng publishes it on its own website (approved dark green version)
+  var DGR_CP_IMG = 'https://www.dinokengreserve.co.za/wp-content/uploads/2025/07/DGR-PARTNER@100x-300x113.png';
   function siteBase() { return new URL('../', location.href).href; }
   function telLink(n) { var d = String(n || '').replace(/[^\d+]/g, ''); return d[0] === '0' ? '+27' + d.slice(1) : d; }
   // the signature as email-safe HTML: tables and inline styles, pictures from the website
@@ -2528,7 +2530,7 @@
     var f = 'font-family:Arial,Helvetica,sans-serif;', a = 'color:#2a1b12;text-decoration:none;', lab = 'color:#8a7a68;padding:0 10px 0 0;font-size:12px;';
     var row = function (l, v, href) { return '<tr><td style="' + f + lab + '">' + l + '</td><td style="' + f + 'font-size:13px;color:#2a1b12;padding:1px 0;">' + (href ? '<a href="' + esc(href) + '" style="' + a + '">' + esc(v) + '</a>' : esc(v)) + '</td></tr>'; };
     return '<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;' + f + 'color:#2a1b12;max-width:520px;"><tr>' +
-      (d.photo ? '<td valign="top" style="padding:0 16px 0 0;"><a href="https://' + esc(sh.web.replace(/^https?:\/\//, '')) + '" style="text-decoration:none;"><img src="' + base + 'assets/img/email/sign-photo.jpg" width="104" height="130" alt="Kyleu Bush Camp" style="display:block;border:0;border-radius:10px;"></a></td>' : '') +
+      (d.photo ? '<td valign="middle" style="padding:0 18px 0 0;"><a href="https://' + esc(sh.web.replace(/^https?:\/\//, '')) + '" style="text-decoration:none;"><img src="' + base + 'assets/img/email/kyleu-logo.png" width="104" height="83" alt="Kyleu Bush Camp" style="display:block;border:0;"></a></td>' : '') +
       '<td valign="top" style="border-left:3px solid #e8731c;padding:0 0 0 16px;">' +
       '<div style="font-family:Georgia,\'Times New Roman\',serif;font-size:21px;font-weight:bold;color:#2a1b12;line-height:1.2;">' + esc(d.name) + '</div>' +
       '<div style="' + f + 'font-size:11px;font-weight:bold;letter-spacing:1.4px;text-transform:uppercase;color:#b8461a;padding:3px 0 9px;">' + esc(d.title ? d.title + ' · ' : '') + 'Kyleu Bush Camp</div>' +
@@ -2538,7 +2540,7 @@
       '<div style="' + f + 'font-size:12px;color:#8a7a68;padding:7px 0 0;">' + esc(sh.place) + '</div>' +
       (soc.length ? '<div style="' + f + 'font-size:12px;padding:6px 0 0;">' + soc.map(function (x) { return '<a href="' + esc(x[1]) + '" style="color:#b8461a;font-weight:bold;text-decoration:none;">' + x[0] + '</a>'; }).join(' &nbsp;·&nbsp; ') + '</div>' : '') +
       '</td></tr>' +
-      (d.dgr ? '<tr><td colspan="' + (d.photo ? 2 : 1) + '" style="padding:12px 0 0;"><table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;"><tr><td style="padding:4px 12px;background:#ffffff;"><img src="' + base + 'assets/img/email/dgr-cp.png" width="80" height="30" alt="DGR CP" style="display:block;border:0;"></td><td style="' + f + 'font-size:12px;color:#5c4d3e;padding:0 0 0 14px;"><b style="color:#2a1b12;">Proud DGR CP Member</b><br>Guests qualify for Dinokeng Conservation Fee Discount Vouchers</td></tr></table></td></tr>' : '') +
+      (d.dgr ? '<tr><td colspan="' + (d.photo ? 2 : 1) + '" style="padding:12px 0 0;"><table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;"><tr><td style="padding:6px 14px 6px 0;background:#ffffff;"><img src="' + DGR_CP_IMG + '" width="96" height="36" alt="DGR Certified Partner" style="display:block;border:0;"></td><td style="' + f + 'font-size:12px;color:#5c4d3e;padding:0 0 0 14px;"><b style="color:#2a1b12;">Proud DGR CP Member</b><br>Guests qualify for Dinokeng Conservation Fee Discount Vouchers</td></tr></table></td></tr>' : '') +
       '</table>';
   }
   // the same signature as plain text (WhatsApp, plain emails, and the demo's email log)
@@ -2552,7 +2554,7 @@
       '<label class="fld"><span>Whose signature?</span><select data-sig-who>' + STAFF.map(function (x) { return '<option value="' + x.id + '"' + (x.id === who ? ' selected' : '') + '>' + esc(sigData(x.id).name) + ' (' + esc(x.role) + ')</option>'; }).join('') + '</select></label>' +
       '<div class="grid2">' + fld('name', 'Full name', d.name) + fld('title', 'Job title', d.title, 'e.g. Owner') + '</div>' +
       '<div class="grid2">' + fld('email', 'Email', d.email) + fld('mobile', 'Own mobile (optional)', d.mobile, 'e.g. 082 123 4567') + '</div>' +
-      chk('photo', 'Show the photo of the entrance sign') + chk('dgr', 'Show "Proud DGR CP Member" (Dinokeng asks partners to use it in email signatures)') + chk('social', 'Show the Facebook and Instagram links (set under Social media)') +
+      chk('photo', 'Show the Kyleu logo') + chk('dgr', 'Show "Proud DGR CP Member" (Dinokeng asks partners to use it in email signatures)') + chk('social', 'Show the Facebook and Instagram links (set under Social media)') +
       '<h5>For everyone</h5><div class="grid2">' + fld('phone', 'Camp phone', sh.phone, '', true) + fld('web', 'Website', sh.web, '', true) + '</div>' + fld('place', 'Line under the details', sh.place, '', true) +
       '</section><section class="card"><header class="card-h"><h3>Preview</h3></header><div class="sig-prev" data-sig-prev>' + sigHTML(d) + '</div>' +
       '<div class="row-btns"><button type="button" class="btn" data-act="sig-copy">' + ic('note') + 'Copy signature</button><button type="button" class="btn ghost" data-act="sig-code">' + ic('download') + 'Download for Outlook</button><button type="button" class="btn ghost" data-act="sig-html">Copy HTML code</button></div>' +
