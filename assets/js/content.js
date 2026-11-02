@@ -214,7 +214,23 @@
   K.prices = function () { return load('prices').then(parsePrices); };
   K.blogFile = function () { return load('blog').then(parseBlog); };   // blog.md only (the admin uses this)
   K.slug = slug;
-  K.stands = function () { return load('stands').then(parseStands); };
+  // Map layout from the admin map editor: moved stands, stands taken off the map and new campsites.
+  // Demo: saved in this browser. Live: assets/js/campmap-layout.js.
+  var AREA_PHOTO = { fenced: 'assets/img/photos/fenced-camp-lawn.jpg', unfenced: 'assets/img/photos/trailer-unfenced.jpg', 'self-sufficient': 'assets/img/wildlife/tree-sunset.jpg' };
+  function mapLayout() { var L = null; try { L = JSON.parse(localStorage.getItem('kyleu-web-map') || 'null'); } catch (e) {} return L || K.MAP_LAYOUT || null; }
+  function withMap(list) {
+    var L = mapLayout(); if (!L) return list;
+    var pos = L.stands || {};
+    list.forEach(function (s) { if (Object.prototype.hasOwnProperty.call(pos, s.id)) s.map = pos[s.id] ? { x: pos[s.id][0], y: pos[s.id][1] } : null; });
+    (L.newStands || []).forEach(function (n) {
+      if (!n || !n.name || list.some(function (s) { return s.id === n.id; })) return;
+      var ak = AREA[n.area] ? n.area : 'unfenced';
+      list.push({ id: n.id, name: n.name, area: ak, areaInfo: AREA[ak], status: 'new', photos: [AREA_PHOTO[ak]], guests: n.guests || 8, setups: '', feel: '', highlights: [], map: n.map ? { x: n.map.x, y: n.map.y } : null, description: '' });
+    });
+    return list;
+  }
+  K.stands = function () { return load('stands').then(parseStands).then(withMap); };
+  K.standsFile = function () { return load('stands').then(parseStands); };   // stands.md only (the map editor uses this)
   // Blog: reads content/blog.md by default. Once the site lives on WordPress,
   // set "Blog source: wordpress" in content/settings.md and posts written in
   // the normal WordPress editor (wp-admin → Posts) appear here automatically.

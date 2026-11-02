@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="kyleu-base" content="../">
+<title>Map editor · Kyleu admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Fraunces:opsz,wght@9..144,600&family=Nunito+Sans:opsz,wght@6..12,400;6..12,700;6..12,800;6..12,900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/style.css?v=3">
+<link rel="stylesheet" href="../assets/css/pages.css?v=3">
+<link rel="stylesheet" href="map-editor.css?v=1">
+</head>
+<body class="me">
+<header class="me-top">
+  <div class="me-views" role="tablist" aria-label="Which map">
+    <button type="button" class="on" data-view="camp" role="tab">Camp map</button>
+    <button type="button" data-view="story" role="tab">A day at Kyleu (scroll map)</button>
+  </div>
+  <div class="me-acts">
+    <button type="button" class="me-btn" data-undo title="Undo (Ctrl+Z)" disabled>Undo</button>
+    <button type="button" class="me-btn" data-redo title="Redo (Ctrl+Y)" disabled>Redo</button>
+    <button type="button" class="me-btn" data-reset>Reset to original</button>
+    <button type="button" class="me-btn" data-download>Download map file</button>
+    <span class="me-state" data-state>Saved</span>
+    <button type="button" class="me-btn primary" data-save disabled>Save to website</button>
+  </div>
+</header>
+<div class="me-main">
+  <aside class="me-side" data-side><p class="me-muted">Loading the map…</p></aside>
+  <div class="me-stage">
+    <div class="me-map campmap"><svg data-svg role="img" aria-label="Kyleu camp map, editable"><g data-base></g><g data-over></g></svg></div>
+    <p class="me-help" data-help></p>
+  </div>
+</div>
+<div class="me-toast" data-toast hidden></div>
+<script src="../assets/js/content.js?v=4"></script>
+<script src="../assets/js/campmap-data.js?v=3"></script>
+<script src="../assets/js/campmap-layout.js?v=1"></script>
+<script src="../assets/js/campmap.js?v=4"></script>
+<script src="map-editor.js?v=1"></script>
+</body>
+</html>

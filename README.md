@@ -39,6 +39,10 @@ All the everyday content lives in the **`content`** folder as simple text files.
 
 Each file has instructions at the top. Lines starting with `>` are notes and don't show on the site.
 
+**The maps:** the camp map and the "A day at Kyleu" scroll map are edited in the admin under **Settings > Maps**. Staff can move campsites, text and buildings, draw roads and footpaths, add new campsites, and change the game drive route and the scroll map's story. In the demo, "Save to website" updates the maps in that browser. To publish for everyone, press "Download map file" and replace `assets/js/campmap-layout.js` with the downloaded file (the live version can save it on the server instead).
+
+**Camp news from the admin:** posts can also be written under **Camp news** in the admin. In the demo they show on the website in the same browser; "Copy as blog.md text" gives the text to paste into `content/blog.md`.
+
 **Adding stand photos:** use landscape photos (wider than tall) at least 1200px wide. Save them as `1.jpg`, `2.jpg` and so on in the stand's folder, and list them after `Photos:` in `stands.md`.
 
 ## Previewing on your computer

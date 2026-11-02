@@ -44,16 +44,47 @@
      All shapes come from assets/js/campmap-data.js (picture pixels, 1386 x 627).
      The map keeps the picture's proportions, so stand positions in stands.md
      (left %, top %) line up exactly with the site layout picture. */
-  var G = K.CAMP_GEO || { w: 1386, h: 627, roads: [], fence: [], perimeter: [], drive: [[185, 147], [258, -40]], house: [], pool: [267, 201, 17, 21], lapa: [252, 185, 22, 16], reception: [172, 160], spruit: [] };
-  var SC = W / G.w; H = Math.round(G.h * SC * 10) / 10;
+  var G0 = K.CAMP_GEO || { w: 1386, h: 627, roads: [], fence: [], perimeter: [], drive: [[185, 147], [258, -40]], house: [], pool: [267, 201, 17, 21], lapa: [252, 185, 22, 16], reception: [172, 160], spruit: [] };
+  var SC = W / G0.w; H = Math.round(G0.h * SC * 10) / 10;
   function sc(p) { return [r1(p[0] * SC), r1(p[1] * SC)]; }
   function scR(r) { return [r1(r[0] * SC), r1(r[1] * SC), r1(r[2] * SC), r1(r[3] * SC)]; }
-  var FENCE = G.fence.map(sc);
-  var ROADS = G.roads.map(function (L) { return L.map(sc); });
-  var DRIVE = G.drive.map(sc);
-  var SPRUIT = G.spruit.map(sc);
-  var HOUSES = G.house.map(scR), POOLR = scR(G.pool), LAPA = scR(G.lapa), RECEPTION = sc(G.reception);
   var ROAM = { x0: 445, x1: 985, y0: 28, y1: 440 };      // unfenced area where wildlife may wander
+  function clone(o) { return JSON.parse(JSON.stringify(o)); }
+  function escT(t) { return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function alongPath(P, f) {   // the point a fraction f of the way along a line
+    var segs = [], L = 0, i;
+    for (i = 0; i < P.length - 1; i++) { var d = Math.hypot(P[i + 1][0] - P[i][0], P[i + 1][1] - P[i][1]); segs.push(d); L += d; }
+    var want = L * f;
+    for (i = 0; i < segs.length; i++) { if (want <= segs[i]) { var t = segs[i] ? want / segs[i] : 0; return [P[i][0] + (P[i + 1][0] - P[i][0]) * t, P[i][1] + (P[i + 1][1] - P[i][1]) * t]; } want -= segs[i]; }
+    return P[P.length - 1] || [700, 600];
+  }
+  /* ---------- the editable layout (admin > Settings > Maps) ----------
+     Everything is in site-picture pixels (1386 x 627), except stand positions (left %, top %).
+     Saved layouts: this browser (demo) or assets/js/campmap-layout.js (live). */
+  function defaults() {
+    var sp = G0.spruit.length ? alongPath(G0.spruit, .6) : [700, 600];
+    return clone({ v: 1, roads: G0.roads, perimeter: G0.perimeter, paths: [], fence: G0.fence, spruit: G0.spruit, drive: G0.drive, house: G0.house, pool: G0.pool, lapa: G0.lapa, reception: G0.reception, gate: [258, 62],
+      labels: [
+        { t: '↑ Kaallaagte Rd · Tau Gate', k: 'small', a: 'start', x: r1(258 + 8 / SC), y: r1(13 / SC) },
+        { t: 'Reception', k: 'small', a: 'end', x: 136, y: 190 },
+        { t: 'Pool area', k: 'small', a: 'end', x: 262, y: 216 },
+        { t: 'FENCED', k: 'area', a: 'middle', x: 135, y: 262 },
+        { t: 'OPEN (UNFENCED) BUSH CAMP', k: 'area', a: 'middle', x: 1035, y: 75 },
+        { t: 'SELF-SUFFICIENT', k: 'ss', a: 'middle', x: 1230, y: 520 },
+        { t: 'Kaallaagte Spruit', k: 'water', a: 'middle', x: r1(sp[0]), y: r1(sp[1] - 16) }
+      ], stands: {}, newStands: [], story: {} });
+  }
+  function saved() { var L = null; try { L = JSON.parse(localStorage.getItem('kyleu-web-map') || 'null'); } catch (e) {} return L || K.MAP_LAYOUT || null; }
+  var LAY, FENCE, ROADS, PERIM, PATHS, DRIVE, SPRUIT, HOUSES, POOLR, LAPA, RECEPTION, GATE;
+  function setLayout(L) {
+    var d = defaults(); LAY = d;
+    if (L) Object.keys(d).forEach(function (k) { if (L[k] !== undefined && L[k] !== null) LAY[k] = clone(L[k]); });
+    var many = function (ls) { return ls.filter(function (l) { return l && l.length; }).map(function (l) { return l.map(sc); }); };
+    FENCE = LAY.fence.map(sc); ROADS = many(LAY.roads); PERIM = LAY.perimeter.map(sc); PATHS = many(LAY.paths);
+    DRIVE = LAY.drive.map(sc); SPRUIT = LAY.spruit.map(sc); HOUSES = LAY.house.map(scR); POOLR = scR(LAY.pool); LAPA = scR(LAY.lapa); RECEPTION = sc(LAY.reception); GATE = sc(LAY.gate);
+    baseCache = {};
+    K.campMapParts = { terrain: terrain, smooth: smooth, standXY: standXY, DRIVE: DRIVE, W: W, H: H, POOL: POOLR, RECEPTION: RECEPTION, ROAM: ROAM, FENCE: FENCE, GATE: GATE, story: LAY.story || {} };
+  }
   function poly(L) { return 'M' + L.map(function (p) { return p[0] + ' ' + p[1]; }).join('L'); }
 
   function standXY(st) { return st.map ? [st.map.x / 100 * W, st.map.y / 100 * H] : null; }
@@ -90,10 +121,13 @@
       o.push('<ellipse cx="' + r1(p[0]) + '" cy="' + r1(p[1]) + '" rx="17" ry="12" fill="#d39a6c" opacity=".85"/>');
     });
     // red dirt roads: the only roads on the map (traced from the picture, incl. the perimeter road)
-    var rd = ROADS.map(poly).join(' ') + ' ' + poly(G.perimeter.map(sc).concat([sc(G.perimeter[0])]));
+    var rd = ROADS.filter(function (l) { return l.length > 1; }).map(poly).join(' ') + (PERIM.length > 1 ? ' ' + poly(PERIM.concat([PERIM[0]])) : '');
     o.push('<path d="' + rd + '" fill="none" stroke="#7a3c22" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round" opacity=".45"/>');
     o.push('<path class="cm-road" d="' + rd + '" fill="none" stroke="#c4744a" stroke-width="5.6" stroke-linecap="round" stroke-linejoin="round"/>');
     o.push('<path d="' + rd + '" fill="none" stroke="#dc9a6e" stroke-width="1.4" stroke-dasharray="2 5" stroke-linecap="round" opacity=".8"/>');
+    // footpaths drawn in the map editor
+    var fp = PATHS.filter(function (l) { return l.length > 1; }).map(smooth).join(' ');
+    if (fp) o.push('<path d="' + fp + '" fill="none" stroke="#7a5a32" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" opacity=".3"/><path class="cm-path" d="' + fp + '" fill="none" stroke="#f1e2bf" stroke-width="1.9" stroke-dasharray="3 4" stroke-linecap="round"/>');
     // ablution blocks / fire rings at each stand
     stands.forEach(function (st) {
       var p = standXY(st); if (!p) return;
@@ -108,7 +142,8 @@
     // trees: kept off the roads, clearings, buildings and water (fast grid lookup)
     var CELL = 3, gw = Math.ceil(W / CELL) + 1, gh = Math.ceil(H / CELL) + 1, busy = new Uint8Array(gw * gh);
     function mark(x, y, rad) { var r = Math.ceil(rad / CELL); var cx = Math.round(x / CELL), cy = Math.round(y / CELL); for (var dy = -r; dy <= r; dy++) for (var dx = -r; dx <= r; dx++) { var X = cx + dx, Y = cy + dy; if (X >= 0 && Y >= 0 && X < gw && Y < gh && dx * dx + dy * dy <= r * r) busy[Y * gw + X] = 1; } }
-    ROADS.concat([G.perimeter.map(sc).concat([sc(G.perimeter[0])])]).forEach(function (L) { densify(L, 2.5).forEach(function (p) { mark(p[0], p[1], 7); }); });
+    ROADS.concat(PERIM.length ? [PERIM.concat([PERIM[0]])] : []).filter(function (L) { return L.length; }).forEach(function (L) { densify(L, 2.5).forEach(function (p) { mark(p[0], p[1], 7); }); });
+    PATHS.filter(function (L) { return L.length; }).forEach(function (L) { densify(L, 2.5).forEach(function (p) { mark(p[0], p[1], 5); }); });
     densify(SPRUIT.length ? SPRUIT : [[0, 0], [0, 0]], 4).forEach(function (p) { mark(p[0], p[1], 16); });
     spots.forEach(function (p) { mark(p[0], p[1], 22); });
     HOUSES.concat([POOLR, LAPA]).forEach(function (r) { mark(r[0] + r[2] / 2, r[1] + r[3] / 2, Math.max(r[2], r[3]) * .75 + 4); });
@@ -132,20 +167,15 @@
       else o.push('<circle cx="' + r1(t[0] + 2) + '" cy="' + r1(t[1] + 3) + '" r="' + r1(t[2]) + '" fill="rgba(40,25,10,.22)"/><circle cx="' + r1(t[0]) + '" cy="' + r1(t[1]) + '" r="' + r1(t[2]) + '" fill="' + c + '"/><circle cx="' + r1(t[0] - t[2] * .3) + '" cy="' + r1(t[1] - t[2] * .3) + '" r="' + r1(t[2] * .45) + '" fill="#8aa555" opacity=".5"/>');
     });
     // fence: just outside the perimeter road, with posts
-    o.push('<path d="' + poly(FENCE) + 'Z" fill="none" stroke="#3b2a1a" stroke-width="1.8" stroke-dasharray="7 4" stroke-linejoin="round"/>');
-    densify(FENCE.concat([FENCE[0]]), 18).forEach(function (p) { o.push('<circle cx="' + r1(p[0]) + '" cy="' + r1(p[1]) + '" r="1.5" fill="#3b2a1a"/>'); });
-    // labels
-    var gate = sc([258, 62]);
-    o.push('<g class="cm-labels">' +
-      '<text x="' + r1(gate[0] + 8) + '" y="13" class="cm-small" text-anchor="start">↑ Kaallaagte Rd · Tau Gate</text>' +
-      '<g transform="translate(' + gate[0] + ' ' + gate[1] + ')"><rect x="-15" y="-6" width="30" height="12" rx="6" fill="#2a1b12"/><text y="3.5" class="cm-tag" text-anchor="middle">GATE</text></g>' +
-      '<text x="' + sc([136, 0])[0] + '" y="' + sc([0, 190])[1] + '" class="cm-small" text-anchor="end">Reception</text>' +
-      '<text x="' + sc([262, 0])[0] + '" y="' + sc([0, 216])[1] + '" class="cm-small" text-anchor="end">Pool area</text>' +
-      '<text x="' + r1(sc([135, 262])[0]) + '" y="' + r1(sc([135, 262])[1]) + '" class="cm-area" text-anchor="middle">FENCED</text>' +
-      '<text x="' + r1(sc([1035, 75])[0]) + '" y="' + r1(sc([1035, 75])[1]) + '" class="cm-area" text-anchor="middle">OPEN (UNFENCED) BUSH CAMP</text>' +
-      (SPRUIT.length ? '<text class="cm-water"><textPath href="#cm-spruit" xlink:href="#cm-spruit" startOffset="60%">Kaallaagte Spruit</textPath></text>' : '') +
-      '<text x="' + r1(sc([1230, 520])[0]) + '" y="' + r1(sc([1230, 520])[1]) + '" class="cm-area cm-ss" text-anchor="middle">SELF-SUFFICIENT</text>' +
-      '</g>');
+    if (FENCE.length > 2) {
+      o.push('<path d="' + poly(FENCE) + 'Z" fill="none" stroke="#3b2a1a" stroke-width="1.8" stroke-dasharray="7 4" stroke-linejoin="round"/>');
+      densify(FENCE.concat([FENCE[0]]), 18).forEach(function (p) { o.push('<circle cx="' + r1(p[0]) + '" cy="' + r1(p[1]) + '" r="1.5" fill="#3b2a1a"/>'); });
+    }
+    // labels and the gate (moved, added and renamed in the map editor)
+    o.push('<g class="cm-labels">' + LAY.labels.map(function (l, i) {
+      var p = sc([l.x, l.y]), cls = l.k === 'ss' ? 'cm-area cm-ss' : l.k === 'water' ? 'cm-water' : l.k === 'area' ? 'cm-area' : 'cm-small';
+      return '<text data-lab="' + i + '" x="' + p[0] + '" y="' + p[1] + '" class="' + cls + '" text-anchor="' + (l.a || 'middle') + '">' + escT(l.t) + '</text>';
+    }).join('') + '<g data-gate transform="translate(' + GATE[0] + ' ' + GATE[1] + ')"><rect x="-15" y="-6" width="30" height="12" rx="6" fill="#2a1b12"/><text y="3.5" class="cm-tag" text-anchor="middle">GATE</text></g></g>');
     // compass
     o.push('<g transform="translate(962 34)"><circle r="17" fill="rgba(255,252,246,.85)" stroke="#5a3d26" stroke-width="1.2"/><path d="M0 -13 L4.5 2 L0 -1 L-4.5 2Z" fill="#b8461a"/><path d="M0 13 L4.5 -2 L0 1 L-4.5 -2Z" fill="#5a3d26" opacity=".5"/></g>');
     o.push('<rect width="' + W + '" height="' + H + '" fill="url(#cm-vig)" pointer-events="none"/>');
@@ -294,7 +324,9 @@
   };
 
   // shared pieces for the "day at Kyleu" scene (campscene.js)
-  K.campMapParts = { terrain: terrain, smooth: smooth, standXY: standXY, DRIVE: DRIVE, W: W, H: H, POOL: POOLR, RECEPTION: RECEPTION, ROAM: ROAM, FENCE: FENCE, GATE: sc([258, 62]) };
+  setLayout(saved());
+  // for the admin map editor
+  K.campLayout = { get: function () { return clone(LAY); }, set: setLayout, defaults: defaults, saved: saved, SC: SC, W: W, H: H, inPoly: inPoly, smooth: smooth };
 
   /* ---------- small zoomed map for a single stand ---------- */
   K.campMapMini = function (stands, id) {

@@ -1077,3 +1077,7 @@ select.on, input.on { border-color: var(--sun) !important; background: #fff7ee !
 .m-acts.left { justify-content: flex-start; }
 @media (max-width: 560px) { .car { flex-wrap: wrap; } .car-a { max-width: none; width: 100%; justify-content: flex-start; padding-left: 48px; } }
 
+/* map editor in Settings */
+.me-intro { margin: 0 0 12px; max-width: 70ch; }
+.me-wrap { border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; background: #f6efe3; margin-bottom: 12px; }
+.me-frame { display: block; width: 100%; height: calc(100vh - 230px); min-height: 640px; border: 0; }

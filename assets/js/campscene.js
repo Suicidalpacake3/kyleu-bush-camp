@@ -84,6 +84,8 @@
 
   K.campScene = function (wrap, stands) {
     var P = K.campMapParts; W = P.W; H = P.H;
+    var STORY = P.story || {};   // story moments changed in the map editor
+    ['coffee', 'arrive', 'braai', 'night'].forEach(function (k) { if (STORY[k] && STORY[k].stand) EV_STANDS[k] = STORY[k].stand; });
     var PR = P.POOL; POOL = [PR[0] + PR[2] / 2, PR[1] + PR[3] / 2];
     var mapbox = wrap.querySelector('.dm-mapbox'), panEl = wrap.querySelector('.dm-pan'), card = wrap.querySelector('.dm-card');
     var sticky = wrap.querySelector('.dm-sticky'), clock = wrap.querySelector('[data-dm-clock]'), bar = wrap.querySelector('.dm-progress'), ticks = wrap.querySelector('.dm-ticks');
@@ -98,6 +100,8 @@
       { h: 17.75, end: 20.7, time: '17:45', title: 'Golden hour braai', text: 'Fires get lit across camp with your free bag of wood as the sky turns orange.', img: 'assets/img/photos/campfire-stand.jpg', at: function () { return at(EV_STANDS.braai); } },
       { h: 20.8, end: 23, time: '21:00', title: 'Glowing eyes in the dark', text: 'Jackals and hyenas come out after dark. Stay by your fire and listen to the bush.', img: 'assets/img/wildlife/bonfire.jpg', at: function () { return at(EV_STANDS.night); } }
     ];
+
+    ['coffee', 'drive', 'pool', 'arrive', 'braai', 'night'].forEach(function (k, i) { var m = STORY[k]; if (m && EVENTS[i]) { if (m.title) EVENTS[i].title = m.title; if (m.text) EVENTS[i].text = m.text; } });
 
     /* --- occupied stands --- */
     var camps = [];
