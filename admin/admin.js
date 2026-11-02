@@ -309,6 +309,19 @@
     if (n) save();
     return n;
   }
+  /* ---------- each booking's private link (manage.html?b=REF&k=KEY): amend before paying in full, finalise after ---------- */
+  function newKey() { return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6); }
+  function bookingLink(b) { if (!b.key) { b.key = newKey(); save(); } return new URL('../manage.html?b=' + encodeURIComponent(b.ref) + '&k=' + b.key, location.href).href; }
+  function paidUp(b) { return paid(b) > 0 && balance(b) <= 0; }
+  function linkSec(b) {
+    if (b.status === 'cancelled' || b.status === 'out') return '';
+    var full = paidUp(b), fin = b.finalised;
+    return '<section class="d-sec"><h4 class="h4-row">Booking page · ' + (full ? 'Finalise' : 'Amend') + '<span class="pill ' + (full ? (fin ? 'ok' : 'warn') : 'muted') + '">' + (full ? (fin ? ic('check') + 'Finalised ' + fd(fin.at.slice(0, 10)) + (fin.by ? ' by ' + esc(fin.by) : '') : 'Paid, not finalised yet') : 'Not paid in full yet') + '</span></h4>' +
+      '<p class="muted small">' + (full ? 'Paid in full, so ' + esc(b.guest.first) + '\'s link opens <b>Finalise your booking</b>: vehicles and passengers, arrival time, camp shop. You can also fill these in here (vehicles below, arrival time under Edit booking, shop items in the Shop) and mark it finalised.'
+        : esc(b.guest.first) + '\'s link opens <b>Amend your booking</b>: I have paid, number of guests and contact details. Once the booking is paid in full, the same link lets them finalise it.') + '</p>' +
+      '<div class="row-btns"><button type="button" class="btn ghost sm" data-act="send-doc" data-ref="' + b.ref + '|' + (full ? 'finalise' : 'link') + '">' + ic('send') + (full ? 'Send the finalise link' : 'Send the booking link') + '</button><button type="button" class="btn ghost sm" data-act="link-copy" data-ref="' + b.ref + '">' + ic('note') + 'Copy link</button><a class="btn ghost sm" href="' + esc(bookingLink(b)) + '" target="_blank" rel="noopener">' + ic('ext') + 'Open as the guest</a>' +
+      (full && !fin ? '<button type="button" class="btn sm" data-act="fin-mark" data-ref="' + b.ref + '">' + ic('check') + 'Mark as finalised</button>' : '') + '</div></section>';
+  }
   /* ---------- camp shop items ordered with the booking: one charge, replaced when the guest changes it ---------- */
   function preShop(b) { return (b.charges || []).filter(function (c) { return c.pre; })[0]; }
   function setPreShop(b, items, at, inTotal) {
@@ -362,6 +375,7 @@
         done.push(r.ci !== b.ci || r.co !== b.co ? (r.adults !== b.adults || r.pens !== b.pens || r.kids !== b.kids ? 'asked to change the dates and the number of guests' : 'asked to change the dates') : 'asked to change the number of guests');
       }
       if (a.note) { b.notes.push({ at: a.at, by: 'Guest', text: a.note }); done.push('left a message'); }
+      if (a.finalise) { b.finalised = { at: a.at, by: 'Guest' }; done.push('finalised the booking'); }
       if (a.invoice) { b.invoices = b.invoices || []; b.invoices.push(Object.assign(JSON.parse(JSON.stringify(a.invoice)), { by: 'Website', sent: { at: a.at, via: 'Email (automatic)', to: b.guest.email } })); autoMail(b, a.invoice, a.at, 'Your updated Kyleu invoice ' + a.invoice.no, invMailBody(b, a.invoice, true)); done.push('updated invoice ' + a.invoice.no + ' emailed'); }
       if (!done.length) return;
       b.notes.push({ at: a.at, by: 'Guest', text: 'Changed on the website: ' + done.join('; ') + '.' });
@@ -393,7 +407,7 @@
     list.forEach(function (w) {
       if (byRef(w.ref)) return;
       var card = w.pay === 'deposit' || w.pay === 'full', nowPaid = w.paid || 0;
-      var b = { ref: w.ref, created: w.created, source: 'Website', guest: { first: w.first, last: w.last, email: w.email, phone: w.phone, consent: !!w.consent }, stand: w.stand, ci: w.ci, co: w.co, adults: w.adults, pens: w.pens, kids: w.kids, vehicles: Math.max(1, +w.vehicles || 1), vehTbc: !!w.vehTbc, eta: w.eta || '', setup: w.setup || '', extras: w.extras || {},
+      var b = { ref: w.ref, created: w.created, source: 'Website', guest: { first: w.first, last: w.last, email: w.email, phone: w.phone, consent: !!w.consent }, stand: w.stand, ci: w.ci, co: w.co, adults: w.adults, pens: w.pens, kids: w.kids, vehicles: Math.max(1, +w.vehicles || 1), vehTbc: !!w.vehTbc, eta: w.eta || '', key: w.key || newKey(), setup: w.setup || '', extras: w.extras || {},
         method: card ? 'card' : 'eft', eft: w.eft, card: w.card, total: card ? w.card : w.eft, payments: [], status: nowPaid ? 'confirmed' : 'pending', notes: w.notes ? [{ at: w.created, by: 'Guest', text: w.notes }] : [], pop: false, isNew: true };
       if (nowPaid) b.payments.push({ d: w.created.slice(0, 10), amt: nowPaid, m: card ? 'card' : 'eft', type: w.pay === 'full' ? 'Full payment' : 'Deposit', ref: card ? 'Card (website)' : 'Instant EFT' });
       linkBooking(b);
@@ -499,6 +513,7 @@
       (b.guestEdit && b.guestEdit.at >= add(TODAY, -14) ? '<p class="callout info cflex">' + ic('edit') + '<span><b>Changed by ' + esc(b.guest.first) + ' on the website</b> ' + esc(b.guestEdit.at) + ': ' + esc(b.guestEdit.what.join('; ')) + '.</span></p>' : '') +
       (function () { var cl = clientById(b.cid), sb = staysBefore(b); return '<section class="d-sec"><h4 class="h4-row">Guest' + (cl ? '<button type="button" class="link-btn" data-client="' + cl.id + '">Client card' + ic('chev-r') + '</button>' : '') + '</h4><div class="guest-line"><span class="avatar">' + esc((b.guest.first[0] || '?') + ((b.guest.last.split(' ').pop() || '?')[0] || '')) + '</span><div><b>' + esc(guestName(b)) + '</b> ' + (sb ? '<span class="pill ok ret">' + ic('return') + 'Returning · ' + nth(sb + 1) + ' stay</span>' : '<span class="pill info">First stay</span>') + '<div class="muted small">' + esc(b.guest.email || 'No email') + '</div></div></div>' + (cl && cl.notes ? '<p class="cl-note">' + ic('note') + '<span>' + esc(cl.notes) + '</span></p>' : ''); })() +
       '<div class="chips"><a class="chip" href="tel:' + esc(b.guest.phone.replace(/\s/g, '')) + '">' + ic('phone') + esc(b.guest.phone) + '</a><a class="chip" target="_blank" rel="noopener" href="https://wa.me/' + wa + '">' + ic('wa') + 'WhatsApp</a><a class="chip" href="mailto:' + esc(b.guest.email) + '">' + ic('mail') + 'Email</a></div></section>' +
+      linkSec(b) +
       '<section class="d-sec"><h4>Stay</h4><dl class="kv">' +
       '<dt>Stand</dt><dd><b>' + esc(st.name) + '</b> · ' + AREA_SHORT[st.area] + '</dd>' +
       '<dt>Arrive</dt><dd>' + fd(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }) + ' <span class="muted">(' + rel(b.ci) + ')</span></dd>' +
@@ -546,7 +561,7 @@
         if (b.paidClaim) { b.notes.push({ at: nowStamp(), by: ME.name, text: 'Payment the guest told us about is confirmed: ' + money(amt) + ' is in the bank.' }); b.paidClaim = null; if (b.status !== 'pending') b.pop = false; }
         log(money(amt) + ' ' + methodLabel(m) + ' payment recorded on ' + b.ref, b.ref); save(); refresh(); toast(money(amt) + ' recorded');
         var pp = b.payments[b.payments.length - 1];
-        setTimeout(function () { sendBox({ b: b, title: 'Send the receipt', value: 'receipt', load: function () { return { subject: 'Payment received: ' + b.ref, text: 'Hi ' + b.guest.first + ',\n\nThank you! We received ' + money(pp.amt) + ' for your booking ' + b.ref + ' (' + standById(b.stand).name + ', ' + fd(b.ci, { day: 'numeric', month: 'long' }) + ').\n\n' + (balance(b) > 0 ? 'Still to pay: ' + money(balance(b)) + ', due by ' + fd(balanceDue(b), { day: 'numeric', month: 'long' }) + '.' : 'Your stay is now paid in full.') + ' Your receipt is attached.\n\nThe Kyleu team', docs: [docReceipt(b, pp)] }; } }); }, 0);
+        setTimeout(function () { sendBox({ b: b, title: 'Send the receipt', value: 'receipt', load: function () { return { subject: 'Payment received: ' + b.ref, text: 'Hi ' + b.guest.first + ',\n\nThank you! We received ' + money(pp.amt) + ' for your booking ' + b.ref + ' (' + standById(b.stand).name + ', ' + fd(b.ci, { day: 'numeric', month: 'long' }) + ').\n\n' + (balance(b) > 0 ? 'Still to pay: ' + money(balance(b)) + ', due by ' + fd(balanceDue(b), { day: 'numeric', month: 'long' }) + '.' : 'Your stay is now paid in full.') + ' Your receipt is attached.' + (balance(b) <= 0 && !b.finalised ? '\n\nPlease finalise your booking here: tell us your vehicles and who is in each one, roughly when you arrive, and anything you want waiting from the camp shop.\n' + bookingLink(b) + '\n\nRather not use the website? Just reply with the details and we will add them for you.' : '') + '\n\nThe Kyleu team', docs: [docReceipt(b, pp)] }; } }); }, 0);
       }, { onOpen: function (f) {
         var upd = function () {
           var m = $('[name=m]:checked', f).value, h = $('[data-hint]', f), a = f.elements.amt;
@@ -566,12 +581,14 @@
     indemnity: { t: 'Indemnity form', s: 'Kyleu indemnity form for {ref}', b: function (b) { return 'Hi {first},\n\nPlease find the Kyleu indemnity form attached, one page per vehicle. Every adult signs it when you arrive. You are welcome to print it and fill it in before you come, which makes check-in quicker.\n\nSee you on {ci}!\nThe Kyleu team'; } },
     update: { t: 'Booking updated', s: 'Your Kyleu booking {ref} has been updated', b: function (b) { return 'Hi {first},\n\nWe have updated your booking {ref}: {stand}, {ci} to {co}.\nTotal {total}, paid {paid}, balance {balance}.\n\nIf anything looks wrong, just reply to this email.\n\nThe Kyleu team'; } },
     extra: { t: 'Extra amount to pay', s: 'Your updated Kyleu invoice {ref}', b: function (b) { return 'Hi {first},\n\nThank you for letting us know about the change to your booking {ref}. Your new total is {total}. You have already paid {paid}, so {balance} is still to pay.\n\nThe updated invoice is attached. Please pay the {balance} by EFT using reference {ref} before you arrive on {ci}.\n\nThe Kyleu team'; } },
-    details: { t: 'Ask for vehicle details', s: 'Your Kyleu stay: vehicle details please', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}. Before you arrive, please send us each vehicle\'s registration, the driver and everyone travelling in it. Everyone signs an indemnity form at the gate and we send one Dinokeng Conservation Fee Discount Voucher per vehicle, so this makes your arrival much quicker.\n\nYou can add them yourself at www.kyleu.co.za/manage.html with your booking reference {ref}, or simply reply to this message.\n\nThe Kyleu team'; } },
+    finalise: { t: 'Finalise your booking (link)', s: 'Finalise your Kyleu booking {ref}', b: function (b) { return 'Hi {first},\n\nThank you, your booking {ref} for {stand}, {ci} to {co}, is paid in full.\n\nPlease finalise it here: tell us your vehicles and who is in each one, roughly when you arrive, and anything you want waiting from the camp shop.\n{link}\n\nRather not use the website? Just reply with the details and we will add them for you.\n\nThe Kyleu team'; } },
+    link: { t: 'Link to the booking', s: 'Your Kyleu booking {ref}', b: function (b) { return 'Hi {first},\n\nHere is the link to your booking {ref} ({stand}, {ci} to {co}):\n{link}\n\nUse it to tell us when you have paid, or to change the number of guests or your contact details. Once your booking is paid in full, the same link lets you finalise it: vehicles, passengers and arrival time.\n\nThe Kyleu team'; } },
+    details: { t: 'Ask for vehicle details', s: 'Your Kyleu stay: vehicle details please', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}. Before you arrive, please send us each vehicle\'s registration, the driver and everyone travelling in it. Everyone signs an indemnity form at the gate and we send one Dinokeng Conservation Fee Discount Voucher per vehicle, so this makes your arrival much quicker.\n\nYou can add them yourself here: {link}\nOr simply reply to this message.\n\nThe Kyleu team'; } },
     confirm: { t: 'Booking confirmation', s: 'Booking confirmed: {ref}', b: function (b) { return 'Hi {first},\n\nYour booking {ref} is confirmed: {stand}, {ci} to {co}.\nTotal {total}, paid {paid}, balance {balance} due by {baldue}.\n\nThe Kyleu team'; } }
   };
   function fill(t, b) {
     var dcodes = (b.cars || []).map(function (c) { return c.dgr; }).filter(Boolean);
-    var map = { voucher: dcodes.length ? dcodes.join(', ') : 'the codes we send you', first: b.guest.first, stand: standById(b.stand).name, ci: fd(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }), co: fd(b.co, { weekday: 'long', day: 'numeric', month: 'long' }), deposit: money(deposit(b)), depdue: fd(depositDue(b), { day: 'numeric', month: 'long' }), ref: b.ref, balance: money(balance(b)), baldue: fd(balanceDue(b), { day: 'numeric', month: 'long' }), total: money(b.total), paid: money(paid(b)) };
+    var map = { link: bookingLink(b), voucher: dcodes.length ? dcodes.join(', ') : 'the codes we send you', first: b.guest.first, stand: standById(b.stand).name, ci: fd(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }), co: fd(b.co, { weekday: 'long', day: 'numeric', month: 'long' }), deposit: money(deposit(b)), depdue: fd(depositDue(b), { day: 'numeric', month: 'long' }), ref: b.ref, balance: money(balance(b)), baldue: fd(balanceDue(b), { day: 'numeric', month: 'long' }), total: money(b.total), paid: money(paid(b)) };
     return t.replace(/\{(\w+)\}/g, function (_, k) { return map[k] != null ? map[k] : _; });
   }
   function actRemind(ref) { var b = byRef(ref); sendTemplate(b, defaultTemplate(b)); }
@@ -804,7 +821,7 @@
     var cs = ensureCars(b), nIn = cs.filter(function (c) { return c.st === 'in'; }).length, canIn = (b.status === 'confirmed' || b.status === 'in') && b.ci <= TODAY && TODAY <= b.co;
     var missing = b.vehTbc || cs.some(function (c) { return !c.reg || !c.driver; });
     return '<section class="d-sec"><h4 class="h4-row">Vehicles · ' + (b.status === 'out' ? 'all left' : nIn + ' of ' + cs.length + ' in camp') + (b.status !== 'out' ? '<button type="button" class="link-btn" data-act="car-add" data-ref="' + b.ref + '">' + ic('plus') + 'Add vehicle</button>' : '') + '</h4>' +
-      namesWarn(b) + (b.vehTbc ? '<div class="callout warn cflex veh-tbc">' + ic('alert') + '<span>The client is <b>not sure yet how many vehicles</b> are coming. Ask them closer to the time, or they can add it under Change my booking on the website.</span><button type="button" class="btn ghost sm" data-act="veh-ok" data-ref="' + b.ref + '">Number confirmed</button></div>' : '') +
+      namesWarn(b) + (b.vehTbc ? '<div class="callout warn cflex veh-tbc">' + ic('alert') + '<span><b>Vehicles not given yet.</b> ' + esc(b.guest.first) + ' adds them when finalising the booking after paying in full, or you can add them here.</span><button type="button" class="btn ghost sm" data-act="veh-ok" data-ref="' + b.ref + '">Number confirmed</button></div>' : '') +
       cs.map(function (c, i) {
         var k = b.ref + '|' + c.id, t = carTab(b, c), acts = [];
         if (c.st === 'due' && canIn) acts.push('<button type="button" class="btn green sm" data-act="car-in" data-ref="' + k + '">' + ic('in') + 'Check in</button>');
@@ -819,7 +836,7 @@
           (t.total ? '<span class="pill ' + (t.owing ? 'warn' : 'ok') + '">Tab ' + money(t.total) + (t.owing ? ', ' + money(t.owing) + ' owing' : ', paid') + '</span>' : '') +
           '</div></div><div class="car-a">' + acts.join('') + '</div></div>';
       }).join('') + (b.status === 'pending' ? '<p class="muted small">Vehicles can check in once the deposit is paid.</p>' : '') +
-      '<div class="row-btns car-docs">' + (missing && b.status !== 'out' && b.status !== 'in' ? '<button type="button" class="btn ghost sm" data-act="send-doc" data-ref="' + b.ref + '|details">' + ic('send') + 'Ask for vehicle details</button>' : '') + '<button type="button" class="btn ghost sm" data-act="send-doc" data-ref="' + b.ref + '|indemnity">' + ic('send') + 'Send indemnity form</button><button type="button" class="btn ghost sm" data-act="ind-print" data-ref="' + b.ref + '|">' + ic('note') + 'Print it</button></div></section>';
+      '<div class="row-btns car-docs">' + (missing && paidUp(b) && b.status !== 'out' && b.status !== 'in' ? '<button type="button" class="btn ghost sm" data-act="send-doc" data-ref="' + b.ref + '|finalise">' + ic('send') + 'Send the finalise link</button>' : '') + '<button type="button" class="btn ghost sm" data-act="send-doc" data-ref="' + b.ref + '|indemnity">' + ic('send') + 'Send indemnity form</button><button type="button" class="btn ghost sm" data-act="ind-print" data-ref="' + b.ref + '|">' + ic('note') + 'Print it</button></div></section>';
   }
   function carForm(c) {
     return '<div class="grid2"><label class="fld"><span>Registration</span><input name="reg" value="' + esc(c.reg) + '" placeholder="e.g. CA 123-456" autocomplete="off" style="text-transform:uppercase"></label><label class="fld"><span>People in this vehicle</span><input type="number" min="1" max="12" name="people" value="' + (c.people || 1) + '"></label></div>' +
@@ -1000,6 +1017,7 @@
     ensureClients(); DB.settings = DB.settings || {};
     DB.vouchers = [];   // Kyleu discount vouchers were removed; only Dinokeng partner codes are used
     DB.bookings.forEach(ensureCars);
+    DB.bookings.forEach(function (b) { if (!b.key) b.key = newKey(); });
     if ((DB.dgrV || 0) < 2) { DB.dgrV = 2; DB.bookings.forEach(function (b) { var was = b.dgr; delete b.dgr; if (!live(b) || !(was || b.ci < add(TODAY, 3))) return; b.cars.forEach(function (c) { if (c.dgr) return; c.dgr = 'DGR' + Math.random().toString(36).slice(2, 8).toUpperCase(); c.dgrSent = { at: add(b.ci, -6) + ' 09:10', by: 'Sherri', code: c.dgr }; }); }); }
     newsDB();
   }
@@ -1051,7 +1069,7 @@
       if (extraDue(b)) attention.push({ i: 'alert', tone: 'bad', t: '<b>' + esc(guestName(b)) + '</b> owes ' + money(balance(b)) + ' more: ' + esc(b.extraDue.why || 'the total went up after paying in full').toLowerCase() + '. Send the new invoice.', ref: b.ref, o: 1 });
       if (live(b) && !b.vehTbc && b.status !== 'out' && b.co >= TODAY && namedIn(b) > people(b)) attention.push({ i: 'users', tone: 'warn', t: 'Vehicles list more people than the booking for <b>' + esc(guestName(b)) + '</b> (' + namedIn(b) + ' named, ' + people(b) + ' booked)', ref: b.ref, o: 5 });
       if (b.changeReq && !b.changeReq.done && live(b)) attention.push({ i: 'cal', tone: 'warn', t: '<b>' + esc(guestName(b)) + '</b> asked to change the dates or guests (' + fd(b.ci) + ')', ref: b.ref, o: 1 });
-      if (live(b) && b.status !== 'in' && b.status !== 'out' && b.ci >= TODAY && diff(TODAY, b.ci) <= 7 && (b.vehTbc || ensureCars(b).some(function (c) { return !c.reg; }))) attention.push({ i: 'car', tone: 'warn', t: 'Vehicle details missing for <b>' + esc(guestName(b)) + '</b> (' + fdw(b.ci) + '): ask for them', ref: b.ref, o: 5 });
+      if (live(b) && b.status !== 'in' && b.status !== 'out' && b.ci >= TODAY && diff(TODAY, b.ci) <= 10 && paidUp(b) && !b.finalised) attention.push({ i: 'car', tone: 'warn', t: '<b>' + esc(guestName(b)) + '</b> has paid but not finalised the booking (' + fdw(b.ci) + '): send the finalise link or fill it in', ref: b.ref, o: 5 });
       var ps = preShop(b); if (ps && live(b) && b.status !== 'out' && (b.ci === TODAY || b.ci === add(TODAY, 1))) attention.push({ i: 'cart', tone: 'info', t: 'Have ready for <b>' + esc(guestName(b)) + '</b> (' + (b.ci === TODAY ? 'today' : 'tomorrow') + '): ' + esc(ps.desc.replace(/^Shop order for arrival: /, '')), ref: b.ref, o: 3 });
       if (s.k === 'pop') attention.push({ i: 'note', tone: 'info', t: 'Proof of payment from <b>' + esc(guestName(b)) + '</b>: check the bank for ' + money(deposit(b)), ref: b.ref, o: 1 });
       if (s.k === 'overdue') attention.push({ i: 'alert', tone: 'bad', t: '<b>' + esc(guestName(b)) + '</b> has not paid the EFT deposit (due ' + fd(depositDue(b)) + '). Remind or release the stand.', ref: b.ref, o: 2 });
@@ -1550,7 +1568,7 @@
   function invMailBody(b, inv, updated) {
     var st = K.invoiceState(inv);
     return 'Hi ' + b.guest.first + ',\n\n' + (updated === 'staff' ? 'Please find your invoice ' + inv.no + ' for ' + standById(b.stand).name + ', ' + fd(b.ci, LONGD) + ' to ' + fd(b.co, LONGD) + ', attached.' : updated ? 'Your booking ' + b.ref + ' was changed, so here is your updated invoice ' + inv.no + '.' : 'Thank you for booking ' + standById(b.stand).name + ' from ' + fd(b.ci, LONGD) + ' to ' + fd(b.co, LONGD) + '. Your invoice ' + inv.no + ' is attached.') + '\n\n' +
-      (st.k === 'due' ? st.t + '. Pay by EFT using reference ' + b.ref + '; our banking details are on the invoice. When you have paid, press "I have paid" under Change my booking at www.kyleu.co.za/manage.html.' : st.t) + '\n\nSee you in the bush!\nThe Kyleu team';
+      (st.k === 'due' ? st.t + '. Pay by EFT using reference ' + b.ref + '; our banking details are on the invoice. When you have paid, press "I have paid" on your booking page:\n' + bookingLink(b) + '\n\nOnce your booking is paid in full, the same link lets you finalise it (vehicles, passengers and arrival time).' : st.t) + '\n\nSee you in the bush!\nThe Kyleu team';
   }
   function invSec(b) {
     var list = (b.invoices || []).slice().reverse();
@@ -1726,7 +1744,7 @@
         return { subject: fill(T.s, b), text: fill(T.b(b), b), docs: docs };
       } });
   }
-  function defaultTemplate(b) { return b.status === 'pending' ? 'eft' : balance(b) && b.ci > TODAY ? 'balance' : diff(TODAY, b.ci) <= 10 && b.ci >= TODAY ? 'arrival' : b.status === 'out' ? 'thanks' : 'confirm'; }
+  function defaultTemplate(b) { return paidUp(b) && !b.finalised && b.ci >= TODAY ? 'finalise' : b.status === 'pending' ? 'eft' : balance(b) && b.ci > TODAY ? 'balance' : diff(TODAY, b.ci) <= 10 && b.ci >= TODAY ? 'arrival' : b.status === 'out' ? 'thanks' : 'confirm'; }
 
   function logEmail(b, subject, body, att, to) {
     var t = DB.threads.filter(function (x) { return x.ref === b.ref && x.status !== 'closed'; })[0];
@@ -2615,6 +2633,8 @@
     if (act === 'news-new') return actPost(null);
     if (act === 'dgr') return openBooking(ref);
     if (act === 'inv-new') return actInvNew(ref);
+    if (act === 'link-copy') { var lb = byRef(ref), lk = bookingLink(lb); try { navigator.clipboard.writeText(lk).then(function () { toast('Link copied'); }, function () { prompt('Copy the link', lk); }); } catch (e) { prompt('Copy the link', lk); } return; }
+    if (act === 'fin-mark') { var fb = byRef(ref); fb.finalised = { at: nowStamp(), by: ME.name }; fb.notes.push({ at: nowStamp(), by: ME.name, text: 'Booking finalised by staff.' }); log('Booking ' + fb.ref + ' finalised', fb.ref); save(); refresh(); toast('Marked as finalised'); return; }
     if (act === 'inv-cur') { var cb = byRef(ref), ci_ = invFor(cb, 'Invoice'); CUR_INV[cb.ref + '|' + ci_.no] = ci_; return invView(cb, ci_); }
     if (act === 'inv-view' || act === 'inv-dl' || act === 'inv-send') {
       var ip = ref.split('|'), ib = byRef(ip[0]), iv = invGet(ib, ip[1]); if (!iv) { toast('Invoice not found'); return; }

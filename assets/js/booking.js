@@ -306,7 +306,6 @@
     if ((S && /q2b/i.test(S.get('Booking mode', 'demo')))) { window.open(S.get('Live availability (Q2B)'), '_blank', 'noopener'); return; }
     booking = { stand: current, ci: sel.ci, co: sel.co, g: { adults: state.adults, pens: state.pens, kids: state.kids } };
     extras = {}; shopQty = {}; extras.__shop = shopQty;
-    if (carsEd) carsEd.setTotal(booking.g.adults + booking.g.pens + booking.g.kids);
     step = 1; renderSide(); renderExtras(); goStep(1);
     modal.classList.add('open'); document.body.classList.add('lock');
     var payFull = quote(booking.stand, booking.ci, booking.co).payFull, online = onlinePay();
@@ -316,7 +315,7 @@
     $('h2', s3).textContent = online ? 'Secure your stand' : 'How to pay';
     $('h2 + p', s3).textContent = online ? 'Choose how you\'d like to pay.' : 'We\'ll email you an invoice with our banking details. Pay by EFT to secure your stand.';
     var df = $('.demo-flag span', s3); if (df) df.textContent = online ? 'Demo mode: this is a mock-up. No card is charged and nothing is sent. Use the "fill test card" link to try it.' : 'Demo mode: this is a mock-up. No booking is made and nothing is sent anywhere.';
-    var xw = $('[data-extras-wrap]', modal); if (xw) xw.hidden = !EXTRAS.some(function (x) { return !x.only || x.only === booking.stand.area; });
+
     payChanged();
   }
   function closeCheckout() { bwMark(wstep); modal.classList.remove('open'); if (!sheet.classList.contains('open')) document.body.classList.remove('lock'); }
@@ -352,7 +351,7 @@
     return q;
   }
   function renderExtras() {
-    var box = $('[data-extras]', modal);
+    var box = $('[data-extras]', modal); if (!box) return;   // extras and the camp shop are chosen when the guest finalises the booking
     box.innerHTML = EXTRAS.filter(function (x) { return !x.only || x.only === booking.stand.area; }).map(function (x) {
       var ctl = x.unit === 'toggle' ? '<label class="check" style="margin:0"><input type="checkbox" data-x="' + x.id + '"> Add</label>'
         : '<div class="sb-guests"><button type="button" data-xm="' + x.id + '" aria-label="Fewer">−</button><output data-xo="' + x.id + '">0</output><button type="button" data-xp="' + x.id + '" aria-label="More">+</button></div>';
@@ -398,9 +397,12 @@
   }
   function confirmBooking() {
     var f = function (n) { var el = $('[name=' + n + ']', modal); return el ? el.value.trim() : ''; };
-    var q = renderSide(), pay = $('[name=pay]:checked', modal).value, cv = carsEd.get();
+    var q = renderSide(), pay = $('[name=pay]:checked', modal).value, cv = { count: 0, cars: [] };
+    // the guest's private link to their booking (in the demo a random key; live, the server makes it)
+    var bkey = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
     var ref = 'KY' + String(booking.ci.getFullYear()).slice(2) + '-' + Math.random().toString(36).slice(2, 7).toUpperCase();
     booking.ref = ref;
+    var blink = 'manage.html?b=' + encodeURIComponent(ref) + '&k=' + bkey;
     var isCard = pay === 'full' || pay === 'deposit';
     var paid = pay === 'full' ? q.cardTotal : pay === 'deposit' ? q.cardDeposit : pay === 'eft' ? (q.payFull ? q.total : q.deposit) : 0;
     var inv = makeInvoice(ref, q, isCard, paid, cv);
@@ -408,7 +410,7 @@
     try {
       var saved = JSON.parse(localStorage.getItem('kyleu-web-bookings') || '[]'), now = new Date();
       saved.push({ ref: ref, created: iso(now) + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'), stand: booking.stand.id, ci: iso(booking.ci), co: iso(booking.co),
-        adults: booking.g.adults, pens: booking.g.pens, kids: booking.g.kids, extras: { pp: extras.pp || 0 }, first: f('first'), last: f('last'), email: f('email'), phone: f('phone'), eta: f('eta'), notes: f('notes'),
+        adults: booking.g.adults, pens: booking.g.pens, kids: booking.g.kids, extras: {}, first: f('first'), last: f('last'), email: f('email'), phone: f('phone'), eta: '', notes: f('notes'), key: bkey,
         vehicles: cv.count, vehTbc: !cv.count, cars: cv.cars,
         shop: SHOP.filter(function (it) { return shopQty[it.label]; }).map(function (it) { return { label: it.label, qty: shopQty[it.label], each: it.each }; }),
         pay: pay, paid: paid, eft: q.total, card: q.cardTotal, invoice: inv });
@@ -426,12 +428,12 @@
       '<div class="inv-wrap">' + K.invoiceHTML(inv) + '</div>' +
       '<div class="inv-acts"><button class="btn btn-ghost" type="button" data-inv-pdf><svg><use href="#i-doc"/></svg>Download PDF</button><button class="btn btn-ghost" type="button" data-inv-print><svg><use href="#i-doc"/></svg>Print</button>' + (paid < inv.total ? '<button class="btn btn-green" type="button" data-inv-paid><svg><use href="#i-check"/></svg>I have paid</button>' : '') + '</div>' +
       '<div class="paid-box" data-paid-box></div>' +
+      '<div class="bk-link"><svg><use href="#i-doc"/></svg><div><b>The link to your booking</b><p>We have emailed it to you too. Use it to tell us you have paid or to amend your booking, and once it is paid in full, to finalise it.</p><a href="' + blink + '">' + K.esc(location.href.replace(/[^/]*$/, '') + blink) + '</a></div></div>' +
       '<h3 style="margin:26px 0 6px">What happens next</h3><ol class="next-steps">' +
-      (pay === 'invoice' ? '<li><b>1</b><span>Pay the ' + (q.payFull ? 'full amount of ' + K.money(q.total) : q.depPct + '% deposit of ' + K.money(q.deposit)) + ' by EFT within ' + depDays() + ' days, using reference <b>' + ref + '</b>. Then press <b>I have paid</b>, here or later under <a href="manage.html?ref=' + encodeURIComponent(ref) + '">Change my booking</a>. We check the bank and confirm.</span></li>' : '') +
+      (pay === 'invoice' ? '<li><b>1</b><span>Pay the ' + (q.payFull ? 'full amount of ' + K.money(q.total) : q.depPct + '% deposit of ' + K.money(q.deposit)) + ' by EFT within ' + depDays() + ' days, using reference <b>' + ref + '</b>. Then press <b>I have paid</b>, here or later with <a href="' + blink + '">the link to your booking</a>. We check the bank and confirm.</span></li>' : '') +
       (!q.payFull && pay !== 'full' ? '<li><b>' + (pay === 'invoice' ? 2 : 1) + '</b><span>Balance of ' + K.money(isCard ? q.cardTotal - q.cardDeposit : q.total - q.deposit) + ' is due by ' + nice(q.balanceDue, { day: 'numeric', month: 'long' }) + '. We\'ll send a reminder.</span></li>' : '') +
       '<li><b>✓</b><span>Pay your Dinokeng conservation &amp; self-drive fees online or at the gate. Kyleu is a proud DGR CP member, so before your stay we send you a <b>Conservation Fee Discount Voucher</b> code for each vehicle (R85 instead of R100 per adult per night). <a href="dinokeng.html#fees">Dinokeng fees</a></span></li>' +
-      (cv.count && cv.cars.every(function (c) { return c.reg && c.driver; }) ? '' : '<li><b>✓</b><span>Before you arrive, add ' + (cv.count ? 'the missing vehicle details and passengers' : 'how many vehicles are coming, with each registration, driver and passengers') + ' under <a href="manage.html?ref=' + encodeURIComponent(ref) + '">Change my booking</a>. Keep your reference <b>' + ref + '</b> handy.</span></li>') +
-      (cv.count && cv.cars.every(function (c) { return c.reg && c.driver; }) ? '<li><b>✓</b><span>Need to change something? Use <a href="manage.html?ref=' + encodeURIComponent(ref) + '">Change my booking</a> with your reference <b>' + ref + '</b>.</span></li>' : '') +
+      '<li><b>✓</b><span>Once your booking is <b>paid in full</b>, we email you a link to <b>finalise</b> it: your vehicles and who is in each one, roughly when you arrive, and anything you want waiting from the camp shop.</span></li>' +
       '<li><b>✓</b><span>Enter at Dinokeng <b>Tau Gate</b>, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km. <a href="contact.html">Directions</a></span></li></ol>' +
       '<div class="cta-actions"><button class="btn" type="button" data-ics><svg><use href="#i-cal"/></svg>Add to calendar</button><a class="btn btn-green" target="_blank" rel="noopener" href="https://wa.me/27604584478?text=' + encodeURIComponent('Hi Kyleu! My booking reference is ' + ref + ' (' + booking.stand.name + ', ' + iso(booking.ci) + ' to ' + iso(booking.co) + ').') + '"><svg><use href="#i-wa"/></svg>Share with Kyleu</a></div>' +
       '<div class="demo-flag" style="margin:22px 0 0;text-align:left"><svg><use href="#i-info"/></svg><span>Demo mode: this is a mock-up. No booking was made, nothing was charged and no details were sent anywhere. A copy stays in this browser only, so you can see it in the admin demo.</span></div></div>';
@@ -459,7 +461,7 @@
     }));
     return { kind: 'Invoice', no: K.invoiceNo(ref, 'Invoice', 1), date: iso(t), ref: ref,
       guest: { name: (fv('first') + ' ' + fv('last')).trim(), email: fv('email'), phone: fv('phone') },
-      stay: { stand: booking.stand.name, ci: iso(booking.ci), co: iso(booking.co), nights: q.nights, guests: a + ' adult' + (a === 1 ? '' : 's') + (g.pens ? ' (' + g.pens + ' pensioner' + (g.pens === 1 ? '' : 's') + ')' : '') + (g.kids ? ', ' + g.kids + ' child' + (g.kids === 1 ? '' : 'ren') : ''), vehicles: cv.count || 'Not sure yet' },
+      stay: { stand: booking.stand.name, ci: iso(booking.ci), co: iso(booking.co), nights: q.nights, guests: a + ' adult' + (a === 1 ? '' : 's') + (g.pens ? ' (' + g.pens + ' pensioner' + (g.pens === 1 ? '' : 's') + ')' : '') + (g.kids ? ', ' + g.kids + ' child' + (g.kids === 1 ? '' : 'ren') : ''), vehicles: cv.count || '' },
       lines: lines, total: isCard ? q.cardTotal : q.total, paid: paid, deposit: isCard ? q.cardDeposit : q.deposit, depPct: q.depPct, depositDue: iso(q.payFull ? (due < booking.ci ? due : t) : due), balanceDue: iso(q.balanceDue), payFull: q.payFull };
   }
   function downloadICS() {
@@ -589,14 +591,10 @@
     // checkout
     $('.mc-close', modal).addEventListener('click', function () { if (step === 4) { closeCheckout(); closeSheet(); render(); } else closeCheckout(); });
     $$('[data-next]', modal).forEach(function (b) { b.addEventListener('click', function () { var cur = $('.mc-step.on', modal);
-      if (step === 1 && carsEd.over()) { K.toast('You have named more people in the vehicles than are on the booking'); carsEd.showCount(); return; }
       if (validate(cur)) { goStep(step + 1); if (step === 3) renderSide(); } }); });
     $$('[data-back]', modal).forEach(function (b) { b.addEventListener('click', function () { goStep(step - 1); }); });
     $$('[name=pay]', modal).forEach(function (r) { r.addEventListener('change', payChanged); });
-    carsEd = K.carsEditor($('[data-cars]', modal), { count: 1, total: state.adults + state.pens + state.kids });
-    $('[name=vehicles]', modal).addEventListener('change', function () { carsEd.setCount(+this.value); });
-    // vehicle 1's driver starts as the person booking; they can change it
-    ['first', 'last'].forEach(function (n) { $('[name=' + n + ']', modal).addEventListener('input', function () { var nm = ($('[name=first]', modal).value.trim() + ' ' + $('[name=last]', modal).value.trim()).trim(); if (nm) carsEd.suggestDriver(nm); }); });
+
     $('[data-pay-now]', modal).addEventListener('click', function () {
       var cur = $('.mc-step.on', modal); if (!validate(cur)) return;
       var btn = this; btn.disabled = true; var old = btn.innerHTML; btn.innerHTML = '<span class="spin"></span> Processing…';

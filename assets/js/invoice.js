@@ -90,7 +90,7 @@
       inv.lines.map(function (l) { return '<tr>' + (hasQ ? '<td class="q">' + (l.q || '') + '</td>' : '') + '<td>' + esc(l.t) + '</td>' + (hasQ ? '<td class="u">' + (l.u != null && !l.free ? money(l.u) : '') + '</td>' : '') + '<td>' + (l.free ? 'Free' : (l.amt < 0 ? '&minus;' : '') + money(Math.abs(l.amt))) + '</td></tr>'; }).join('') + '</tbody>' +
       '<tfoot>' + totals(inv, st).map(function (r) { return '<tr class="inv-' + r[2] + '"><td colspan="' + (hasQ ? 3 : 1) + '">' + r[0] + '</td><td>' + r[1].replace(/^-/, '&minus;') + '</td></tr>'; }).join('') + '</tfoot></table>' +
       (st.k === 'due' || st.k === 'quote' ? '<div class="inv-pay"><div><h4>When to pay</h4>' + (rows.length ? '<ul>' + rows.map(function (r) { return '<li><span>' + esc(r[0]) + '<small>' + esc(r[2]) + '</small></span><b>' + esc(r[1]) + '</b></li>'; }).join('') + '</ul>' : '') +
-        (st.k === 'due' ? '<p class="inv-paidtip">Paid? Press <b>I have paid</b> on the website (under Change my booking) or upload your proof of payment at kyleu.co.za/pop.html.</p>' : '') + '</div>' +
+        (st.k === 'due' ? '<p class="inv-paidtip">Paid? Press <b>I have paid</b> using the link to your booking (in your booking email), or upload your proof of payment at kyleu.co.za/pop.html.</p>' : '') + '</div>' +
         '<div class="inv-bank"><h4>Our bank details</h4><dl>' + bankRows().map(function (r) { return '<dt>' + r[0] + '</dt><dd>' + esc(r[1]) + '</dd>'; }).join('') + '</dl><p class="inv-refbox">Use reference <b>' + esc(inv.ref) + '</b></p></div></div>' : '') +
       (inv.note ? '<p class="inv-note inv-own">' + esc(inv.note) + '</p>' : '') +
       '<div class="inv-notes"><h4>Please note</h4><ul>' + notes().map(function (n) { return '<li>' + esc(n).replace('ENTIRELY AT YOUR OWN RISK', '<b>ENTIRELY AT YOUR OWN RISK</b>') + '</li>'; }).join('') + '</ul></div>' +
@@ -173,7 +173,7 @@
       fill(C.sand); doc.roundedRect(L, bx, 88, bh, 2, 2, 'F'); doc.roundedRect(106, bx, 90, bh, 2, 2, 'F');
       font(7.5, true, C.soft); text('WHEN TO PAY', L + 4, bx + 6.5); text('OUR BANK DETAILS', 110, bx + 6.5);
       var ry = bx + 13; schedule(inv).forEach(function (r) { font(9.5, true); text(r[0], L + 4, ry); text(r[1], L + 84, ry, { align: 'right' }); font(8, false, C.soft); text(r[2], L + 4, ry + 4.2); ry += 10; });
-      if (st.k === 'due') { font(7.6, false, C.soft); text(doc.splitTextToSize(clean('Paid? Press "I have paid" under Change my booking on kyleu.co.za, or upload your proof of payment at kyleu.co.za/pop.html.'), 80), L + 4, bx + 32.5); }
+      if (st.k === 'due') { font(7.6, false, C.soft); text(doc.splitTextToSize(clean('Paid? Press "I have paid" using the link to your booking (in your booking email), or upload your proof of payment at kyleu.co.za/pop.html.'), 80), L + 4, bx + 32.5); }
       ry = bx + 11.5; bankRows().forEach(function (r) { font(8.3, false, C.soft); text(r[0], 110, ry); font(8.8, true); text(r[1], 138, ry); ry += 4; });
       fill(C.sun); doc.roundedRect(110, bx + bh - 8.5, 82, 5.5, 1, 1, 'F'); font(8.5, true, C.white); text('Use reference ' + inv.ref, 151, bx + bh - 4.6, { align: 'center' });
       y = bx + bh + 5;

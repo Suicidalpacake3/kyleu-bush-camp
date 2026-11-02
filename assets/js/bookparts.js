@@ -40,7 +40,7 @@
     }
     function draw(focus) {
       if (!n) {
-        box.innerHTML = '<div class="cars-later">' + svg('i-clock') + '<p>' + (o.later || '<b>No problem.</b> Before you arrive, tell us how many vehicles are coming, with each registration, driver and the passengers in it. Use <a href="manage.html" target="_blank">Change my booking</a> any time, or WhatsApp us.') + '</p></div>';
+        box.innerHTML = '<div class="cars-later">' + svg('i-clock') + '<p>' + (o.later || '<b>No problem.</b> Before you arrive, tell us how many vehicles are coming, with each registration, driver and the passengers in it. Use the link to your booking any time, or WhatsApp us.') + '</p></div>';
         return;
       }
       while (cars.length < n) cars.push(blank());
@@ -121,7 +121,7 @@
     box.onclick = function (e) {
       var b = e.target.closest('[data-sp],[data-sm]'); if (!b) return;
       var it = items[+(b.dataset.sp || b.dataset.sm)], q = (qty[it.label] || 0) + (b.dataset.sp ? 1 : -1);
-      q = Math.max(0, Math.min(30, q)); if (q) qty[it.label] = q; else delete qty[it.label];
+      q = Math.max(0, Math.min(it.max || 30, q)); if (q) qty[it.label] = q; else delete qty[it.label];
       draw(); var again = box.querySelector('[data-' + (b.dataset.sp ? 'sp' : 'sm') + '="' + items.indexOf(it) + '"]'); if (again) again.focus();
       if (onChange) onChange();
     };
