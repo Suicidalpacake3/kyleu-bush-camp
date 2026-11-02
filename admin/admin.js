@@ -2467,7 +2467,7 @@
      25 rows a page. Filters: <select data-fk="OBJ:key">, <input data-q="OBJ:key">
      ========================================================= */
   var SORT = {}, TPG = {}, PG_SIZE = 25;
-  function FO(n) { return { VF: VF, F: F, IN: IN, GF: GF, SHOP: SHOP, PROD: PROD, CAL: CAL, STF: STF, GD: GD, LOGF: LOGF, PAYF: PAYF }[n]; }
+  function FO(n) { return { F: F, IN: IN, GF: GF, SHOP: SHOP, PROD: PROD, CAL: CAL, STF: STF, GD: GD, LOGF: LOGF, PAYF: PAYF }[n]; }
   function fsel(fk, cur, opts, label) { return '<select data-fk="' + fk + '" aria-label="' + esc(label || opts[0][1]) + '"' + (cur ? ' class="on"' : '') + '>' + opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (String(o[0]) === String(cur) ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select>'; }
   function fsearch(fk, cur, ph) { return '<label class="search">' + ic('search') + '<input type="search" data-q="' + fk + '" placeholder="' + esc(ph) + '" value="' + esc(cur) + '" aria-label="' + esc(ph) + '"></label>'; }
   function fclear(obj, keys) { var n = keys.filter(function (k) { return FO(obj)[k]; }).length; return n ? '<button class="btn ghost sm" data-fclear="' + obj + ':' + keys.join(',') + '">' + ic('x') + 'Clear ' + n + ' filter' + (n > 1 ? 's' : '') + '</button>' : ''; }
