@@ -744,7 +744,9 @@ body.header-hidden .searchbar-wrap, body.header-hidden .subnav { top: 0; }
 .cars-count { display: flex; gap: 8px; align-items: flex-start; margin: 0; font-size: .9rem; color: var(--ink-soft); }
 .cars-count svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }
 .cars-count.ok { color: var(--ok); }
-.cars-count.warn { color: var(--bad); }
+.cars-count.warn { color: #9a5a00; background: #fff6e8; border-radius: 10px; padding: 10px 12px; }
+.cars-count.bad { color: #8a2a1c; background: #fbeceb; border-radius: 10px; padding: 10px 12px; }
+.cars-count.shake { animation: bw-shake .45s; }
 .cars-later { display: flex; gap: 12px; align-items: flex-start; background: rgba(63,138,74,.08); border: 1.5px solid rgba(63,138,74,.25); border-radius: 14px; padding: 14px 16px; }
 .cars-later svg { width: 22px; height: 22px; flex: none; color: var(--ok); margin-top: 2px; }
 .cars-later p { margin: 0; line-height: 1.5; }
@@ -850,3 +852,13 @@ body.header-hidden .searchbar-wrap, body.header-hidden .subnav { top: 0; }
   .mg-ed-acts .btn { flex: 1; justify-content: center; }
 }
 
+/* Change my booking: number of guests and matching the names in the vehicles */
+.mg-plan { display: flex; gap: 10px; align-items: flex-start; background: rgba(63,138,74,.08); border-radius: 12px; padding: 12px 14px; line-height: 1.5; }
+.mg-plan svg { width: 20px; height: 20px; flex: none; margin-top: 2px; color: var(--ok); }
+.mg-plan.bad { background: #fbeceb; color: #8a2a1c; }
+.mg-plan.bad svg, .mg-bad-t { color: #8a2a1c; }
+.mg-warn { display: flex; gap: 8px; align-items: flex-start; background: #fff6e8; color: #7a4a00; border-radius: 12px; padding: 12px 14px; margin: 10px 0; }
+.mg-warn.bad { background: #fbeceb; color: #8a2a1c; }
+.mg-warn svg { width: 18px; height: 18px; flex: none; margin-top: 2px; }
+.mg-callus { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.mg-booking + .mg-callout { margin: -6px 0 18px; }

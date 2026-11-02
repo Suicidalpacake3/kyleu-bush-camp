@@ -558,7 +558,9 @@
 
     // checkout
     $('.mc-close', modal).addEventListener('click', function () { if (step === 4) { closeCheckout(); closeSheet(); render(); } else closeCheckout(); });
-    $$('[data-next]', modal).forEach(function (b) { b.addEventListener('click', function () { var cur = $('.mc-step.on', modal); if (validate(cur)) { goStep(step + 1); if (step === 3) renderSide(); } }); });
+    $$('[data-next]', modal).forEach(function (b) { b.addEventListener('click', function () { var cur = $('.mc-step.on', modal);
+      if (step === 1 && carsEd.over()) { K.toast('You have named more people in the vehicles than are on the booking'); carsEd.showCount(); return; }
+      if (validate(cur)) { goStep(step + 1); if (step === 3) renderSide(); } }); });
     $$('[data-back]', modal).forEach(function (b) { b.addEventListener('click', function () { goStep(step - 1); }); });
     $$('[name=pay]', modal).forEach(function (r) { r.addEventListener('change', payChanged); });
     carsEd = K.carsEditor($('[data-cars]', modal), { count: 1, total: state.adults + state.pens + state.kids });

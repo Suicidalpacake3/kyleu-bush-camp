@@ -31,11 +31,12 @@
     function count() {
       var el = box.querySelector('[data-cars-count]'); if (!el) return;
       var k = named(), t = total;
-      el.className = 'cars-count' + (t && k === t ? ' ok' : t && k > t ? ' warn' : '');
-      el.innerHTML = !k ? svg('i-users') + '<span>Names are optional for now. Your booking is for <b>' + t + ' ' + (t === 1 ? 'person' : 'people') + '</b>.</span>'
-        : t && k === t ? svg('i-check') + '<span>Everyone is named: <b>' + k + ' of ' + t + ' people</b>. Thank you!</span>'
-        : t && k > t ? svg('i-info') + '<span>You have named <b>' + k + ' people</b>, but the booking is for <b>' + t + '</b>. ' + (o.overText || 'Go back to step 2 to change the number of guests, or remove a name.') + '</span>'
-        : svg('i-users') + '<span>You have named <b>' + k + ' of ' + t + ' people</b>. Add the rest now or later.</span>';
+      // the drivers and passengers should add up to the number of guests on the booking
+      el.className = 'cars-count' + (!k ? '' : k === t ? ' ok' : k > t ? ' bad' : ' warn');
+      el.innerHTML = !k ? svg('i-users') + '<span>Names are optional for now. Your booking is for <b>' + t + ' ' + (t === 1 ? 'person' : 'people') + '</b>, so you will name ' + t + ' people in total (drivers and passengers).</span>'
+        : k === t ? svg('i-check') + '<span>Everyone is named: <b>' + k + ' of ' + t + ' people</b>. Thank you!</span>'
+        : k > t ? svg('i-info') + '<span><b>The numbers do not match.</b> You have named <b>' + k + ' people</b> in the vehicles, but the booking is for <b>' + t + '</b>. ' + (o.overText || 'Remove a name, or go back to step 2 to change the number of guests.') + '</span>'
+        : svg('i-info') + '<span><b>' + (t - k) + ' ' + (t - k === 1 ? 'person is' : 'people are') + ' not named yet.</b> You have named ' + k + ' of the ' + t + ' people on the booking. Add the rest now, or later before you arrive.</span>';
     }
     function draw(focus) {
       if (!n) {
@@ -75,6 +76,9 @@
     return {
       setCount: function (k) { read(); n = Math.max(0, k | 0); draw(); },
       setTotal: function (t) { total = t; count(); },
+      over: function () { read(); return n > 0 && named() > total; },
+      total: function () { return total; },
+      showCount: function () { var el = box.querySelector('[data-cars-count]'); if (el) { el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } },
       // fill vehicle 1's driver with the booker's name, until they type their own
       suggestDriver: function (name) { read(); if (!n || !cars[0]) return; if (!cars[0].driver.trim() || cars[0].driver === auto) { cars[0].driver = auto = name; var el = box.querySelector('.car-card[data-i="0"] [name=car-driver]'); if (el) el.value = name; count(); } },
       get: function () {
@@ -83,6 +87,20 @@
       },
       named: function () { read(); return named(); }
     };
+  };
+
+  /* ---------- stay price for a number of guests (same rules as the booking page) ---------- */
+  K.stayPrice = function (P, area, ci, co, g) {
+    var ss = area === 'self-sufficient', sec = ss ? 'Self-sufficient' : 'Ablution stands';
+    var R = { wk: P.num(sec, 'Weekend per person per night', ss ? 180 : 245), wd: P.num(sec, 'Weekday per person per night', ss ? 100 : 160), pe: P.num(sec, 'Pensioner weekday per person per night', ss ? 100 : 115), kid: P.num(sec, 'Children under 12', 0) };
+    var p = function (s) { var a = s.split('-'); return new Date(+a[0], a[1] - 1, +a[2]); }, iso = function (d) { return new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10); };
+    var acc = 0;
+    for (var d = p(ci), end = p(co); d < end; d.setDate(d.getDate() + 1)) {
+      var dow = d.getDay(), nx = new Date(d); nx.setDate(nx.getDate() + 1);
+      var wk = dow === 5 || dow === 6 || !!P.holidays[iso(nx)], pens = (!wk && dow >= 1 && dow <= 4) ? R.pe : (wk ? R.wk : R.wd);
+      acc += g.adults * (wk ? R.wk : R.wd) + g.pens * pens + g.kids * R.kid;
+    }
+    return acc;
   };
 
   /* ---------- camp shop ---------- */

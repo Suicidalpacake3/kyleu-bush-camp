@@ -329,6 +329,14 @@
     for (var i = cs.length - 1; i >= n; i--) if (cs[i].st === 'due' && !carTab(b, cs[i]).items.length) cs.splice(i, 1);
     b.vehicles = cs.length;
   }
+  function namedIn(b) { return (b.cars || []).reduce(function (a, c) { return a + (c.driver ? 1 : 0) + (c.guests || []).length; }, 0); }
+  function namesWarn(b) {   // the drivers and passengers should add up to the guests on the booking
+    if (b.vehTbc) return ''; var n = namedIn(b), t = people(b);
+    if (n > t) return '<p class="callout bad cflex">' + ic('alert') + '<span><b>The numbers do not match:</b> ' + n + ' people are named in the vehicles, but the booking is for ' + t + '. Check with ' + esc(b.guest.first) + ' and fix the vehicles or the number of guests.</span></p>';
+    if (n && n < t) return '<p class="callout warn cflex">' + ic('info') + '<span>' + (t - n) + ' of the ' + t + ' guests ' + (t - n === 1 ? 'is' : 'are') + ' not named in a vehicle yet.</span></p>';
+    return '';
+  }
+  function extraDue(b) { return b.extraDue && !b.extraDue.done && b.status !== 'cancelled' && balance(b) > 0; }
   function peopleTxt(x) { return (x.adults + x.pens) + ' adult' + (x.adults + x.pens === 1 ? '' : 's') + (x.pens ? ' (' + x.pens + ' pensioner' + (x.pens === 1 ? '' : 's') + ')' : '') + (x.kids ? ' + ' + x.kids + ' kid' + (x.kids > 1 ? 's' : '') : ''); }
   function importAmend() {
     var list = []; try { list = JSON.parse(localStorage.getItem(AMK) || '[]'); } catch (e) {}
@@ -338,6 +346,12 @@
       var b = byRefLoose(a.ref); if (!b) return;
       var done = [];
       if (a.details) { var cl = clientById(b.cid), cc = cl ? clientChanges(cl, a.details) : []; if (cl && cc.length) { applyClient(cl, a.details); done = done.concat(cc); } else if (!cl) { Object.assign(b.guest, a.details); done.push('contact details'); } }
+      if (a.guests && a.guests.mode === 'direct') {
+        var g = a.guests, wasFull = paid(b) > 0 && paid(b) >= b.total, q0 = quote(b.stand, b.ci, b.co, b, b.extras), q1 = quote(b.stand, b.ci, b.co, g, b.extras), before = b.total, ppl0 = peopleTxt(b);
+        b.adults = g.adults; b.pens = g.pens; b.kids = g.kids; b.eft += q1.eft - q0.eft; b.card += q1.card - q0.card; b.total = b.method === 'card' ? b.card : b.eft;
+        done.push('guests ' + ppl0 + ' to ' + peopleTxt(b) + (b.total !== before ? ' (total ' + money(before) + ' to ' + money(b.total) + ')' : ''));
+        if (wasFull && balance(b) > 0) { b.extraDue = { at: a.at, amt: balance(b), why: 'Guests added after paying in full' }; done.push(money(balance(b)) + ' now outstanding'); }
+      }
       if (a.cars) { applyCars(b, a.vehicles, a.cars); done.push(a.vehicles ? a.vehicles + ' vehicle' + (a.vehicles === 1 ? '' : 's') + ' with drivers and passengers' : 'not sure yet how many vehicles'); }
       if (a.eta != null) { b.eta = a.eta; done.push('arrival time ' + (a.eta || 'cleared')); }
       if (a.shopItems) { var before = b.total; setPreShop(b, a.shopItems, a.at); done.push('camp shop order (total ' + money(before) + ' to ' + money(b.total) + ')'); }
@@ -345,7 +359,7 @@
         var r = a.request; b.changeReq = Object.assign({ at: a.at }, r);
         var body = 'Please change my booking ' + b.ref + ' (' + standById(b.stand).name + '):\n\nDates: ' + fd(b.ci) + ' to ' + fd(b.co) + (r.ci !== b.ci || r.co !== b.co ? ', please change to ' + fd(r.ci) + ' to ' + fd(r.co) : ' (no change)') + '\nGuests: ' + peopleTxt(b) + (r.adults !== b.adults || r.pens !== b.pens || r.kids !== b.kids ? ', please change to ' + peopleTxt(r) : ' (no change)') + (r.msg ? '\n\n' + r.msg : '') + '\n\n' + b.guest.first;
         DB.threads.push({ id: uid('t'), subject: 'Change request: ' + b.ref, name: guestName(b), email: b.guest.email, phone: b.guest.phone, status: 'open', unread: true, ref: b.ref, msgs: [{ from: 'guest', at: a.at, body: body }] });
-        done.push('asked to change the dates or guests');
+        done.push(r.ci !== b.ci || r.co !== b.co ? (r.adults !== b.adults || r.pens !== b.pens || r.kids !== b.kids ? 'asked to change the dates and the number of guests' : 'asked to change the dates') : 'asked to change the number of guests');
       }
       if (a.note) { b.notes.push({ at: a.at, by: 'Guest', text: a.note }); done.push('left a message'); }
       if (!done.length) return;
@@ -461,7 +475,9 @@
       (b.changeReq && !b.changeReq.done ? (function (r) { return '<div class="callout warn cflex req">' + ic('cal') + '<div><b>' + esc(b.guest.first) + ' asked to change this booking</b> on the website (' + esc(r.at) + ').' +
         (r.ci !== b.ci || r.co !== b.co ? '<br>Dates: ' + fd(b.ci) + ' to ' + fd(b.co) + ' <b>→ ' + fd(r.ci) + ' to ' + fd(r.co) + '</b>' : '') +
         (r.adults !== b.adults || r.pens !== b.pens || r.kids !== b.kids ? '<br>Guests: ' + peopleTxt(b) + ' <b>→ ' + peopleTxt(r) + '</b>' : '') + (r.msg ? '<br>"' + esc(r.msg) + '"' : '') +
+        (paid(b) > 0 ? '<br><b>' + esc(b.guest.first) + ' has already paid ' + money(paid(b)) + '.</b> Talk to them about the difference, then make the change with Edit booking.' : '') +
         '<div class="row-btns"><button type="button" class="btn sm" data-act="edit" data-ref="' + b.ref + '">' + ic('edit') + 'Edit booking</button><button type="button" class="btn ghost sm" data-act="req-done" data-ref="' + b.ref + '">' + ic('check') + 'Dealt with</button></div></div></div>'; })(b.changeReq) : '') +
+      (extraDue(b) ? '<div class="callout bad cflex">' + ic('alert') + '<div><b>' + money(balance(b)) + ' outstanding.</b> ' + esc(b.extraDue.why || 'The total went up after paying in full') + ' (' + esc(b.extraDue.at) + '). Send ' + esc(b.guest.first) + ' the new invoice for just this amount.<div class="row-btns"><button type="button" class="btn sm" data-act="send-doc" data-ref="' + b.ref + '|extra">' + ic('send') + 'Send new invoice</button></div></div></div>' : '') +
       (b.guestEdit && b.guestEdit.at >= add(TODAY, -14) ? '<p class="callout info cflex">' + ic('edit') + '<span><b>Changed by ' + esc(b.guest.first) + ' on the website</b> ' + esc(b.guestEdit.at) + ': ' + esc(b.guestEdit.what.join('; ')) + '.</span></p>' : '') +
       (function () { var cl = clientById(b.cid), sb = staysBefore(b); return '<section class="d-sec"><h4 class="h4-row">Guest' + (cl ? '<button type="button" class="link-btn" data-client="' + cl.id + '">Client card' + ic('chev-r') + '</button>' : '') + '</h4><div class="guest-line"><span class="avatar">' + esc((b.guest.first[0] || '?') + ((b.guest.last.split(' ').pop() || '?')[0] || '')) + '</span><div><b>' + esc(guestName(b)) + '</b> ' + (sb ? '<span class="pill ok ret">' + ic('return') + 'Returning · ' + nth(sb + 1) + ' stay</span>' : '<span class="pill info">First stay</span>') + '<div class="muted small">' + esc(b.guest.email || 'No email') + '</div></div></div>' + (cl && cl.notes ? '<p class="cl-note">' + ic('note') + '<span>' + esc(cl.notes) + '</span></p>' : ''); })() +
       '<div class="chips"><a class="chip" href="tel:' + esc(b.guest.phone.replace(/\s/g, '')) + '">' + ic('phone') + esc(b.guest.phone) + '</a><a class="chip" target="_blank" rel="noopener" href="https://wa.me/' + wa + '">' + ic('wa') + 'WhatsApp</a><a class="chip" href="mailto:' + esc(b.guest.email) + '">' + ic('mail') + 'Email</a></div></section>' +
@@ -530,6 +546,7 @@
     invoice: { t: 'Invoice', s: 'Your Kyleu invoice {ref}', b: function (b) { return 'Hi {first},\n\nPlease find your invoice for {stand}, {ci} to {co}, attached.\n\nTotal {total}, paid so far {paid}, balance {balance}. Pay by EFT using reference {ref}.\n\nThe Kyleu team'; } },
     indemnity: { t: 'Indemnity form', s: 'Kyleu indemnity form for {ref}', b: function (b) { return 'Hi {first},\n\nPlease find the Kyleu indemnity form attached, one page per vehicle. Every adult signs it when you arrive. You are welcome to print it and fill it in before you come, which makes check-in quicker.\n\nSee you on {ci}!\nThe Kyleu team'; } },
     update: { t: 'Booking updated', s: 'Your Kyleu booking {ref} has been updated', b: function (b) { return 'Hi {first},\n\nWe have updated your booking {ref}: {stand}, {ci} to {co}.\nTotal {total}, paid {paid}, balance {balance}.\n\nIf anything looks wrong, just reply to this email.\n\nThe Kyleu team'; } },
+    extra: { t: 'Extra amount to pay', s: 'Your updated Kyleu invoice {ref}', b: function (b) { return 'Hi {first},\n\nThank you for letting us know about the change to your booking {ref}. Your new total is {total}. You have already paid {paid}, so {balance} is still to pay.\n\nThe updated invoice is attached. Please pay the {balance} by EFT using reference {ref} before you arrive on {ci}.\n\nThe Kyleu team'; } },
     details: { t: 'Ask for vehicle details', s: 'Your Kyleu stay: vehicle details please', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}. Before you arrive, please send us each vehicle\'s registration, the driver and everyone travelling in it. Everyone signs an indemnity form at the gate and we make one Dinokeng partner code per vehicle, so this makes your arrival much quicker.\n\nYou can add them yourself at www.kyleu.co.za/manage.html with your booking reference {ref}, or simply reply to this message.\n\nThe Kyleu team'; } },
     confirm: { t: 'Booking confirmation', s: 'Booking confirmed: {ref}', b: function (b) { return 'Hi {first},\n\nYour booking {ref} is confirmed: {stand}, {ci} to {co}.\nTotal {total}, paid {paid}, balance {balance} due by {baldue}.\n\nThe Kyleu team'; } }
   };
@@ -605,20 +622,21 @@
           if (s.vehicles !== (b.vehicles || 1)) changes.push('vehicles ' + (b.vehicles || 1) + ' to ' + s.vehicles);
           if (s.eta !== (b.eta || '')) changes.push('arrival time ' + (b.eta || 'blank') + ' to ' + (s.eta || 'blank'));
           if (s.gd !== (ex.gd || 0)) changes.push('game drive ' + (ex.gd || 0) + ' to ' + s.gd + ' people');
-          var oldTotal = b.total;
+          var oldTotal = b.total, wasFull = paid(b) > 0 && paid(b) >= b.total;
           b.ci = s.ci; b.co = s.co; b.stand = s.stand; b.adults = s.adults; b.pens = s.pens; b.kids = s.kids; if (s.vehicles !== (b.vehicles || 1)) b.vehTbc = false; b.vehicles = s.vehicles; b.eta = s.eta; b.extras = Object.assign({}, ex, { gd: s.gd }); fitCars(b);
           // shift the price by the difference, so discounts and shop charges already on the booking stay
           b.eft += p.de; b.card += p.dc; b.total += b.method === 'card' ? p.dc : p.de;
           if (b.total !== oldTotal) changes.push('total ' + money(oldTotal) + ' to ' + money(b.total));
+          if (wasFull && b.total > oldTotal && balance(b) > 0) b.extraDue = { at: nowStamp(), amt: balance(b), why: 'The total went up after paying in full' };
         }
         if (src !== b.source) { changes.push('booked via ' + b.source + ' to ' + src); b.source = src; }
         if (!changes.length) { toast('Nothing was changed'); return; }
         if (b.status === 'pending' && paid(b) > 0 && paid(b) >= deposit(b)) b.status = 'confirmed';
         var txt = changes.join('; '); txt = txt.charAt(0).toUpperCase() + txt.slice(1);
         b.notes.push({ at: nowStamp(), by: ME.name, text: 'Booking edited: ' + txt + '.' + (why ? ' Reason: ' + why : '') });
-        if (fval(f, 'tell')) setTimeout(function () { sendTemplate(b, 'update'); }, 0);
+        if (fval(f, 'tell')) setTimeout(function () { sendTemplate(b, extraDue(b) ? 'extra' : 'update'); }, 0);
         log('Booking ' + b.ref + ' edited', b.ref); save(); refresh();
-        toast('Booking updated');
+        toast(!b.vehTbc && namedIn(b) > people(b) ? 'Booking updated. The vehicles still list ' + namedIn(b) + ' people: check them.' : 'Booking updated');
       }, { wide: true, noFocus: true, onOpen: function (f) {
         var box = $('[data-q]', f), tell = f.elements.tell;
         tell.addEventListener('change', function () { tellTouched = true; });
@@ -627,7 +645,7 @@
           var s = read(f);
           if (s.co <= s.ci) { box.innerHTML = '<span class="bad-t">Departure must be after arrival.</span>'; return; }
           var p = priceOf(s), nt = b.total + (b.method === 'card' ? p.dc : p.de), pd = paid(b), moved = s.ci !== b.ci || s.co !== b.co || s.stand !== b.stand, st = standById(s.stand);
-          box.innerHTML = (moved ? (overlaps(s.stand, s.ci, s.co, b.ref) ? '<span class="pill bad"><i></i>Stand not free for those nights</span>' : '<span class="pill ok"><i></i>Stand free</span>') : '') + (s.adults + s.pens + s.kids > st.guests ? ' <span class="pill warn"><i></i>Over ' + st.guests + ' guests</span>' : '') +
+          box.innerHTML = (moved ? (overlaps(s.stand, s.ci, s.co, b.ref) ? '<span class="pill bad"><i></i>Stand not free for those nights</span>' : '<span class="pill ok"><i></i>Stand free</span>') : '') + (s.adults + s.pens + s.kids > st.guests ? ' <span class="pill warn"><i></i>Over ' + st.guests + ' guests</span>' : '') + (!b.vehTbc && namedIn(b) > s.adults + s.pens + s.kids ? ' <span class="pill bad"><i></i>' + namedIn(b) + ' people named in the vehicles</span>' : '') +
             '<div class="qb-row"><span>' + p.nights + ' night' + (p.nights > 1 ? 's' : '') + ' · ' + methodLabel(b.method) + '</span><span class="price-pair">' + (nt !== b.total ? '<s>' + money(b.total) + '</s> ' : '') + '<b>' + money(nt) + '</b></span></div>' +
             '<div class="muted small">Paid ' + money(pd) + ' · ' + (nt >= pd ? 'balance ' + money(nt - pd) : '<span class="warn-t">' + money(pd - nt) + ' more than the new total. Keep it as credit or refund it.</span>') + '</div>';
           if (!tellTouched) tell.checked = moved || nt !== b.total;
@@ -767,7 +785,7 @@
     var cs = ensureCars(b), nIn = cs.filter(function (c) { return c.st === 'in'; }).length, canIn = (b.status === 'confirmed' || b.status === 'in') && b.ci <= TODAY && TODAY <= b.co;
     var missing = b.vehTbc || cs.some(function (c) { return !c.reg || !c.driver; });
     return '<section class="d-sec"><h4 class="h4-row">Vehicles · ' + (b.status === 'out' ? 'all left' : nIn + ' of ' + cs.length + ' in camp') + (b.status !== 'out' ? '<button type="button" class="link-btn" data-act="car-add" data-ref="' + b.ref + '">' + ic('plus') + 'Add vehicle</button>' : '') + '</h4>' +
-      (b.vehTbc ? '<div class="callout warn cflex veh-tbc">' + ic('alert') + '<span>The client is <b>not sure yet how many vehicles</b> are coming. Ask them closer to the time, or they can add it under Change my booking on the website.</span><button type="button" class="btn ghost sm" data-act="veh-ok" data-ref="' + b.ref + '">Number confirmed</button></div>' : '') +
+      namesWarn(b) + (b.vehTbc ? '<div class="callout warn cflex veh-tbc">' + ic('alert') + '<span>The client is <b>not sure yet how many vehicles</b> are coming. Ask them closer to the time, or they can add it under Change my booking on the website.</span><button type="button" class="btn ghost sm" data-act="veh-ok" data-ref="' + b.ref + '">Number confirmed</button></div>' : '') +
       cs.map(function (c, i) {
         var k = b.ref + '|' + c.id, t = carTab(b, c), acts = [];
         if (c.st === 'due' && canIn) acts.push('<button type="button" class="btn green sm" data-act="car-in" data-ref="' + k + '">' + ic('in') + 'Check in</button>');
@@ -830,7 +848,7 @@
     var o = carOf(key), b = o.b, c = o.c, i = o.i; if (!c) return;
     modal('Edit ' + esc(carLabel(c, i)), carForm(c) + (c.st !== 'due' ? indBox(key, !!c.ind) : ''), 'Save', function (f) {
       readCar(f, c); if (c.st !== 'due') c.ind = fval(f, 'ind') ? (c.ind || { at: nowStamp(), by: ME.name }) : null;
-      log('Vehicle details updated on ' + b.ref, b.ref); save(); refresh(); toast('Vehicle saved');
+      log('Vehicle details updated on ' + b.ref, b.ref); save(); refresh(); toast(namedIn(b) > people(b) ? 'Saved, but ' + namedIn(b) + ' people are now named and the booking is for ' + people(b) : 'Vehicle saved');
     });
   }
   var IND_DEFAULT = 'Kyleu Bush Camp is inside the Dinokeng Big 5 Game Reserve. Dangerous wild animals, including lion, leopard, elephant, rhino and buffalo, roam freely through the reserve and the unfenced parts of the camp.\n\nI enter the reserve, camp and drive at my own risk. I accept responsibility for myself, the people in my vehicle and any children in my care, and for keeping children supervised at all times, including at the pool.\n\nI release Kyleu Bush Camp, its owners and staff from any claim for injury, illness, death, loss or damage to property, however it is caused, except where the law does not allow it.\n\nI will follow the camp rules and the Dinokeng reserve rules: stay in my vehicle outside the camp, keep to the speed limits, never feed or approach animals, and only make fires in the boma or braai provided.';
@@ -857,6 +875,7 @@
     if (b.status === 'cancelled') return '';
     var cs = ensureCars(b), n = cs.length, sent = cs.filter(function (c) { return c.dgrSent; }).length;
     return '<section class="d-sec dgr"><h4 class="h4-row">Dinokeng partner codes<span class="pill ' + (sent === n ? 'ok' : sent ? 'warn' : 'muted') + '">' + sent + ' of ' + n + ' sent</span></h4>' +
+      (b.vehTbc ? '<p class="callout warn cflex">' + ic('info') + '<span>' + esc(b.guest.first) + ' is not sure yet how many vehicles are coming. Make the codes once they tell you.</span></p>' : '') +
       '<ol class="dgr-steps"><li><b>Make the codes</b> on the Dinokeng site: one code per vehicle (copy the client\'s email and the number of vehicles below).</li><li><b>Paste</b> each vehicle\'s code in its box.</li><li><b>Send the codes to the client yourself</b>, by WhatsApp or email. Dinokeng does not send them.</li></ol>' +
       '<div class="dgr-copy"><button type="button" class="chip" data-copy="' + esc(b.guest.email) + '">' + ic('mail') + esc(b.guest.email || 'No email yet') + '<small>Copy</small></button><button type="button" class="chip" data-copy="' + n + '">' + ic('car') + n + ' vehicle' + (n === 1 ? '' : 's') + '<small>Copy</small></button><a class="btn ghost sm" href="' + esc(dgrLink()) + '" target="_blank" rel="noopener">' + ic('ext') + 'Open Dinokeng site to make codes</a></div>' +
       '<div class="dgr-cars">' + cs.map(function (c, i) {
@@ -1009,6 +1028,8 @@
       var s = stateOf(b);
       if (b.isNew) attention.push({ i: 'bell', tone: 'info', t: 'New website booking: <b>' + esc(guestName(b)) + '</b>, ' + esc(standById(b.stand).name) + ', ' + fd(b.ci), ref: b.ref, o: 0 });
       if (b.guestEdit && !b.guestEdit.seen) attention.push({ i: 'edit', tone: 'info', t: '<b>' + esc(guestName(b)) + '</b> changed their booking on the website: ' + esc(b.guestEdit.what.join('; ')), ref: b.ref, o: 0 });
+      if (extraDue(b)) attention.push({ i: 'alert', tone: 'bad', t: '<b>' + esc(guestName(b)) + '</b> owes ' + money(balance(b)) + ' more: ' + esc(b.extraDue.why || 'the total went up after paying in full').toLowerCase() + '. Send the new invoice.', ref: b.ref, o: 1 });
+      if (live(b) && !b.vehTbc && b.status !== 'out' && b.co >= TODAY && namedIn(b) > people(b)) attention.push({ i: 'users', tone: 'warn', t: 'Vehicles list more people than the booking for <b>' + esc(guestName(b)) + '</b> (' + namedIn(b) + ' named, ' + people(b) + ' booked)', ref: b.ref, o: 5 });
       if (b.changeReq && !b.changeReq.done && live(b)) attention.push({ i: 'cal', tone: 'warn', t: '<b>' + esc(guestName(b)) + '</b> asked to change the dates or guests (' + fd(b.ci) + ')', ref: b.ref, o: 1 });
       if (live(b) && b.status !== 'in' && b.status !== 'out' && b.ci >= TODAY && diff(TODAY, b.ci) <= 7 && (b.vehTbc || ensureCars(b).some(function (c) { return !c.reg; }))) attention.push({ i: 'car', tone: 'warn', t: 'Vehicle details missing for <b>' + esc(guestName(b)) + '</b> (' + fdw(b.ci) + '): ask for them', ref: b.ref, o: 5 });
       var ps = preShop(b); if (ps && live(b) && b.status !== 'out' && (b.ci === TODAY || b.ci === add(TODAY, 1))) attention.push({ i: 'cart', tone: 'info', t: 'Have ready for <b>' + esc(guestName(b)) + '</b> (' + (b.ci === TODAY ? 'today' : 'tomorrow') + '): ' + esc(ps.desc.replace(/^Shop order for arrival: /, '')), ref: b.ref, o: 3 });
@@ -1567,7 +1588,7 @@
       } });
   }
   // messages from the template list, each with the documents that belong to it
-  var SEND_DOCS = { eft: ['Invoice'], balance: ['Invoice'], invoice: ['Invoice'], confirm: ['Booking confirmation'], update: ['Booking confirmation'], indemnity: ['indemnity'], arrival: ['indemnity', 'codes'] };
+  var SEND_DOCS = { extra: ['Invoice'], eft: ['Invoice'], balance: ['Invoice'], invoice: ['Invoice'], confirm: ['Booking confirmation'], update: ['Booking confirmation'], indemnity: ['indemnity'], arrival: ['indemnity', 'codes'] };
   function sendTemplate(b, key) {
     sendBox({ b: b, title: 'Send to ' + guestName(b), value: key, choices: Object.keys(TEMPLATES).map(function (k) { return [k, TEMPLATES[k].t]; }),
       load: function (k) {

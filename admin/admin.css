@@ -1135,3 +1135,6 @@ html:has(body.lock) { overflow: hidden; }
 .veh-tbc { align-items: center; flex-wrap: wrap; }
 .veh-tbc > span { flex: 1; min-width: 200px; }
 .car-b small.car-pass { color: var(--ink, inherit); font-size: .8rem; }
+.callout.bad { background: var(--bad-bg, #fbeceb); }
+.callout.cflex > div { flex: 1; line-height: 1.5; }
+.callout.cflex .row-btns { margin-top: 10px; }
