@@ -140,12 +140,13 @@
             <div class="field"><label for="f-phone">Mobile number</label><input id="f-phone" name="phone" type="tel" autocomplete="tel" placeholder="e.g. 082 123 4567" required><span class="msg">Please add a mobile number</span></div>
           </div>
           <p class="fieldset-title">Your setup</p>
-          <div class="grid-3">
+          <div class="grid-2">
             <div class="field"><label for="f-setup">Camping with</label><select id="f-setup" name="setup" required><option value="">Choose…</option><option>Ground tent</option><option>Rooftop tent</option><option>Off-road trailer</option><option>Caravan</option><option>Motorhome / camper</option><option>Mixed group</option></select><span class="msg">Please choose</span></div>
-            <div class="field"><label for="f-veh">Vehicles</label><select id="f-veh" name="vehicles"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></div>
             <div class="field"><label for="f-eta">Arriving around</label><select id="f-eta" name="eta"><option>Before 12:00</option><option selected>12:00-15:00</option><option>15:00-18:00</option><option>After 18:00</option></select></div>
           </div>
-          <div class="field"><label for="f-reg">Vehicle registration(s) <span class="opt">(optional, speeds up check-in)</span></label><input id="f-reg" name="reg" placeholder="e.g. CA 123-456"></div>
+          <p class="fieldset-title">Vehicles</p>
+          <div class="field"><label for="f-veh">How many vehicles are coming?</label><select id="f-veh" name="vehicles"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option></select><span class="field-note">One person books for the whole group. We send you a Dinokeng partner code for every vehicle.</span></div>
+          <div class="cars-list" data-cars></div>
           <div class="field"><label for="f-notes">Anything we should know? <span class="opt">(optional)</span></label><textarea id="f-notes" name="notes" placeholder="Celebrating something? Travelling with a big group? Need a porta potty?"></textarea></div>
         </div>
         <div class="mc-actions"><span class="muted" style="font-size:.85rem"><svg width="14" height="14" style="vertical-align:-2px"><use href="#i-lock"/></svg> Your details are protected under POPIA. <a href="policies.html#privacy" target="_blank">Privacy</a></span><button class="btn" type="button" data-next>Continue <svg><use href="#i-arrow"/></svg></button></div>

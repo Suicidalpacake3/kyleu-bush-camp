@@ -410,6 +410,17 @@
     var s3t = $('.mc-step[data-step="3"] .eft-box', modal); if (s3t && !onlinePay()) s3t.hidden = false;
     renderSide();
   }
+  // one row per vehicle: registration and driver (both optional)
+  function drawCars() {
+    var box = $('[data-cars]', modal); if (!box) return;
+    var n = +($('[name=vehicles]', modal) || {}).value || 1, old = $$('.car-row', box).map(function (r) { return { reg: $('[name=car-reg]', r).value, driver: $('[name=car-driver]', r).value }; });
+    var rows = '';
+    for (var i = 0; i < n; i++) {
+      var o = old[i] || { reg: '', driver: '' };
+      rows += '<div class="car-row"><b>Vehicle ' + (i + 1) + '</b><input name="car-reg" value="' + K.esc(o.reg) + '" placeholder="Registration, e.g. CA 123-456" aria-label="Vehicle ' + (i + 1) + ' registration" autocomplete="off"><input name="car-driver" value="' + K.esc(o.driver) + '" placeholder="Driver\'s name" aria-label="Vehicle ' + (i + 1) + ' driver"></div>';
+    }
+    box.innerHTML = rows + '<p class="field-note">Registrations and drivers are optional, but they make check-in at the gate quicker.</p>';
+  }
   function confirmBooking() {
     var f = function (n) { var el = $('[name=' + n + ']', modal); return el ? el.value.trim() : ''; };
     var q = renderSide(), pay = $('[name=pay]:checked', modal).value;
@@ -422,6 +433,7 @@
       var saved = JSON.parse(localStorage.getItem('kyleu-web-bookings') || '[]'), now = new Date();
       saved.push({ ref: ref, created: iso(now) + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'), stand: booking.stand.id, ci: iso(booking.ci), co: iso(booking.co),
         adults: booking.g.adults, pens: booking.g.pens, kids: booking.g.kids, extras: extras, first: f('first'), last: f('last'), email: f('email'), phone: f('phone'), setup: f('setup'), notes: f('notes'),
+        vehicles: +f('vehicles') || 1, cars: $$('[data-cars] .car-row', modal).map(function (r) { return { reg: $('[name=car-reg]', r).value.trim(), driver: $('[name=car-driver]', r).value.trim() }; }),
         pay: pay, paid: paid, eft: q.total, card: q.cardTotal, voucher: extras.__voucher ? extras.__voucher.code : '', discount: q.exLines.filter(function (l) { return l.voucher; }).reduce(function (a, l) { return a - l.v; }, 0) });
       localStorage.setItem('kyleu-web-bookings', JSON.stringify(saved.slice(-50)));
     } catch (e) {}
@@ -435,7 +447,7 @@
       '<ol class="next-steps">' +
       (pay === 'invoice' ? '<li><b>1</b><span>We\'ll email your invoice. Pay the ' + (q.payFull ? 'full amount' : q.depPct + '% deposit (' + K.money(q.deposit) + ') within 5 days') + ' using reference <b>' + ref + '</b>, then <a href="pop.html?ref=' + encodeURIComponent(ref) + '&email=' + encodeURIComponent(f('email')) + '">upload your proof of payment</a>. It goes straight onto your booking.</span></li>' : '') +
       (!q.payFull && pay !== 'full' ? '<li><b>' + (pay === 'invoice' ? 2 : 1) + '</b><span>Balance of ' + K.money(isCard ? q.cardTotal - q.cardDeposit : q.total - q.deposit) + ' is due by ' + nice(q.balanceDue, { day: 'numeric', month: 'long' }) + '. We\'ll send a reminder.</span></li>' : '') +
-      '<li><b>✓</b><span>Pay your Dinokeng conservation &amp; self-drive fees online or at the gate. Before your stay, Dinokeng emails you a <b>partner code</b> for the lower partner rate. <a href="dinokeng.html#fees">Dinokeng fees</a></span></li>' +
+      '<li><b>✓</b><span>Pay your Dinokeng conservation &amp; self-drive fees online or at the gate. Before your stay we send you a Dinokeng <b>partner code</b> for each vehicle, for the lower partner rate. <a href="dinokeng.html#fees">Dinokeng fees</a></span></li>' +
       '<li><b>✓</b><span>Enter at Dinokeng <b>Tau Gate</b>, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km. <a href="contact.html">Directions</a></span></li></ol>' +
       '<div class="cta-actions"><button class="btn" type="button" data-ics><svg><use href="#i-cal"/></svg>Add to calendar</button><a class="btn btn-green" target="_blank" rel="noopener" href="https://wa.me/27604584478?text=' + encodeURIComponent('Hi Kyleu! My booking reference is ' + ref + ' (' + booking.stand.name + ', ' + iso(booking.ci) + ' to ' + iso(booking.co) + ').') + '"><svg><use href="#i-wa"/></svg>Share with Kyleu</a></div>' +
       '<div class="demo-flag" style="margin:22px 0 0;text-align:left"><svg><use href="#i-info"/></svg><span>Demo mode: this is a mock-up. No booking was made, nothing was charged and no details were sent anywhere. A copy stays in this browser only, so you can see it in the admin demo.</span></div></div>';
@@ -580,7 +592,8 @@
       renderSide();
     });
     $('[name=voucher]', modal).addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); $('[data-apply-voucher]', modal).click(); } });
-    $('[name=vehicles]', modal).addEventListener('change', renderSide);
+    $('[name=vehicles]', modal).addEventListener('change', function () { drawCars(); renderSide(); });
+    drawCars();
     $('[data-pay-now]', modal).addEventListener('click', function () {
       var cur = $('.mc-step.on', modal); if (!validate(cur)) return;
       var btn = this; btn.disabled = true; var old = btn.innerHTML; btn.innerHTML = '<span class="spin"></span> Processing…';

@@ -697,3 +697,14 @@ body.header-hidden .searchbar-wrap, body.header-hidden .subnav { top: 0; }
   .mc-main, .mc-side { overflow: visible; }
 }
 
+/* checkout: one row per vehicle */
+.cars-list { display: grid; gap: 8px; }
+.car-row { display: grid; grid-template-columns: 90px 1fr 1fr; gap: 8px; align-items: center; }
+.car-row b { font-size: .9rem; }
+.car-row input { width: 100%; box-sizing: border-box; }
+.field-note { display: block; font-size: .84rem; color: var(--ink-soft); margin-top: 6px; }
+@media (max-width: 560px) { .car-row { grid-template-columns: 1fr 1fr; } .car-row b { grid-column: 1 / -1; } }
+
+.car-row input { padding: 11px 12px; border: 1.5px solid rgba(74,52,36,.22); border-radius: 12px; background: #fff; font: inherit; font-size: .95rem; }
+.car-row input:focus { outline: none; border-color: var(--sun); box-shadow: 0 0 0 4px rgba(232,115,28,.16); }
+.car-row input[name=car-reg] { text-transform: uppercase; }

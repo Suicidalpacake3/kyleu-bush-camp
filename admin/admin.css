@@ -1088,3 +1088,18 @@ html:has(body.lock) { overflow: hidden; }
 .d-panel { overscroll-behavior: contain; }
 #modal { overflow-y: auto; overscroll-behavior: contain; }
 
+/* Dinokeng codes, one per vehicle */
+.dgr .h4-row .pill { text-transform: none; letter-spacing: 0; }
+.dgr-copy { align-items: center; }
+.dgr-cars { display: grid; gap: 8px; margin: 4px 0 12px; }
+.dgr-car { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "tick who st" "tick code btn"; gap: 8px 10px; align-items: center; background: #fdf8ef; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.dgr-tick { grid-area: tick; align-self: start; padding-top: 2px; } .dgr-who { grid-area: who; } .dgr-st { grid-area: st; } .dgr-code { grid-area: code; } .dgr-car > .btn { grid-area: btn; }
+.dgr-tick input { width: 18px; height: 18px; accent-color: var(--sun); display: block; }
+.dgr-who { min-width: 0; display: grid; }
+.dgr-who small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dgr-code { border: 1px solid var(--line); border-radius: 9px; padding: 7px 9px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; background: #fff; min-width: 0; width: 100%; }
+.dgr-code:focus { outline: 0; border-color: var(--sun); box-shadow: 0 0 0 3px rgba(232, 115, 28, .18); }
+.dgr-st .pill .ic { width: 12px; height: 12px; }
+.dgr-acts { justify-content: flex-end; }
+
+
