@@ -205,6 +205,17 @@
     K._pdfP = new Promise(function (ok, no) { var s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
     return K._pdfP;
   };
+  // Print sends the one-page PDF to the printer (printing the web page itself gave extra copies)
+  K.printInvoice = function (inv) {
+    return Promise.all([K.needPdf(), K.invoiceAssets()]).then(function () {
+      var f = K.invoicePDF(inv); if (!f) throw new Error('no pdf');
+      var old = document.getElementById('inv-print-frame'); if (old) old.remove();
+      var fr = document.createElement('iframe'); fr.id = 'inv-print-frame'; fr.title = 'Invoice for printing';
+      fr.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none';
+      fr.onload = function () { setTimeout(function () { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch (e) { window.open(f.url, '_blank'); } }, 300); };
+      fr.src = f.url; document.body.appendChild(fr);
+    });
+  };
   K.downloadInvoice = function (inv) {
     return Promise.all([K.needPdf(), K.invoiceAssets()]).then(function () {
       var f = K.invoicePDF(inv); if (!f) throw new Error('no pdf');

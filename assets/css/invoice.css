@@ -111,8 +111,12 @@
 .inv-modal-h h2 { margin: 0; font-size: 1.4rem; }
 .inv-x { width: 44px; height: 44px; border-radius: 50%; border: 1.5px solid #e6d9c3; background: #fff; display: grid; place-items: center; cursor: pointer; }
 .inv-x svg { width: 20px; height: 20px; }
+/* Ctrl+P while an invoice is open: print only the invoice, once. Everything that does not hold it is
+   taken out of the page (not just made invisible), and the pop-ups around it stop being pinned to the
+   screen, because a pinned pop-up is printed again on every page. */
 @media print {
-  body * { visibility: hidden; }
-  .inv, .inv * { visibility: visible; }
-  .inv { position: absolute; left: 0; top: 0; width: 100%; box-shadow: none; border: 0; }
+  body:has(.modal.open .inv, .inv-modal .inv, #modal:not([hidden]) .inv) *:not(:has(.inv)):not(.inv):not(.inv *) { display: none !important; }
+  body:has(.modal.open .inv, .inv-modal .inv, #modal:not([hidden]) .inv) :has(.inv) { position: static !important; overflow: visible !important; max-height: none !important; height: auto !important; min-height: 0 !important; transform: none !important; margin: 0 !important; padding: 0 !important; background: none !important; box-shadow: none !important; border: 0 !important; display: block !important; inset: auto !important; }
+  .inv { box-shadow: none !important; border: 0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; break-inside: auto; }
+  .inv-hero, .inv-status, .inv-lines th, .inv-pay > div, .inv-refbox { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }

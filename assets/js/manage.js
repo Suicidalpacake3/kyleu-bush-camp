@@ -136,7 +136,7 @@
     m.addEventListener('click', function (e) {
       if (e.target === m || e.target.closest('[data-inv-close]')) { close(); return; }
       if (e.target.closest('[data-inv-pdf]')) { K.downloadInvoice(inv).catch(function () { K.toast('The PDF could not be made. Check your internet connection.'); }); return; }
-      if (e.target.closest('[data-inv-print]')) { window.print(); return; }
+      if (e.target.closest('[data-inv-print]')) { K.printInvoice(inv).catch(function () { K.toast('The invoice could not be printed. Try Download PDF instead.'); }); return; }
       var pb = e.target.closest('[data-inv-paid]');
       if (pb) K.paidForm($('[data-paid-box]', m), inv, function (c) { if (c) { pb.remove(); base.claim = c; } });
     });

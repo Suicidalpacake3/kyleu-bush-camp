@@ -438,7 +438,7 @@
     $('[data-ics]', box).onclick = downloadICS;
     setTimeout(function () { var s = $('[data-inv-sent]', box); if (s) { s.className = 'inv-sent ok'; s.innerHTML = '<svg><use href="#i-check"/></svg>Invoice sent to ' + K.esc(f('email')) + ' by email'; } }, 1400);
     $('[data-inv-pdf]', box).onclick = function () { K.downloadInvoice(inv).catch(function () { K.toast('The PDF could not be made. Check your internet connection.'); }); };
-    $('[data-inv-print]', box).onclick = function () { window.print(); };
+    $('[data-inv-print]', box).onclick = function () { K.printInvoice(inv).catch(function () { K.toast('The invoice could not be printed. Try Download PDF instead.'); }); };
     var pb = $('[data-inv-paid]', box); if (pb) pb.onclick = function () { var pbx = $('[data-paid-box]', box); K.paidForm(pbx, inv, function (c) { if (c) pb.remove(); }); pbx.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
     goStep(4); confetti();
   }
