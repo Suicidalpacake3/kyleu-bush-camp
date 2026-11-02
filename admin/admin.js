@@ -381,7 +381,7 @@
   function modal(title, body, ok, onOk, opts) {
     opts = opts || {};
     var m = $('#modal');
-    m.innerHTML = '<div class="m-back" data-close></div><form class="m-card' + (opts.wide ? ' wide' : '') + '" novalidate><header><h3>' + title + '</h3><button type="button" class="icon-btn" data-close aria-label="Close">' + ic('x') + '</button></header><div class="m-body">' + body + '</div>' +
+    m.innerHTML = '<div class="m-back" data-close></div><form class="m-card' + (opts.wide ? ' wide' : '') + (opts.xl ? ' xl' : '') + '" novalidate><header><h3>' + title + '</h3><button type="button" class="icon-btn" data-close aria-label="Close">' + ic('x') + '</button></header><div class="m-body">' + body + '</div>' +
       (ok ? '<footer><button type="button" class="btn ghost" data-close>Cancel</button><button class="btn ' + (opts.danger ? 'danger' : '') + '" type="submit">' + ok + '</button></footer>' : '') + '</form>';
     m.hidden = false; document.body.classList.add('lock');
     var f = $('form', m);
@@ -415,7 +415,8 @@
     var cs0 = b.status === 'cancelled' ? [] : ensureCars(b), dueN = cs0.filter(function (c) { return c.st === 'due'; }).length, inN = cs0.filter(function (c) { return c.st === 'in'; }).length;
     if ((b.status === 'confirmed' || b.status === 'in') && b.ci <= TODAY && b.co >= TODAY && dueN) acts.push('<button class="btn green" data-act="checkin" data-ref="' + b.ref + '">' + ic('in') + 'Check in' + (cs0.length > 1 ? ' a vehicle' : '') + '</button>');
     if (inN) acts.push('<button class="btn green" data-act="checkout" data-ref="' + b.ref + '">' + ic('out') + 'Check out' + (cs0.length > 1 ? ' a vehicle' : '') + '</button>');
-    if (b.status !== 'cancelled' && b.status !== 'out') acts.push('<button class="btn ghost" data-act="remind" data-ref="' + b.ref + '">' + ic('send') + 'Send message</button>');
+    acts.push('<button class="btn ghost" data-act="remind" data-ref="' + b.ref + '">' + ic('send') + 'Send a message</button>');
+    if (b.status !== 'cancelled') acts.push('<button class="btn ghost" data-act="send-doc" data-ref="' + b.ref + '|invoice">' + ic('note') + 'Send invoice</button>');
     acts.push('<button class="btn ghost" data-act="edit" data-ref="' + b.ref + '">' + ic('edit') + 'Edit booking</button>');
     if (b.status !== 'cancelled' && b.status !== 'out') acts.push('<button class="btn ghost danger-t" data-act="cancel" data-ref="' + b.ref + '">' + ic('x') + 'Cancel booking</button>');
     return '<header class="d-head"><div><span class="muted small">Booking</span><h2>' + esc(b.ref) + '</h2>' + pill(s) + (b.pop && b.status === 'pending' ? ' <span class="pill info">' + ic('note') + 'Check bank</span>' : '') + '</div><button class="icon-btn" data-dclose aria-label="Close">' + ic('x') + '</button></header>' +
@@ -466,7 +467,9 @@
         if (m !== 'card' && b.method === 'card' && !paid(b)) { b.method = m; b.total = b.eft; }
         b.payments.push({ d: fval(f, 'd'), amt: amt, m: m, type: fval(f, 'type'), ref: fval(f, 'ref') });
         if (b.status === 'pending') { b.status = 'confirmed'; b.pop = false; }
-        log(money(amt) + ' ' + methodLabel(m) + ' payment recorded on ' + b.ref, b.ref); save(); refresh(); toast(money(amt) + ' recorded. Receipt emailed to ' + esc(b.guest.first) + ' (demo)');
+        log(money(amt) + ' ' + methodLabel(m) + ' payment recorded on ' + b.ref, b.ref); save(); refresh(); toast(money(amt) + ' recorded');
+        var pp = b.payments[b.payments.length - 1];
+        setTimeout(function () { sendBox({ b: b, title: 'Send the receipt', value: 'receipt', load: function () { return { subject: 'Payment received: ' + b.ref, text: 'Hi ' + b.guest.first + ',\n\nThank you! We received ' + money(pp.amt) + ' for your booking ' + b.ref + ' (' + standById(b.stand).name + ', ' + fd(b.ci, { day: 'numeric', month: 'long' }) + ').\n\n' + (balance(b) > 0 ? 'Still to pay: ' + money(balance(b)) + ', due by ' + fd(balanceDue(b), { day: 'numeric', month: 'long' }) + '.' : 'Your stay is now paid in full.') + ' Your receipt is attached.\n\nThe Kyleu team', docs: [docReceipt(b, pp)] }; } }); }, 0);
       }, { onOpen: function (f) {
         var upd = function () {
           var m = $('[name=m]:checked', f).value, h = $('[data-hint]', f), a = f.elements.amt;
@@ -482,6 +485,8 @@
     balance: { t: 'Balance reminder', s: 'Your Kyleu stay is coming up', b: function (b) { return 'Hi {first},\n\nYour stay at {stand} starts on {ci}. The balance of {balance} is due by {baldue}. Pay by EFT with reference {ref}, or reply and we will send a card payment link.\n\nThe Kyleu team'; } },
     arrival: { t: 'Pre-arrival information', s: 'Getting to Kyleu Bush Camp', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}.\n\nDirections: enter Dinokeng at Tau Gate, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km.\n\nWe send you a Dinokeng partner code for each vehicle. Enter it when you buy your conservation fees at https://dinokeng.plnktn.io to pay the partner rate. To use the self-drive route, each vehicle also needs a Self Drive Permit (R250 once off).\n\nEvery adult signs an indemnity form when you arrive. Check-in from 12:00. Gate questions: 060 458 4478.\n\nThe Kyleu team'; } },
     thanks: { t: 'Thank you & review', s: 'Thanks for staying at Kyleu', b: function (b) { return 'Hi {first},\n\nThank you for camping with us at {stand}. We hope you loved the bush! If you have a minute, a Google review helps our small family camp a lot.\n\nThe Kyleu team'; } },
+    invoice: { t: 'Invoice', s: 'Your Kyleu invoice {ref}', b: function (b) { return 'Hi {first},\n\nPlease find your invoice for {stand}, {ci} to {co}, attached.\n\nTotal {total}, paid so far {paid}, balance {balance}. Pay by EFT using reference {ref}.\n\nThe Kyleu team'; } },
+    indemnity: { t: 'Indemnity form', s: 'Kyleu indemnity form for {ref}', b: function (b) { return 'Hi {first},\n\nPlease find the Kyleu indemnity form attached, one page per vehicle. Every adult signs it when you arrive. You are welcome to print it and fill it in before you come, which makes check-in quicker.\n\nSee you on {ci}!\nThe Kyleu team'; } },
     update: { t: 'Booking updated', s: 'Your Kyleu booking {ref} has been updated', b: function (b) { return 'Hi {first},\n\nWe have updated your booking {ref}: {stand}, {ci} to {co}.\nTotal {total}, paid {paid}, balance {balance}.\n\nIf anything looks wrong, just reply to this email.\n\nThe Kyleu team'; } },
     confirm: { t: 'Booking confirmation', s: 'Booking confirmed: {ref}', b: function (b) { return 'Hi {first},\n\nYour booking {ref} is confirmed: {stand}, {ci} to {co}.\nTotal {total}, paid {paid}, balance {balance} due by {baldue}.\n\nThe Kyleu team'; } }
   };
@@ -490,20 +495,7 @@
     var map = { voucher: dcodes.length ? dcodes.join(', ') : 'the codes we send you', first: b.guest.first, stand: standById(b.stand).name, ci: fd(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }), co: fd(b.co, { weekday: 'long', day: 'numeric', month: 'long' }), deposit: money(deposit(b)), depdue: fd(depositDue(b), { day: 'numeric', month: 'long' }), ref: b.ref, balance: money(balance(b)), baldue: fd(balanceDue(b), { day: 'numeric', month: 'long' }), total: money(b.total), paid: money(paid(b)) };
     return t.replace(/\{(\w+)\}/g, function (_, k) { return map[k] != null ? map[k] : _; });
   }
-  function actRemind(ref) {
-    var b = byRef(ref), def = b.status === 'pending' ? 'eft' : balance(b) && b.ci > TODAY ? 'balance' : diff(TODAY, b.ci) <= 10 ? 'arrival' : 'confirm';
-    modal('Send a message', '<p class="muted small">To ' + esc(guestName(b)) + ' · ' + esc(b.guest.email) + '</p>' +
-      '<label class="fld"><span>Template</span><select name="tpl">' + Object.keys(TEMPLATES).map(function (k) { return '<option value="' + k + '"' + (k === def ? ' selected' : '') + '>' + TEMPLATES[k].t + '</option>'; }).join('') + '</select></label>' +
-      '<label class="fld"><span>Subject</span><input name="s"></label><label class="fld"><span>Message</span><textarea name="b" rows="10"></textarea></label>' +
-      '<div class="seg"><label><input type="radio" name="via" value="email" checked><span>' + ic('mail') + 'Email</span></label><label><input type="radio" name="via" value="wa"><span>' + ic('wa') + 'WhatsApp</span></label></div>',
-      'Send', function (f) {
-        var via = $('[name=via]:checked', f).value;
-        if (via === 'wa') window.open('https://wa.me/27' + b.guest.phone.replace(/\D/g, '').replace(/^0/, '') + '?text=' + encodeURIComponent(f.elements.b.value), '_blank', 'noopener');
-        if (via === 'wa') b.notes.push({ at: nowStamp(), by: ME.name, text: 'Sent "' + f.elements.s.value + '" by WhatsApp.' });
-        else logEmail(b, f.elements.s.value, f.elements.b.value);
-        log('Message sent to ' + guestName(b), b.ref); save(); refresh(); toast(via === 'wa' ? 'WhatsApp opened with the message' : 'Email sent (demo: nothing was actually sent)');
-      }, { wide: true, onOpen: function (f) { var set = function () { var t = TEMPLATES[f.elements.tpl.value]; f.elements.s.value = fill(t.s, b); f.elements.b.value = fill(t.b(b), b); }; f.elements.tpl.addEventListener('change', set); set(); }, noFocus: true });
-  }
+  function actRemind(ref) { var b = byRef(ref); sendTemplate(b, defaultTemplate(b)); }
   function actCancel(ref) {
     var b = byRef(ref), pd = paid(b);
     modal('Cancel ' + esc(b.ref) + '?', '<p>' + esc(guestName(b)) + ' · ' + esc(standById(b.stand).name) + ' · arriving ' + fdw(b.ci) + ' (' + rel(b.ci) + ').</p>' +
@@ -543,7 +535,7 @@
       '<label class="fld"><span>Booked via</span><select name="source">' + srcs.map(function (x) { return '<option' + (x === b.source ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select></label>' +
       '<div class="quote-box" data-q></div>' +
       '<label class="fld"><span>Reason for the change (optional, saved in the notes)</span><input name="why" placeholder="e.g. Guest phoned to add a night"></label>' +
-      '<label class="check"><input type="checkbox" name="tell"><span>Email ' + esc(b.guest.first) + ' the updated booking</span></label>',
+      '<label class="check"><input type="checkbox" name="tell"><span>Let ' + esc(b.guest.first) + ' know about the change (opens the send box)</span></label>',
       'Save changes', function (f) {
         var g = { first: fval(f, 'first'), last: fval(f, 'last'), email: fval(f, 'email'), phone: fval(f, 'phone') }, s = read(f), why = fval(f, 'why'), src = fval(f, 'source'), changes = [];
         if (!g.first || !g.last) { toast('Add the guest\'s name'); return false; }
@@ -581,9 +573,9 @@
         if (b.status === 'pending' && paid(b) > 0 && paid(b) >= deposit(b)) b.status = 'confirmed';
         var txt = changes.join('; '); txt = txt.charAt(0).toUpperCase() + txt.slice(1);
         b.notes.push({ at: nowStamp(), by: ME.name, text: 'Booking edited: ' + txt + '.' + (why ? ' Reason: ' + why : '') });
-        if (fval(f, 'tell') && b.guest.email) { var T = TEMPLATES.update; logEmail(b, fill(T.s, b), fill(T.b(b), b)); }
+        if (fval(f, 'tell')) setTimeout(function () { sendTemplate(b, 'update'); }, 0);
         log('Booking ' + b.ref + ' edited', b.ref); save(); refresh();
-        toast('Booking updated' + (fval(f, 'tell') && b.guest.email ? ' and ' + esc(b.guest.first) + ' emailed (demo)' : ''));
+        toast('Booking updated');
       }, { wide: true, noFocus: true, onOpen: function (f) {
         var box = $('[data-q]', f), tell = f.elements.tell;
         tell.addEventListener('change', function () { tellTouched = true; });
@@ -595,7 +587,7 @@
           box.innerHTML = (moved ? (overlaps(s.stand, s.ci, s.co, b.ref) ? '<span class="pill bad"><i></i>Stand not free for those nights</span>' : '<span class="pill ok"><i></i>Stand free</span>') : '') + (s.adults + s.pens + s.kids > st.guests ? ' <span class="pill warn"><i></i>Over ' + st.guests + ' guests</span>' : '') +
             '<div class="qb-row"><span>' + p.nights + ' night' + (p.nights > 1 ? 's' : '') + ' · ' + methodLabel(b.method) + '</span><span class="price-pair">' + (nt !== b.total ? '<s>' + money(b.total) + '</s> ' : '') + '<b>' + money(nt) + '</b></span></div>' +
             '<div class="muted small">Paid ' + money(pd) + ' · ' + (nt >= pd ? 'balance ' + money(nt - pd) : '<span class="warn-t">' + money(pd - nt) + ' more than the new total. Keep it as credit or refund it.</span>') + '</div>';
-          if (!tellTouched) tell.checked = !!b.guest.email && (moved || nt !== b.total);
+          if (!tellTouched) tell.checked = moved || nt !== b.total;
         };
         $$('input,select', f).forEach(function (x) { if (x.name === 'tell') return; x.addEventListener('input', u); x.addEventListener('change', u); }); u();
       } });
@@ -646,7 +638,8 @@
         if (fval(f, 'usecredit')) { var need = b.total; creditsFor(b.guest.email).forEach(function (c) { var take = Math.min(need, c.amt - c.used); if (take <= 0) return; c.used += take; need -= take; b.payments.push({ d: TODAY, amt: take, m: 'credit', type: 'Credit', ref: 'Credit from ' + c.from }); }); if (paid(b) >= deposit(b)) b.status = 'confirmed'; }
         ensureCars(b); DB.bookings.push(b); DB.bookings.sort(function (x, y) { return x.ci < y.ci ? -1 : 1; });
         log('New ' + b.source.toLowerCase() + ' booking ' + b.ref + ' for ' + guestName(b), b.ref); save(); render(); openBooking(b.ref);
-        toast('Booking ' + b.ref + ' created' + (linked ? ' for returning client ' + esc(clientName(cl)) : '') + (m === 'eft' ? '. Invoice emailed (demo)' : ''));
+        toast('Booking ' + b.ref + ' created' + (linked ? ' for returning client ' + esc(clientName(cl)) : ''));
+        setTimeout(function () { sendTemplate(b, b.status === 'pending' ? 'invoice' : 'confirm'); }, 0);
       }, { wide: true, onOpen: function (f) {
         var u = function () {
           var g = { adults: +fval(f, 'adults') || 0, pens: +fval(f, 'pens') || 0, kids: +fval(f, 'kids') || 0 }, sid = fval(f, 'stand'), a = fval(f, 'ci'), z = fval(f, 'co'), m = $('[name=m]:checked', f).value, box = $('[data-q]', f);
@@ -743,7 +736,8 @@
           (c.dgrSent ? '<span class="pill ok">' + ic('gift') + 'Dinokeng code sent</span>' : '') +
           (t.total ? '<span class="pill ' + (t.owing ? 'warn' : 'ok') + '">Tab ' + money(t.total) + (t.owing ? ', ' + money(t.owing) + ' owing' : ', paid') + '</span>' : '') +
           '</div></div><div class="car-a">' + acts.join('') + '</div></div>';
-      }).join('') + (b.status === 'pending' ? '<p class="muted small">Vehicles can check in once the deposit is paid.</p>' : '') + '</section>';
+      }).join('') + (b.status === 'pending' ? '<p class="muted small">Vehicles can check in once the deposit is paid.</p>' : '') +
+      '<div class="row-btns car-docs"><button type="button" class="btn ghost sm" data-act="send-doc" data-ref="' + b.ref + '|indemnity">' + ic('send') + 'Send indemnity form</button><button type="button" class="btn ghost sm" data-act="ind-print" data-ref="' + b.ref + '|">' + ic('note') + 'Print it</button></div></section>';
   }
   function carForm(c) {
     return '<div class="grid2"><label class="fld"><span>Registration</span><input name="reg" value="' + esc(c.reg) + '" placeholder="e.g. CA 123-456" autocomplete="off" style="text-transform:uppercase"></label><label class="fld"><span>People in this vehicle</span><input type="number" min="1" max="12" name="people" value="' + (c.people || 1) + '"></label></div>' +
@@ -843,15 +837,17 @@
     var withCode = cars.filter(function (c) { return c.dgr; }), missing = cars.length - withCode.length;
     if (!cars.length) { toast('Tick the cars to send, or use Send all codes'); return; }
     if (!withCode.length) { toast('Paste the Dinokeng code' + (cars.length > 1 ? 's' : '') + ' first'); return; }
-    if (!b.guest.email) { toast('This guest has no email address. Add it with Edit booking.'); return; }
     var lines = withCode.map(function (c) { var i = b.cars.indexOf(c); return '- ' + carLabel(c, i) + (c.driver ? ' (driver ' + c.driver + ')' : '') + ': ' + c.dgr; }).join('\n'), many = withCode.length > 1;
-    logEmail(b, 'Your Dinokeng partner code' + (many ? 's' : '') + ' for ' + fd(b.ci, { day: 'numeric', month: 'long' }),
-      'Hi ' + b.guest.first + ',\n\nKyleu is a Dinokeng Certified Partner, so you pay the partner conservation fee of R85 per adult per night instead of R100.\n\nYour Dinokeng partner code' + (many ? 's, one for each vehicle' : '') + ':\n' + lines +
-      '\n\nUse ' + (many ? 'each code' : 'the code') + ' when you buy your conservation fees online at https://dinokeng.plnktn.io before you arrive. Each vehicle that uses the self-drive route also needs a Self Drive Permit (R250 once off).' + (many ? '\n\nPlease pass each driver their own code.' : '') + '\n\nSee you in the bush!\n' + ME.name + '\nKyleu Bush Camp');
-    withCode.forEach(function (c) { c.dgrSent = { at: nowStamp(), by: ME.name, code: c.dgr }; });
-    b.notes.push({ at: nowStamp(), by: ME.name, text: 'Dinokeng code' + (many ? 's' : '') + ' sent to ' + b.guest.email + ': ' + withCode.map(function (c) { return carLabel(c, b.cars.indexOf(c)) + ' ' + c.dgr; }).join(', ') + '.' });
-    log('Dinokeng code' + (many ? 's' : '') + ' sent to ' + guestName(b), b.ref); save(); refresh();
-    toast(withCode.length + ' code' + (many ? 's' : '') + ' emailed to ' + esc(b.guest.email) + ' (demo)' + (missing ? '. ' + missing + ' car' + (missing > 1 ? 's have' : ' has') + ' no code yet' : ''));
+    if (missing) toast(missing + ' car' + (missing > 1 ? 's have' : ' has') + ' no code yet, so ' + (missing > 1 ? 'they are' : 'it is') + ' left out');
+    sendBox({ b: b, title: 'Send Dinokeng code' + (many ? 's' : ''), value: 'codes', load: function () {
+      return { subject: 'Your Dinokeng partner code' + (many ? 's' : '') + ' for ' + fd(b.ci, { day: 'numeric', month: 'long' }),
+        text: 'Hi ' + b.guest.first + ',\n\nKyleu is a Dinokeng Certified Partner, so you pay the partner conservation fee of R85 per adult per night instead of R100.\n\nYour Dinokeng partner code' + (many ? 's, one for each vehicle' : '') + ':\n' + lines +
+          '\n\nUse ' + (many ? 'each code' : 'the code') + ' when you buy your conservation fees online at https://dinokeng.plnktn.io before you arrive. Each vehicle that uses the self-drive route also needs a Self Drive Permit (R250 once off).' + (many ? '\n\nPlease pass each driver their own code.' : '') + '\n\nSee you in the bush!\n' + ME.name + '\nKyleu Bush Camp',
+        docs: [docCodes(b, withCode)] };
+    }, onSent: function (via) {
+      withCode.forEach(function (c) { c.dgrSent = { at: nowStamp(), by: ME.name, code: c.dgr, via: via === 'wa' ? 'WhatsApp' : 'email' }; });
+      b.notes.push({ at: nowStamp(), by: ME.name, text: 'Dinokeng code' + (many ? 's' : '') + ' sent by ' + (via === 'wa' ? 'WhatsApp' : 'email') + ': ' + withCode.map(function (c) { return carLabel(c, b.cars.indexOf(c)) + ' ' + c.dgr; }).join(', ') + '.' });
+    } });
   }
   function copyText(s, msg) { var done = function () { toast(msg || 'Copied'); }; if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(String(s)).then(done, function () { fallbackCopy(s); done(); }); else { fallbackCopy(s); done(); } }
   function fallbackCopy(s) { var ta = document.createElement('textarea'); ta.value = s; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (e) {} ta.remove(); }
@@ -1345,10 +1341,196 @@
   function thrById(id) { return DB.threads.filter(function (t) { return t.id === id; })[0]; }
   function lastMsg(t) { return t.msgs[t.msgs.length - 1]; }
   // emails sent from a booking go into that booking's conversation
-  function logEmail(b, subject, body) {
+  /* =========================================================
+     Sending: nothing goes out by itself. Every message opens this box first:
+     preview and edit the words, look at the documents, then send by email
+     (sent for you, documents attached) or WhatsApp (documents download, WhatsApp
+     opens with the message typed in, you attach the files). The box stays open
+     so you can send both ways.
+     ========================================================= */
+  var BIZ = { name: 'Kyleu Bush Camp', addr: 'Plot 77 Klipdrift 90 JR, Kaallaagte Road, Dinokeng Game Reserve, Gauteng', phone: '060 458 4478', email: 'info@kyleu.co.za', bank: 'FNB, account Kyleu Bush Camp, number 62000000000, branch 250655' };
+  var LONGD = { day: 'numeric', month: 'long', year: 'numeric' };
+  function waDigits(p) { var d = String(p || '').replace(/[^\d+]/g, ''); if (!d) return ''; if (d[0] === '+') return d.slice(1); if (d.indexOf('00') === 0) return d.slice(2); if (d[0] === '0') return '27' + d.slice(1); return d; }
+  // must run straight from a click, so the browser does not block the new tab
+  function openWhatsApp(phone, text) {
+    var n = waDigits(phone), t = encodeURIComponent(text || '');
+    try { var fr = document.createElement('iframe'); fr.style.display = 'none'; fr.src = 'whatsapp://send?phone=' + n + '&text=' + t; document.body.appendChild(fr); setTimeout(function () { fr.remove(); }, 2000); } catch (e) {}
+    try { window.open('https://wa.me/' + n + '?text=' + t, '_blank'); } catch (e) {}
+  }
+  function downloadFile(blob, name) { var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(function () { a.remove(); }, 1500); }
+
+  /* ---------- PDF documents (made in the browser with jsPDF) ---------- */
+  function pdfClean(s) { return String(s == null ? '' : s).replace(/[\u00a0\u2009\u202f]/g, ' ').replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"').replace(/[^\x09\x0a\x0d\x20-\xff]/g, ''); }
+  function pdfKit(doc) {
+    var y = 18, L = 18, R = 192, text = doc.text.bind(doc);
+    doc.text = function (s, x, yy, o) { return text(Array.isArray(s) ? s.map(pdfClean) : pdfClean(s), x, yy, o); };
+    var k = {
+      y: function (v) { if (v != null) y = v; return y; },
+      font: function (size, bold, c) { doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(size); c = c || [42, 27, 18]; doc.setTextColor(c[0], c[1], c[2]); },
+      need: function (h) { if (y + h > 278) { doc.addPage(); y = 20; } },
+      head: function (title, sub) {
+        k.font(17, true); doc.text(BIZ.name, L, y); k.font(16, true, [184, 70, 26]); doc.text(title, R, y, { align: 'right' }); y += 6;
+        k.font(8.5, false, [110, 95, 80]); doc.text(BIZ.addr, L, y); if (sub) doc.text(sub, R, y, { align: 'right' }); y += 4.5;
+        doc.text(BIZ.phone + ' · ' + BIZ.email + ' · www.kyleu.co.za', L, y); y += 4;
+        doc.setDrawColor(232, 115, 28); doc.setLineWidth(.6); doc.line(L, y, R, y); y += 9;
+      },
+      pairs: function (rows) {
+        var half = Math.ceil(rows.length / 2);
+        rows.forEach(function (r, i) { var x = i < half ? L : 108, yy = y + (i < half ? i : i - half) * 6; k.font(8.5, false, [120, 105, 90]); doc.text(r[0], x, yy); k.font(9.5, true); doc.text(String(r[1]), x + 30, yy); });
+        y += half * 6 + 5;
+      },
+      h: function (t) { k.need(12); k.font(11.5, true); doc.text(t, L, y); y += 6.5; },
+      line: function (a, b, strong) {
+        k.font(strong ? 10.5 : 9.5, !!strong); var ls = doc.splitTextToSize(pdfClean(a), 132); k.need(ls.length * 4.6 + 3);
+        doc.text(ls, L, y); doc.text(b, R, y, { align: 'right' }); y += ls.length * 4.6 + 1.6;
+        doc.setDrawColor(228, 218, 202); doc.setLineWidth(.2); doc.line(L, y - 3, R, y - 3); y += 1;
+      },
+      para: function (t, size) { k.font(size || 9.5); String(t).split(/\n\s*\n/).forEach(function (p) { var ls = doc.splitTextToSize(pdfClean(p.trim()), R - L); k.need(ls.length * 4.5 + 3); doc.text(ls, L, y); y += ls.length * 4.5 + 3; }); },
+      box: function (t) { k.font(9.5); var ls = doc.splitTextToSize(pdfClean(t), R - L - 8), h = ls.length * 4.6 + 5; k.need(h + 4); doc.setFillColor(250, 242, 228); doc.roundedRect(L, y - 4, R - L, h, 2, 2, 'F'); doc.text(ls, L + 4, y + .5); y += h + 3; },
+      table: function (cols, w, rows, n) {
+        rows = rows || []; n = Math.max(rows.length, n || 0); k.need(12 + n * 10);
+        var x = L; doc.setFillColor(242, 235, 224); doc.rect(L, y - 5, R - L, 8, 'F'); k.font(8.5, true); cols.forEach(function (c, i) { doc.text(c, x + 2, y); x += w[i]; }); y += 3;
+        doc.setDrawColor(160, 150, 138); doc.setLineWidth(.25);
+        for (var r = 0; r < n; r++) { x = L; w.forEach(function (ww, i) { doc.rect(x, y, ww, 10); if (rows[r] && rows[r][i] != null) { k.font(10, i === w.length - 1 && rows[r].strongLast); doc.text(String(rows[r][i]), x + 2, y + 6.5); } x += ww; }); y += 10; }
+        y += 6;
+      },
+      foot: function () { var n = doc.getNumberOfPages(); for (var i = 1; i <= n; i++) { doc.setPage(i); k.font(7.5, false, [140, 125, 110]); doc.text(BIZ.name + ' · ' + BIZ.email + ' · ' + BIZ.phone + ' · page ' + i + ' of ' + n, 105, 289, { align: 'center' }); } }
+    };
+    return k;
+  }
+  function makePdf(d) {
+    var J = window.jspdf && window.jspdf.jsPDF;
+    if (!J) { var t = new Blob(['This document could not be made because the PDF maker did not load. Check the internet connection and try again.'], { type: 'text/plain' }); return { blob: t, url: URL.createObjectURL(t), data: '' }; }
+    var doc = new J({ unit: 'mm', format: 'a4' }); d.build(doc, pdfKit(doc));
+    var blob = doc.output('blob'); return { blob: blob, url: URL.createObjectURL(blob), data: doc.output('datauristring') };
+  }
+  function guestsLine(b) { var a = b.adults + b.pens; return a + ' adult' + (a === 1 ? '' : 's') + (b.pens ? ' (' + b.pens + ' pensioner' + (b.pens === 1 ? '' : 's') + ')' : '') + (b.kids ? ', ' + b.kids + ' child' + (b.kids === 1 ? '' : 'ren') : ''); }
+  function stayRows(b) { var st = standById(b.stand); return [['Booking', b.ref], ['Guest', guestName(b)], ['Mobile', b.guest.phone || '-'], ['Email', b.guest.email || '-'], ['Stand', st.name + ' (' + AREA_SHORT[st.area] + ')'], ['Arrive', fd(b.ci, LONGD)], ['Depart', fd(b.co, LONGD)], ['Nights', diff(b.ci, b.co)], ['Guests', guestsLine(b)], ['Vehicles', ensureCars(b).length]]; }
+  function moneyLines(b, k) {
+    var q = quote(b.stand, b.ci, b.co, b, b.extras), card = b.method === 'card', sum = 0;
+    q.lines.forEach(function (l) { var v = card ? l.c : l.e; sum += v; k.line(l.t, money(v)); });
+    (b.charges || []).forEach(function (c) { var v = card ? c.c : c.e; sum += v; k.line(c.desc, money(v)); });
+    if (Math.round(sum) !== Math.round(b.total)) k.line('Discount or adjustment', money(b.total - sum));
+    k.line('Total', money(b.total), true); k.line('Paid so far', money(paid(b)), true); k.line('Balance', money(balance(b)), true);
+  }
+  function docBooking(b, title) {
+    return { name: 'Kyleu ' + title.toLowerCase() + ' ' + b.ref + '.pdf', build: function (doc, k) {
+      k.head(title, (title === 'Invoice' ? 'Invoice ' : 'Reference ') + b.ref + ' · ' + fd(TODAY, LONGD));
+      k.pairs(stayRows(b)); k.h('Your stay'); moneyLines(b, k); k.y(k.y() + 3);
+      if (b.status === 'cancelled') k.box('This booking is cancelled.');
+      else if (b.status === 'pending') k.box('A deposit of ' + money(deposit(b)) + ' secures your stand and is due by ' + fd(depositDue(b), LONGD) + '. Pay by EFT to ' + BIZ.bank + ', using reference ' + b.ref + '. Then upload your proof of payment at www.kyleu.co.za/pop.html.');
+      else if (balance(b) > 0) k.box('The balance of ' + money(balance(b)) + ' is due by ' + fd(balanceDue(b), LONGD) + '. Pay by EFT to ' + BIZ.bank + ', using reference ' + b.ref + '.');
+      else k.box('Paid in full. Thank you!');
+      k.para('Dinokeng Game Reserve conservation and self-drive fees are paid to the reserve, not to Kyleu. We send you a Dinokeng partner code for each vehicle, for the partner rate of R85 instead of R100 per adult per night.', 8.5);
+      k.foot();
+    } };
+  }
+  function docReceipt(b, p) {
+    return { name: 'Kyleu receipt ' + b.ref + '.pdf', build: function (doc, k) {
+      k.head('Receipt', 'Booking ' + b.ref + ' · ' + fd(p.d, LONGD));
+      k.box('Received with thanks: ' + money(p.amt) + ' by ' + methodLabel(p.m) + ' on ' + fd(p.d, LONGD) + (p.ref ? ' (reference ' + p.ref + ')' : '') + '.');
+      k.pairs(stayRows(b)); k.h('Your booking'); moneyLines(b, k); k.y(k.y() + 3);
+      k.box(balance(b) > 0 ? 'Still to pay: ' + money(balance(b)) + ', due by ' + fd(balanceDue(b), LONGD) + '. Bank: ' + BIZ.bank + ', reference ' + b.ref + '.' : 'Your stay is paid in full. See you in the bush!');
+      k.foot();
+    } };
+  }
+  function docIndemnity(b) {
+    return { name: 'Kyleu indemnity form ' + b.ref + '.pdf', build: function (doc, k) {
+      var cs = ensureCars(b);
+      cs.forEach(function (c, i) {
+        if (i) { doc.addPage(); k.y(18); }
+        k.head('Indemnity', 'Vehicle ' + (i + 1) + ' of ' + cs.length);
+        k.pairs([['Booking', b.ref], ['Stand', standById(b.stand).name], ['Arrive', fd(b.ci, LONGD)], ['Depart', fd(b.co, LONGD)], ['Vehicle', c.reg || '________________'], ['Driver', c.driver || '________________']]);
+        k.para(indText(), 9.2);
+        k.table(['Full name', 'ID or passport number', 'Signature', 'Date'], [56, 44, 52, 22], [], Math.max(4, Math.min(8, c.people || 4)));
+        k.para('Every adult in the vehicle signs. A parent or guardian signs for children under 18.', 8.5);
+      });
+      k.foot();
+    } };
+  }
+  function docCodes(b, cars) {
+    return { name: 'Dinokeng partner codes ' + b.ref + '.pdf', build: function (doc, k) {
+      k.head('Dinokeng codes', 'Booking ' + b.ref);
+      k.pairs([['Guest', guestName(b)], ['Stand', standById(b.stand).name], ['Arrive', fd(b.ci, LONGD)], ['Depart', fd(b.co, LONGD)]]);
+      k.box('Kyleu is a Dinokeng Certified Partner, so you pay the partner conservation fee of R85 per adult per night instead of R100. Each vehicle has its own code below.');
+      k.table(['Vehicle', 'Driver', 'Dinokeng partner code'], [56, 56, 62], cars.map(function (c) { var r = [carLabel(c, b.cars.indexOf(c)), c.driver || '', c.dgr]; r.strongLast = true; return r; }));
+      k.para('Use the code when you buy your conservation fees online at https://dinokeng.plnktn.io before you arrive. Each vehicle that uses the self-drive route also needs a Self Drive Permit (R250 once off). Please give each driver their own code.');
+      k.foot();
+    } };
+  }
+
+  /* ---------- the send box ---------- */
+  // o: { b, title, choices: [[key, label]], value, load(key) -> { subject, text, docs }, onSent(via, current) }
+  function sendBox(o) {
+    var b = o.b, cur = null;
+    modal(esc(o.title), '<div class="sx">' +
+      '<div class="grid2"><label class="fld"><span>Email to</span><input name="to" type="email" value="' + esc(b.guest.email) + '"></label><label class="fld"><span>WhatsApp to</span><input name="wa" inputmode="tel" value="' + esc(b.guest.phone) + '"></label></div>' +
+      (o.choices && o.choices.length > 1 ? '<label class="fld"><span>What are you sending?</span><select name="tpl">' + o.choices.map(function (c) { return '<option value="' + c[0] + '"' + (c[0] === o.value ? ' selected' : '') + '>' + esc(c[1]) + '</option>'; }).join('') + '</select></label>' : '') +
+      '<div class="sx-tabs" data-sx-tabs></div>' +
+      '<div data-sx-msg><label class="fld"><span>Email subject</span><input name="s"></label><label class="fld"><span>Message (the same words go by email or WhatsApp; change anything you like)</span><textarea name="b" rows="11"></textarea></label></div>' +
+      '<div class="sx-doc" data-sx-doc hidden><iframe class="sx-frame" title="Document preview"></iframe><div class="row-btns"><button type="button" class="btn ghost sm" data-sx-dl>' + ic('download') + 'Download this document</button></div></div>' +
+      '<div class="sx-log" data-sx-log hidden></div>' +
+      '<div class="sx-acts"><button type="button" class="btn ghost" data-sx-done>Done</button><span class="sx-sp"></span><button type="button" class="btn wa" data-sx-wa>' + ic('wa') + 'Send on WhatsApp</button><button type="button" class="btn" data-sx-mail>' + ic('mail') + 'Send email</button></div></div>',
+      null, null, { xl: true, noFocus: true, onOpen: function (f) {
+        var tabs = $('[data-sx-tabs]', f), msgBox = $('[data-sx-msg]', f), docBox = $('[data-sx-doc]', f), frame = $('.sx-frame', f), made = {};
+        f.addEventListener('submit', function (e) { e.preventDefault(); e.stopImmediatePropagation(); }, true);   // Enter never closes the box
+        var docs = function () { return (cur && cur.docs) || []; };
+        var file = function (i) { if (!made[i]) made[i] = makePdf(docs()[i]); return made[i]; };
+        function show(tab) {
+          tabs.innerHTML = '<button type="button" data-sx-tab="msg" class="' + (tab === 'msg' ? 'on' : '') + '">' + ic('note') + 'Message</button>' + docs().map(function (d, i) { return '<button type="button" data-sx-tab="' + i + '" class="' + (tab === String(i) ? 'on' : '') + '">' + ic('clip') + esc(d.name) + '</button>'; }).join('') + (docs().length ? '' : '<span class="muted small">No documents with this message</span>');
+          msgBox.hidden = tab !== 'msg'; docBox.hidden = tab === 'msg';
+          if (tab !== 'msg') { docBox.dataset.i = tab; frame.src = file(+tab).url; }
+        }
+        function load(key) { cur = o.load(key); cur.key = key; made = {}; f.elements.s.value = cur.subject; f.elements.b.value = cur.text; show('msg'); }
+        function sent(via, text) {
+          var lg = $('[data-sx-log]', f); lg.hidden = false;
+          lg.insertAdjacentHTML('beforeend', '<div class="sx-l ' + via + '">' + ic(via === 'wa' ? 'wa' : 'check') + '<span>' + esc(text) + '</span><small>' + nowStamp().slice(11) + '</small></div>');
+          $(via === 'wa' ? '[data-sx-wa]' : '[data-sx-mail]', f).innerHTML = ic(via === 'wa' ? 'wa' : 'mail') + (via === 'wa' ? 'WhatsApp again' : 'Email again');
+          if (o.onSent) o.onSent(via, cur);
+          log((via === 'wa' ? 'WhatsApp' : 'Email') + ' sent to ' + guestName(b) + ': ' + fval(f, 's'), b.ref); save(); refresh();
+        }
+        if (f.elements.tpl) f.elements.tpl.addEventListener('change', function () { load(f.elements.tpl.value); });
+        load(o.value);
+        f.addEventListener('click', function (e) {
+          var t = e.target, x;
+          if ((x = t.closest('[data-sx-tab]'))) { show(x.dataset.sxTab); return; }
+          if (t.closest('[data-sx-dl]')) { var di = +docBox.dataset.i; downloadFile(file(di).blob, docs()[di].name); return; }
+          if (t.closest('[data-sx-done]')) { closeModal(); return; }
+          if (t.closest('[data-sx-mail]')) {
+            var to = fval(f, 'to'); if (!/.+@.+\..+/.test(to)) { toast('Add the email address to send to'); return; }
+            var att = docs().map(function (d, i) { var fl = file(i); return { name: d.name, size: fl.blob.size, type: 'application/pdf', data: fl.data, at: nowStamp(), via: 'Sent by email' }; });
+            logEmail(b, fval(f, 's') || o.title, f.elements.b.value, att, to);
+            sent('mail', 'Emailed to ' + to + (att.length ? ' with ' + att.map(function (a) { return a.name; }).join(', ') : ''));
+            toast('Email sent to ' + esc(to) + ' (demo: nothing really leaves this browser)'); return;
+          }
+          if (t.closest('[data-sx-wa]')) {
+            var ph = fval(f, 'wa'); if (waDigits(ph).length < 10) { toast('Add a valid mobile number for WhatsApp'); return; }
+            var names = docs().map(function (d) { return d.name; });
+            docs().forEach(function (d, i) { downloadFile(file(i).blob, d.name); });
+            openWhatsApp(ph, f.elements.b.value);
+            b.notes.push({ at: nowStamp(), by: ME.name, text: 'Sent "' + (fval(f, 's') || o.title) + '" on WhatsApp to ' + ph + (names.length ? ' (attach: ' + names.join(', ') + ')' : '') + '.' });
+            sent('wa', 'WhatsApp opened for ' + ph + (names.length ? '. Downloaded to attach: ' + names.join(', ') : ''));
+            toast(names.length ? 'WhatsApp is opening. Attach the downloaded ' + (names.length > 1 ? 'documents' : 'document') + ' to the chat' : 'WhatsApp is opening with the message'); return;
+          }
+        });
+      } });
+  }
+  // messages from the template list, each with the documents that belong to it
+  var SEND_DOCS = { eft: ['Invoice'], balance: ['Invoice'], invoice: ['Invoice'], confirm: ['Booking confirmation'], update: ['Booking confirmation'], indemnity: ['indemnity'], arrival: ['indemnity', 'codes'] };
+  function sendTemplate(b, key) {
+    sendBox({ b: b, title: 'Send to ' + guestName(b), value: key, choices: Object.keys(TEMPLATES).map(function (k) { return [k, TEMPLATES[k].t]; }),
+      load: function (k) {
+        var T = TEMPLATES[k], codes = ensureCars(b).filter(function (c) { return c.dgr; });
+        var docs = (SEND_DOCS[k] || []).map(function (d) { return d === 'indemnity' ? docIndemnity(b) : d === 'codes' ? (codes.length ? docCodes(b, codes) : null) : docBooking(b, d); }).filter(Boolean);
+        return { subject: fill(T.s, b), text: fill(T.b(b), b), docs: docs };
+      } });
+  }
+  function defaultTemplate(b) { return b.status === 'pending' ? 'eft' : balance(b) && b.ci > TODAY ? 'balance' : diff(TODAY, b.ci) <= 10 && b.ci >= TODAY ? 'arrival' : b.status === 'out' ? 'thanks' : 'confirm'; }
+
+  function logEmail(b, subject, body, att, to) {
     var t = DB.threads.filter(function (x) { return x.ref === b.ref && x.status !== 'closed'; })[0];
-    if (!t) { t = { id: uid('t'), subject: subject, name: guestName(b), email: b.guest.email, phone: b.guest.phone, status: 'waiting', unread: false, ref: b.ref, msgs: [] }; DB.threads.push(t); }
-    t.msgs.push({ from: 'staff', by: ME.name, at: nowStamp(), body: body, att: [] }); t.status = 'waiting';
+    if (!t) { t = { id: uid('t'), subject: subject, name: guestName(b), email: to || b.guest.email, phone: b.guest.phone, status: 'waiting', unread: false, ref: b.ref, msgs: [] }; DB.threads.push(t); }
+    t.msgs.push({ from: 'staff', by: ME.name, at: nowStamp(), body: (t.subject !== subject ? 'Subject: ' + subject + '\n\n' : '') + body, att: att || [] }); t.status = 'waiting';
     return t;
   }
   function vEnquiries() {
@@ -2280,6 +2462,7 @@
     if (act === 'client-add') return actClient(null);
     if (act === 'news-new') return actPost(null);
     if (act === 'dgr') return openBooking(ref);
+    if (act === 'send-doc') { var sd = ref.split('|'); return sendTemplate(byRef(sd[0]), sd[1]); }
     if (act === 'dgr-send') { var so = carOf(ref); if (so.c) sendCodes(so.b, [so.c]); return; }
     if (act === 'dgr-send-all') { var sa = byRef(ref); sendCodes(sa, ensureCars(sa)); return; }
     if (act === 'dgr-send-sel') { var ss = byRef(ref); sendCodes(ss, $$('[data-dgr-tick]').filter(function (x) { return x.checked && x.dataset.dgrTick.indexOf(ref + '|') === 0; }).map(function (x) { return carOf(x.dataset.dgrTick).c; }).filter(Boolean)); return; }

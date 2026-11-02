@@ -1102,4 +1102,23 @@ html:has(body.lock) { overflow: hidden; }
 .dgr-st .pill .ic { width: 12px; height: 12px; }
 .dgr-acts { justify-content: flex-end; }
 
+/* ---------- the send box ---------- */
+.m-card.xl { width: min(880px, 100%); }
+.sx-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 12px; align-items: center; }
+.sx-tabs button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 7px 12px; font-weight: 800; font-size: .82rem; cursor: pointer; color: var(--ink); max-width: 100%; }
+.sx-tabs button .ic { width: 14px; height: 14px; flex: none; }
+.sx-tabs button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+.sx-frame { width: 100%; height: min(58vh, 560px); border: 1px solid var(--line); border-radius: 12px; background: #e9e4dc; display: block; margin-bottom: 10px; }
+.sx-log { display: grid; gap: 6px; margin: 4px 0 12px; }
+.sx-l { display: flex; align-items: center; gap: 8px; background: var(--ok-bg); border-radius: 10px; padding: 8px 12px; font-size: .86rem; }
+.sx-l.wa { background: #e3f6ea; }
+.sx-l .ic { width: 16px; height: 16px; color: var(--ok); flex: none; }
+.sx-l span { flex: 1; }
+.sx-l small { color: var(--muted); font-weight: 700; }
+.sx-acts { position: sticky; bottom: -12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 0 4px; background: var(--card); border-top: 1px solid var(--line-2); margin-top: 6px; }
+.sx-sp { flex: 1; }
+.btn.wa { background: #1f9e55; border-color: #1f9e55; color: #fff; }
+.btn.wa:hover { background: #17864a; }
+.car-docs { margin-top: 8px; }
+@media (max-width: 560px) { .sx-acts .btn { flex: 1 1 100%; justify-content: center; } .sx-sp { display: none; } }
 
