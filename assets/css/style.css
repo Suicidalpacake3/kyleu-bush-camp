@@ -674,3 +674,8 @@ html:has(body.lock) { overflow: hidden; }
 @media (max-width: 1300px) { .nav-links > a, .nav-drop > a { padding: 10px 10px; } .nav-links { gap: 2px; } }
 @media (max-width: 1180px) { .nav-links { display: none; } .burger { display: grid; } }
 
+
+/* DGR CP logo rules (Dinokeng logo guide): approved file only, no effects on the logo,
+   light background behind the dark-green version, and clear space all round it */
+.dgr-badge { gap: 26px; padding: 12px 20px 12px 16px; }
+.foot-dgr img, .foot-logos .foot-dgr img { padding: 12px 22px; border-radius: 10px; box-sizing: content-box; }

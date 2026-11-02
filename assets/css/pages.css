@@ -862,3 +862,9 @@ body.header-hidden .searchbar-wrap, body.header-hidden .subnav { top: 0; }
 .mg-warn svg { width: 18px; height: 18px; flex: none; margin-top: 2px; }
 .mg-callus { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 .mg-booking + .mg-callout { margin: -6px 0 18px; }
+
+/* Change my booking: invoice buttons on the booking card */
+.mg-bk-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.mg-bk-acts .btn svg { width: 16px; height: 16px; }
+.mg-claim { background: rgba(255,255,255,.12); border-radius: 10px; padding: 8px 10px; }
+.link-btn { background: none; border: 0; padding: 0; font: inherit; color: var(--ember); font-weight: 800; text-decoration: underline; cursor: pointer; }

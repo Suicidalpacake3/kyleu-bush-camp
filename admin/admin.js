@@ -288,7 +288,7 @@
     if (DB.stands) { CONTENT_STANDS.forEach(function (s) { if (!DB.stands.some(function (x) { return x.id === s.id; }) && !DB.gone[s.id]) DB.stands.push(JSON.parse(JSON.stringify(s))); }); STANDS = DB.stands; }   // campsites added in the map editor join the list   // stands added or changed in this admin
     if (!DB.products) DB.products = defaultProducts();
     DB.threads = DB.threads || []; DB.popSeen = DB.popSeen || {}; applyHol();
-    migrate(); importWeb(); importAmend(); importPop();
+    migrate(); importWeb(); importAmend(); importPop(); importPaid();
   }
   // proof of payment uploaded on the website (pop.html), same browser in the demo
   var POPK = 'kyleu-web-pop';
@@ -362,10 +362,26 @@
         done.push(r.ci !== b.ci || r.co !== b.co ? (r.adults !== b.adults || r.pens !== b.pens || r.kids !== b.kids ? 'asked to change the dates and the number of guests' : 'asked to change the dates') : 'asked to change the number of guests');
       }
       if (a.note) { b.notes.push({ at: a.at, by: 'Guest', text: a.note }); done.push('left a message'); }
+      if (a.invoice) { b.invoices = b.invoices || []; b.invoices.push(Object.assign(JSON.parse(JSON.stringify(a.invoice)), { by: 'Website', sent: { at: a.at, via: 'Email (automatic)', to: b.guest.email } })); autoMail(b, a.invoice, a.at, 'Your updated Kyleu invoice ' + a.invoice.no, invMailBody(b, a.invoice, true)); done.push('updated invoice ' + a.invoice.no + ' emailed'); }
       if (!done.length) return;
       b.notes.push({ at: a.at, by: 'Guest', text: 'Changed on the website: ' + done.join('; ') + '.' });
       b.guestEdit = { at: a.at, what: done, seen: false };
       DB.log.unshift({ at: a.at, by: 'Website', text: guestName(b) + ' changed booking ' + b.ref + ' on the website', ref: b.ref });
+    });
+    if (n) save();
+    return n;
+  }
+  // "I have paid" from the website (after booking or under Change my booking), same browser in the demo
+  var PDK = 'kyleu-web-paid';
+  function importPaid() {
+    var list = []; try { list = JSON.parse(localStorage.getItem(PDK) || '[]'); } catch (e) {}
+    DB.paidSeen = DB.paidSeen || {}; var n = 0;
+    list.forEach(function (c) {
+      if (!c || !c.id || DB.paidSeen[c.id]) return; DB.paidSeen[c.id] = 1; n++;
+      var b = byRefLoose(c.ref); if (!b) return;
+      b.paidClaim = JSON.parse(JSON.stringify(c)); b.pop = true;
+      b.notes.push({ at: c.at, by: 'Guest', text: 'Says they paid ' + money(c.amt) + ' (' + String(c.what || 'payment').toLowerCase() + ') on ' + fd(c.date) + (c.note ? ': ' + c.note : '.') });
+      DB.log.unshift({ at: c.at, by: 'Website', text: guestName(b) + ' says they paid ' + money(c.amt) + ' on ' + b.ref, ref: b.ref });
     });
     if (n) save();
     return n;
@@ -384,6 +400,7 @@
       if (w.cars && w.cars.length) b.cars = w.cars.map(function (c, i) { var dr = c.driver || (i ? '' : w.first + ' ' + w.last), gs = (c.guests || []).slice(); return newCar({ reg: String(c.reg || '').toUpperCase(), driver: dr, phone: i ? '' : w.phone, guests: gs, people: (dr ? 1 : 0) + gs.length }); });
       if (w.shop && w.shop.length) { b.charges = []; setPreShop(b, w.shop, w.created, true); }
       ensureCars(b); DB.bookings.push(b); added++;
+      if (w.invoice) { b.invoices = [Object.assign(JSON.parse(JSON.stringify(w.invoice)), { by: 'Website', sent: { at: w.created, via: 'Email (automatic)', to: w.email } })]; autoMail(b, w.invoice, w.created, 'Your Kyleu booking ' + b.ref + ': invoice ' + w.invoice.no, invMailBody(b, w.invoice)); }
       DB.log.unshift({ at: w.created, by: 'Website', text: 'New website booking ' + b.ref + ' for ' + guestName(b), ref: b.ref });
     });
     if (added) { DB.bookings.sort(function (a, b) { return a.ci < b.ci ? -1 : 1; }); save(); }
@@ -408,7 +425,7 @@
     { id: 'calendar', t: 'Calendar', i: 'cal', g: 'Front desk' },
     { id: 'enquiries', t: 'Inbox', i: 'mail', g: 'Front desk' },
     { id: 'clients', t: 'Clients', i: 'users', g: 'Front desk' },
-    { id: 'vouchers', t: 'Dinokeng codes', i: 'gift', g: 'Front desk' },
+    { id: 'vouchers', t: 'Dinokeng vouchers', i: 'gift', g: 'Front desk' },
     { id: 'eft', t: 'EFT payments', i: 'bank', g: 'Money' },
     { id: 'payments', t: 'Payments', i: 'card', g: 'Money' },
     { id: 'reports', t: 'Reports', i: 'chart', g: 'Money' },
@@ -477,6 +494,7 @@
         (r.adults !== b.adults || r.pens !== b.pens || r.kids !== b.kids ? '<br>Guests: ' + peopleTxt(b) + ' <b>→ ' + peopleTxt(r) + '</b>' : '') + (r.msg ? '<br>"' + esc(r.msg) + '"' : '') +
         (paid(b) > 0 ? '<br><b>' + esc(b.guest.first) + ' has already paid ' + money(paid(b)) + '.</b> Talk to them about the difference, then make the change with Edit booking.' : '') +
         '<div class="row-btns"><button type="button" class="btn sm" data-act="edit" data-ref="' + b.ref + '">' + ic('edit') + 'Edit booking</button><button type="button" class="btn ghost sm" data-act="req-done" data-ref="' + b.ref + '">' + ic('check') + 'Dealt with</button></div></div></div>'; })(b.changeReq) : '') +
+      (b.paidClaim ? '<div class="callout info cflex claim">' + ic('bank') + '<div><b>' + esc(b.guest.first) + ' says they paid ' + money(b.paidClaim.amt) + '</b> (' + esc(String(b.paidClaim.what || 'payment').toLowerCase()) + ') on ' + fd(b.paidClaim.date) + (b.paidClaim.note ? ': "' + esc(b.paidClaim.note) + '"' : '') + '. Check the bank, then confirm it.<div class="row-btns"><button type="button" class="btn sm" data-act="pay" data-ref="' + b.ref + '">' + ic('check') + 'Confirm payment</button><button type="button" class="btn ghost sm" data-act="claim-no" data-ref="' + b.ref + '">Not in the bank yet</button></div></div></div>' : '') +
       (extraDue(b) ? '<div class="callout bad cflex">' + ic('alert') + '<div><b>' + money(balance(b)) + ' outstanding.</b> ' + esc(b.extraDue.why || 'The total went up after paying in full') + ' (' + esc(b.extraDue.at) + '). Send ' + esc(b.guest.first) + ' the new invoice for just this amount.<div class="row-btns"><button type="button" class="btn sm" data-act="send-doc" data-ref="' + b.ref + '|extra">' + ic('send') + 'Send new invoice</button></div></div></div>' : '') +
       (b.guestEdit && b.guestEdit.at >= add(TODAY, -14) ? '<p class="callout info cflex">' + ic('edit') + '<span><b>Changed by ' + esc(b.guest.first) + ' on the website</b> ' + esc(b.guestEdit.at) + ': ' + esc(b.guestEdit.what.join('; ')) + '.</span></p>' : '') +
       (function () { var cl = clientById(b.cid), sb = staysBefore(b); return '<section class="d-sec"><h4 class="h4-row">Guest' + (cl ? '<button type="button" class="link-btn" data-client="' + cl.id + '">Client card' + ic('chev-r') + '</button>' : '') + '</h4><div class="guest-line"><span class="avatar">' + esc((b.guest.first[0] || '?') + ((b.guest.last.split(' ').pop() || '?')[0] || '')) + '</span><div><b>' + esc(guestName(b)) + '</b> ' + (sb ? '<span class="pill ok ret">' + ic('return') + 'Returning · ' + nth(sb + 1) + ' stay</span>' : '<span class="pill info">First stay</span>') + '<div class="muted small">' + esc(b.guest.email || 'No email') + '</div></div></div>' + (cl && cl.notes ? '<p class="cl-note">' + ic('note') + '<span>' + esc(cl.notes) + '</span></p>' : ''); })() +
@@ -500,7 +518,7 @@
       (b.status === 'confirmed' && bal ? '<p class="note">' + ic('clock') + '<span>Balance of <b>' + money(bal) + '</b> is due by <b>' + fd(balanceDue(b)) + '</b> (' + rel(balanceDue(b)) + ').</span></p>' : '') +
       ((b.pops || []).length ? '<h5>Proof of payment</h5>' + popChips(b) : '') +
       '<h5>Payments</h5>' + ((b.payments || []).length ? '<ul class="timeline">' + b.payments.map(function (p) { return '<li><span class="dot ' + (p.amt < 0 ? 'bad' : 'pm-' + p.m) + '"></span><div><b>' + money(p.amt) + '</b> ' + esc(p.type) + ' · ' + methodLabel(p.m) + '<div class="muted small">' + fd(p.d, { day: 'numeric', month: 'short', year: 'numeric' }) + ' · ' + esc(p.ref || '') + '</div></div></li>'; }).join('') + '</ul>' : '<p class="muted small">No payments yet.</p>') + '</section>' +
-      dgrHTML(b) +
+      invSec(b) + dgrHTML(b) +
       (function () { var ts = DB.threads.filter(function (t) { return t.ref === b.ref || t.email === b.guest.email; }); return '<section class="d-sec"><h4>Emails</h4>' + (ts.length ? '<div class="list">' + ts.map(function (t) { return '<button type="button" class="brow" data-thread-go="' + t.id + '"><span class="brow-g"><b>' + esc(t.subject) + '</b><small>' + t.msgs.length + ' email' + (t.msgs.length > 1 ? 's' : '') + ' · last ' + when(lastMsg(t).at) + '</small></span>' + ic('chev-r') + '</button>'; }).join('') + '</div>' : '<p class="muted small">No emails yet.</p>') + '</section>'; })() +
       '<section class="d-sec"><h4>Notes</h4>' + (b.notes.length ? '<ul class="notes">' + b.notes.map(function (n, i) { return '<li><p>' + esc(n.text) + '</p><span class="muted small">' + esc(n.by) + ' · ' + esc(n.at) + (n.edited ? ' · edited by ' + esc(n.edited.by) + ' ' + esc(n.edited.at) : '') + '</span><span class="note-acts"><button type="button" class="icon-btn sm" data-note-edit="' + b.ref + '|' + i + '" aria-label="Edit note" title="Edit note">' + ic('edit') + '</button><button type="button" class="icon-btn sm" data-note-del="' + b.ref + '|' + i + '" aria-label="Delete note" title="Delete note">' + ic('x') + '</button></span></li>'; }).join('') + '</ul>' : '<p class="muted small">No notes yet.</p>') +
       '<form class="note-form" data-note="' + b.ref + '"><input name="t" placeholder="Add a note for the team" aria-label="Add a note"><button class="btn ghost" type="submit">Add</button></form></section>' +
@@ -510,13 +528,13 @@
   /* ---------- actions ---------- */
   function actPay(ref) {
     var b = byRef(ref), bal = balance(b), isPend = b.status === 'pending';
-    var dueNow = isPend ? deposit(b) : bal;
+    var cl = b.paidClaim, dueNow = cl ? cl.amt : isPend ? deposit(b) : bal;
     var cardBal = isPend ? Math.round(b.card * depPct() / 100) : Math.max(0, b.card - paid(b));
     modal(isPend ? 'EFT payment received' : 'Record a payment',
       '<p class="muted small">' + esc(guestName(b)) + ' · ' + esc(b.ref) + ' · ' + esc(standById(b.stand).name) + '</p>' +
       '<div class="seg" role="radiogroup">' + ['eft', 'card', 'cash'].map(function (m) { return '<label><input type="radio" name="m" value="' + m + '"' + ((isPend ? 'eft' : (b.method === 'card' ? 'card' : 'eft')) === m ? ' checked' : '') + '><span>' + methodLabel(m) + '</span></label>'; }).join('') + '</div>' +
       '<p class="hint" data-hint></p>' +
-      '<div class="grid2"><label class="fld"><span>Amount (R)</span><input name="amt" inputmode="numeric" value="' + dueNow + '"></label><label class="fld"><span>Date</span><input type="date" name="d" value="' + TODAY + '"></label></div>' +
+      '<div class="grid2"><label class="fld"><span>Amount (R)</span><input name="amt" inputmode="numeric" value="' + dueNow + '"></label><label class="fld"><span>Date</span><input type="date" name="d" value="' + (cl ? cl.date : TODAY) + '"></label></div>' +
       '<div class="grid2"><label class="fld"><span>Type</span><select name="type"><option' + (isPend ? ' selected' : '') + '>Deposit</option><option' + (!isPend ? ' selected' : '') + '>Balance</option><option>Full payment</option></select></label><label class="fld"><span>Bank / card reference</span><input name="ref" value="' + esc(b.ref) + '"></label></div>',
       'Save payment', function (f) {
         var m = fval(f, 'm') || $('[name=m]:checked', f).value, amt = parseFloat(fval(f, 'amt').replace(/[^\d.]/g, ''));
@@ -525,6 +543,7 @@
         if (m !== 'card' && b.method === 'card' && !paid(b)) { b.method = m; b.total = b.eft; }
         b.payments.push({ d: fval(f, 'd'), amt: amt, m: m, type: fval(f, 'type'), ref: fval(f, 'ref') });
         if (b.status === 'pending') { b.status = 'confirmed'; b.pop = false; }
+        if (b.paidClaim) { b.notes.push({ at: nowStamp(), by: ME.name, text: 'Payment the guest told us about is confirmed: ' + money(amt) + ' is in the bank.' }); b.paidClaim = null; if (b.status !== 'pending') b.pop = false; }
         log(money(amt) + ' ' + methodLabel(m) + ' payment recorded on ' + b.ref, b.ref); save(); refresh(); toast(money(amt) + ' recorded');
         var pp = b.payments[b.payments.length - 1];
         setTimeout(function () { sendBox({ b: b, title: 'Send the receipt', value: 'receipt', load: function () { return { subject: 'Payment received: ' + b.ref, text: 'Hi ' + b.guest.first + ',\n\nThank you! We received ' + money(pp.amt) + ' for your booking ' + b.ref + ' (' + standById(b.stand).name + ', ' + fd(b.ci, { day: 'numeric', month: 'long' }) + ').\n\n' + (balance(b) > 0 ? 'Still to pay: ' + money(balance(b)) + ', due by ' + fd(balanceDue(b), { day: 'numeric', month: 'long' }) + '.' : 'Your stay is now paid in full.') + ' Your receipt is attached.\n\nThe Kyleu team', docs: [docReceipt(b, pp)] }; } }); }, 0);
@@ -541,13 +560,13 @@
   var TEMPLATES = {
     eft: { t: 'EFT deposit reminder', s: 'Your Kyleu booking: deposit reminder', b: function (b) { return 'Hi {first},\n\nThank you for booking {stand} from {ci} to {co}. To secure your stand please pay the deposit of {deposit} by {depdue} using reference {ref}.\n\nBank: FNB · Account: Kyleu Bush Camp · Acc no: 62000000000 · Branch: 250655\n\nUpload your proof of payment at www.kyleu.co.za/pop.html, or reply to this email with it attached.\n\nSee you in the bush!\nThe Kyleu team'; } },
     balance: { t: 'Balance reminder', s: 'Your Kyleu stay is coming up', b: function (b) { return 'Hi {first},\n\nYour stay at {stand} starts on {ci}. The balance of {balance} is due by {baldue}. Pay by EFT with reference {ref}, or reply and we will send a card payment link.\n\nThe Kyleu team'; } },
-    arrival: { t: 'Pre-arrival information', s: 'Getting to Kyleu Bush Camp', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}.\n\nDirections: enter Dinokeng at Tau Gate, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km.\n\nWe send you a Dinokeng partner code for each vehicle. Enter it when you buy your conservation fees at https://dinokeng.plnktn.io to pay the partner rate. To use the self-drive route, each vehicle also needs a Self Drive Permit (R250 once off).\n\nEvery adult signs an indemnity form when you arrive. Check-in from 12:00. Gate questions: 060 458 4478.\n\nThe Kyleu team'; } },
+    arrival: { t: 'Pre-arrival information', s: 'Getting to Kyleu Bush Camp', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}.\n\nDirections: enter Dinokeng at Tau Gate, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km.\n\nKyleu is a proud DGR CP member, so we send you a Conservation Fee Discount Voucher code for each vehicle. Enter it when you buy your conservation fees at https://dinokeng.plnktn.io to pay R85 instead of R100 per adult per night. To use the self-drive route, each vehicle also needs a Self Drive Permit (R250 once off).\n\nEvery adult signs an indemnity form when you arrive. Check-in from 12:00. Gate questions: 060 458 4478.\n\nThe Kyleu team'; } },
     thanks: { t: 'Thank you & review', s: 'Thanks for staying at Kyleu', b: function (b) { return 'Hi {first},\n\nThank you for camping with us at {stand}. We hope you loved the bush! If you have a minute, a Google review helps our small family camp a lot.\n\nThe Kyleu team'; } },
     invoice: { t: 'Invoice', s: 'Your Kyleu invoice {ref}', b: function (b) { return 'Hi {first},\n\nPlease find your invoice for {stand}, {ci} to {co}, attached.\n\nTotal {total}, paid so far {paid}, balance {balance}. Pay by EFT using reference {ref}.\n\nThe Kyleu team'; } },
     indemnity: { t: 'Indemnity form', s: 'Kyleu indemnity form for {ref}', b: function (b) { return 'Hi {first},\n\nPlease find the Kyleu indemnity form attached, one page per vehicle. Every adult signs it when you arrive. You are welcome to print it and fill it in before you come, which makes check-in quicker.\n\nSee you on {ci}!\nThe Kyleu team'; } },
     update: { t: 'Booking updated', s: 'Your Kyleu booking {ref} has been updated', b: function (b) { return 'Hi {first},\n\nWe have updated your booking {ref}: {stand}, {ci} to {co}.\nTotal {total}, paid {paid}, balance {balance}.\n\nIf anything looks wrong, just reply to this email.\n\nThe Kyleu team'; } },
     extra: { t: 'Extra amount to pay', s: 'Your updated Kyleu invoice {ref}', b: function (b) { return 'Hi {first},\n\nThank you for letting us know about the change to your booking {ref}. Your new total is {total}. You have already paid {paid}, so {balance} is still to pay.\n\nThe updated invoice is attached. Please pay the {balance} by EFT using reference {ref} before you arrive on {ci}.\n\nThe Kyleu team'; } },
-    details: { t: 'Ask for vehicle details', s: 'Your Kyleu stay: vehicle details please', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}. Before you arrive, please send us each vehicle\'s registration, the driver and everyone travelling in it. Everyone signs an indemnity form at the gate and we make one Dinokeng partner code per vehicle, so this makes your arrival much quicker.\n\nYou can add them yourself at www.kyleu.co.za/manage.html with your booking reference {ref}, or simply reply to this message.\n\nThe Kyleu team'; } },
+    details: { t: 'Ask for vehicle details', s: 'Your Kyleu stay: vehicle details please', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}. Before you arrive, please send us each vehicle\'s registration, the driver and everyone travelling in it. Everyone signs an indemnity form at the gate and we send one Dinokeng Conservation Fee Discount Voucher per vehicle, so this makes your arrival much quicker.\n\nYou can add them yourself at www.kyleu.co.za/manage.html with your booking reference {ref}, or simply reply to this message.\n\nThe Kyleu team'; } },
     confirm: { t: 'Booking confirmation', s: 'Booking confirmed: {ref}', b: function (b) { return 'Hi {first},\n\nYour booking {ref} is confirmed: {stand}, {ci} to {co}.\nTotal {total}, paid {paid}, balance {balance} due by {baldue}.\n\nThe Kyleu team'; } }
   };
   function fill(t, b) {
@@ -874,7 +893,7 @@
   function dgrHTML(b) {
     if (b.status === 'cancelled') return '';
     var cs = ensureCars(b), n = cs.length, sent = cs.filter(function (c) { return c.dgrSent; }).length;
-    return '<section class="d-sec dgr"><h4 class="h4-row">Dinokeng partner codes<span class="pill ' + (sent === n ? 'ok' : sent ? 'warn' : 'muted') + '">' + sent + ' of ' + n + ' sent</span></h4>' +
+    return '<section class="d-sec dgr"><h4 class="h4-row">Dinokeng discount vouchers (DGR CP)<span class="pill ' + (sent === n ? 'ok' : sent ? 'warn' : 'muted') + '">' + sent + ' of ' + n + ' sent</span></h4>' +
       (b.vehTbc ? '<p class="callout warn cflex">' + ic('info') + '<span>' + esc(b.guest.first) + ' is not sure yet how many vehicles are coming. Make the codes once they tell you.</span></p>' : '') +
       '<ol class="dgr-steps"><li><b>Make the codes</b> on the Dinokeng site: one code per vehicle (copy the client\'s email and the number of vehicles below).</li><li><b>Paste</b> each vehicle\'s code in its box.</li><li><b>Send the codes to the client yourself</b>, by WhatsApp or email. Dinokeng does not send them.</li></ol>' +
       '<div class="dgr-copy"><button type="button" class="chip" data-copy="' + esc(b.guest.email) + '">' + ic('mail') + esc(b.guest.email || 'No email yet') + '<small>Copy</small></button><button type="button" class="chip" data-copy="' + n + '">' + ic('car') + n + ' vehicle' + (n === 1 ? '' : 's') + '<small>Copy</small></button><a class="btn ghost sm" href="' + esc(dgrLink()) + '" target="_blank" rel="noopener">' + ic('ext') + 'Open Dinokeng site to make codes</a></div>' +
@@ -905,8 +924,8 @@
     var lines = withCode.map(function (c) { var i = b.cars.indexOf(c); return '- ' + carLabel(c, i) + (c.driver ? ' (driver ' + c.driver + ')' : '') + ': ' + c.dgr; }).join('\n'), many = withCode.length > 1;
     if (missing) toast(missing + ' car' + (missing > 1 ? 's have' : ' has') + ' no code yet, so ' + (missing > 1 ? 'they are' : 'it is') + ' left out');
     sendBox({ b: b, title: 'Send Dinokeng code' + (many ? 's' : '') + ' to ' + guestName(b), value: 'codes', load: function () {
-      return { subject: 'Your Dinokeng partner code' + (many ? 's' : '') + ' for ' + fd(b.ci, { day: 'numeric', month: 'long' }),
-        text: 'Hi ' + b.guest.first + ',\n\nKyleu is a Dinokeng Certified Partner, so you pay the partner conservation fee of R85 per adult per night instead of R100.\n\nYour Dinokeng partner code' + (many ? 's, one for each vehicle' : '') + ':\n' + lines +
+      return { subject: 'Your Dinokeng discount voucher' + (many ? 's' : '') + ' for ' + fd(b.ci, { day: 'numeric', month: 'long' }),
+        text: 'Hi ' + b.guest.first + ',\n\nKyleu is a proud DGR CP member, so you qualify for Dinokeng Conservation Fee Discount Vouchers: R85 per adult per night instead of R100.\n\nYour voucher code' + (many ? 's, one for each vehicle' : '') + ':\n' + lines +
           '\n\nUse ' + (many ? 'each code' : 'the code') + ' when you buy your conservation fees online at https://dinokeng.plnktn.io before you arrive. Each vehicle that uses the self-drive route also needs a Self Drive Permit (R250 once off).' + (many ? '\n\nPlease pass each driver their own code.' : '') + '\n\nSee you in the bush!\n' + ME.name + '\nKyleu Bush Camp',
         docs: [docCodes(b, withCode)] };
     }, onSent: function (via) {
@@ -1028,6 +1047,7 @@
       var s = stateOf(b);
       if (b.isNew) attention.push({ i: 'bell', tone: 'info', t: 'New website booking: <b>' + esc(guestName(b)) + '</b>, ' + esc(standById(b.stand).name) + ', ' + fd(b.ci), ref: b.ref, o: 0 });
       if (b.guestEdit && !b.guestEdit.seen) attention.push({ i: 'edit', tone: 'info', t: '<b>' + esc(guestName(b)) + '</b> changed their booking on the website: ' + esc(b.guestEdit.what.join('; ')), ref: b.ref, o: 0 });
+      if (b.paidClaim) attention.push({ i: 'bank', tone: 'info', t: '<b>' + esc(guestName(b)) + '</b> says they paid ' + money(b.paidClaim.amt) + ' on ' + fd(b.paidClaim.date) + ': check the bank and confirm', ref: b.ref, o: 1 });
       if (extraDue(b)) attention.push({ i: 'alert', tone: 'bad', t: '<b>' + esc(guestName(b)) + '</b> owes ' + money(balance(b)) + ' more: ' + esc(b.extraDue.why || 'the total went up after paying in full').toLowerCase() + '. Send the new invoice.', ref: b.ref, o: 1 });
       if (live(b) && !b.vehTbc && b.status !== 'out' && b.co >= TODAY && namedIn(b) > people(b)) attention.push({ i: 'users', tone: 'warn', t: 'Vehicles list more people than the booking for <b>' + esc(guestName(b)) + '</b> (' + namedIn(b) + ' named, ' + people(b) + ' booked)', ref: b.ref, o: 5 });
       if (b.changeReq && !b.changeReq.done && live(b)) attention.push({ i: 'cal', tone: 'warn', t: '<b>' + esc(guestName(b)) + '</b> asked to change the dates or guests (' + fd(b.ci) + ')', ref: b.ref, o: 1 });
@@ -1103,11 +1123,11 @@
   function vEft() {
     var pend = DB.bookings.filter(function (b) { return b.status === 'pending'; });
     var pop = pend.filter(function (b) { return b.pop; }), over = pend.filter(function (b) { return !b.pop && TODAY > depositDue(b); }), wait = pend.filter(function (b) { return !b.pop && TODAY <= depositDue(b); });
-    var bal = DB.bookings.filter(function (b) { return b.status === 'confirmed' && b.method !== 'card' && balance(b) > 0 && diff(TODAY, balanceDue(b)) <= 14; }).sort(function (a, b) { return a.ci < b.ci ? -1 : 1; });
+    var bal = DB.bookings.filter(function (b) { return b.status === 'confirmed' && b.method !== 'card' && balance(b) > 0 && (diff(TODAY, balanceDue(b)) <= 14 || b.paidClaim); }).sort(function (a, b) { return a.ci < b.ci ? -1 : 1; });
     function card(b, kind) {
       var amt = kind === 'bal' ? balance(b) : deposit(b), due = kind === 'bal' ? balanceDue(b) : depositDue(b), left = diff(TODAY, due);
       return '<article class="eft-card ' + kind + '"><div class="eft-top" data-open="' + b.ref + '"><div><b>' + esc(guestName(b)) + '</b><small>' + esc(b.ref) + ' · ' + esc(standById(b.stand).name) + ' · ' + fd(b.ci) + ' to ' + fd(b.co) + '</small></div><div class="eft-amt"><b>' + money(amt) + '</b><small>' + (kind === 'bal' ? 'balance' : depPct() + '% deposit') + (hasFee() ? ' · card ' + money(kind === 'bal' ? b.card - paid(b) : Math.round(b.card * depPct() / 100)) : '') + '</small></div></div>' +
-        '<div class="eft-due ' + (left < 0 ? 'bad-t' : left <= 1 ? 'warn-t' : '') + '">' + ic('clock') + (left < 0 ? 'Overdue by ' + -left + ' day' + (-left > 1 ? 's' : '') : 'Due ' + fd(due) + ' (' + rel(due) + ')') + (b.pop ? '<span class="info-t pop-line">' + ic('note') + 'Proof of payment received' + ((b.pops || []).length ? ' ' + whenSaid(b.pops[b.pops.length - 1].at) + ', check the bank:' : ': check the bank') + '</span>' + popChips(b) : '') + '</div>' +
+        '<div class="eft-due ' + (left < 0 ? 'bad-t' : left <= 1 ? 'warn-t' : '') + '">' + ic('clock') + (left < 0 ? 'Overdue by ' + -left + ' day' + (-left > 1 ? 's' : '') : 'Due ' + fd(due) + ' (' + rel(due) + ')') + (b.paidClaim ? '<span class="info-t pop-line">' + ic('bank') + esc(b.guest.first) + ' says they paid ' + money(b.paidClaim.amt) + ' on ' + fd(b.paidClaim.date) + ': check the bank</span>' : '') + (b.pop && (b.pops || []).length ? '<span class="info-t pop-line">' + ic('note') + 'Proof of payment received' + ((b.pops || []).length ? ' ' + whenSaid(b.pops[b.pops.length - 1].at) + ', check the bank:' : ': check the bank') + '</span>' + popChips(b) : '') + '</div>' +
         '<div class="eft-act"><button class="btn sm" data-act="pay" data-ref="' + b.ref + '">' + ic('check') + 'Money is in</button><button class="btn sm ghost" data-act="remind" data-ref="' + b.ref + '">' + ic('send') + 'Remind</button>' + (kind === 'over' ? '<button class="btn sm ghost danger-t" data-act="release" data-ref="' + b.ref + '">' + ic('x') + 'Release stand</button>' : '') + '</div></article>';
     }
     var sec = function (title, sub, list, kind) { return '<section class="eft-sec"><h3>' + title + ' <span class="count">' + list.length + '</span></h3><p class="muted small">' + sub + '</p>' + (list.length ? '<div class="eft-grid">' + list.map(function (b) { return card(b, kind); }).join('') + '</div>' : '<p class="empty">Nothing here.</p>') + '</section>'; };
@@ -1389,6 +1409,7 @@
   function viewAtt(key) {
     var a = attFrom(key); if (!a) return;
     var src = a.data || '';
+    if (!src && a.inv) { var ib = byRef(a.invRef), iv = ib && invByNo(ib, a.inv), mk = iv && window.jspdf ? K.invoicePDF(iv) : null; if (mk) { modal(esc(a.name), '<iframe class="att-pdf" src="' + mk.url + '" title="' + esc(a.name) + '"></iframe><p class="muted small">' + esc(a.via || '') + ' · ' + esc(a.at || '') + '</p>', null, null, { wide: true, noFocus: true }); return; } }
     if (src && /pdf/.test(a.type || '')) { try { var bin = atob(src.split(',')[1]), arr = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i); src = URL.createObjectURL(new Blob([arr], { type: 'application/pdf' })); } catch (e) {} }
     var body = src ? (/^image/.test(a.type || '') ? '<img class="att-img" src="' + src + '" alt="' + esc(a.name) + '">' : '<iframe class="att-pdf" src="' + src + '" title="' + esc(a.name) + '"></iframe>') :
       '<div class="att-demo">' + ic('note') + '<div><b>' + esc(a.name) + '</b><p class="muted small">Made-up demo file, so there is nothing to open. In the live version the real document opens here.</p></div></div>';
@@ -1484,7 +1505,102 @@
     if (Math.round(sum) !== Math.round(b.total)) k.line('Discount or adjustment', money(b.total - sum));
     k.line('Total', money(b.total), true); k.line('Paid so far', money(paid(b)), true); k.line('Balance', money(balance(b)), true);
   }
+  /* ---------- invoices and quotes: same look as on the website (assets/js/invoice.js) ---------- */
+  function invLines(b) {
+    var q = quote(b.stand, b.ci, b.co, b, b.extras), card = b.method === 'card', L = q.lines.map(function (l) { return { t: l.t, amt: card ? l.c : l.e, tag: 'stay' }; });
+    (b.charges || []).forEach(function (c) { L.push({ t: c.desc.replace(/^Shop order for arrival: /, 'Shop order for arrival: '), amt: card ? c.c : c.e, tag: c.pre ? 'shop' : c.adj ? 'adj' : 'extra' }); });
+    var sum = L.reduce(function (a, l) { return a + l.amt; }, 0);
+    if (Math.round(sum) !== Math.round(b.total)) L.push({ t: 'Discount or adjustment', amt: b.total - sum, tag: 'adj' });
+    return L;
+  }
+  function nextInvNo(b, kind) { return K.invoiceNo(b.ref, kind, (b.invoices || []).filter(function (x) { return x.kind === kind; }).length + 1); }
+  function invFor(b, kind, lines, extra) {
+    kind = kind || 'Invoice'; lines = lines || invLines(b);
+    return Object.assign({ kind: kind, no: nextInvNo(b, kind), date: TODAY, ref: b.ref, guest: { name: guestName(b), email: b.guest.email, phone: b.guest.phone },
+      stay: { stand: standById(b.stand).name, ci: b.ci, co: b.co, nights: diff(b.ci, b.co), guests: guestsLine(b), vehicles: b.vehTbc ? 'Not sure yet' : ensureCars(b).length },
+      lines: lines, total: lines.reduce(function (a, l) { return a + l.amt; }, 0), paid: paid(b), deposit: deposit(b), depPct: depPct(), depositDue: depositDue(b), balanceDue: balanceDue(b),
+      payFull: diff(b.created.slice(0, 10), b.ci) <= num('Booking rules', 'Balance due days before arrival', 7), cancelled: b.status === 'cancelled' }, extra || {});
+  }
+  function invDoc(inv) { return { name: K.invoiceName(inv), inv: inv, build: function (doc) { K.invoiceDraw(doc, inv); } }; }
+  function invByNo(b, no) { return (b.invoices || []).filter(function (x) { return x.no === no; })[0]; }
+  function recordInv(b, inv, via, to) {
+    b.invoices = b.invoices || [];
+    var x = invByNo(b, inv.no); if (!x) { x = JSON.parse(JSON.stringify(inv)); x.by = x.by || (ME ? ME.name : 'Staff'); b.invoices.push(x); }
+    x.sent = { at: nowStamp(), via: via, to: to || '', by: ME ? ME.name : '' };
+  }
+  // the website emails the invoice by itself; it shows in the inbox like any email
+  function autoMail(b, inv, at, subject, body) {
+    var t = DB.threads.filter(function (x) { return x.ref === b.ref && x.auto; })[0];   // all automatic invoice emails in one conversation
+    var att = [{ name: K.invoiceName(inv), type: 'application/pdf', size: 0, inv: inv.no, invRef: b.ref, at: at, via: 'Sent automatically' }];
+    if (!t) { t = { id: uid('t'), subject: subject, name: guestName(b), email: b.guest.email, phone: b.guest.phone, status: 'closed', unread: false, ref: b.ref, auto: true, msgs: [] }; DB.threads.push(t); }
+    t.msgs.push({ from: 'staff', by: 'Website (automatic)', at: at, body: (t.subject !== subject ? 'Subject: ' + subject + '\n\n' : '') + body, att: att });
+  }
+  function invMailBody(b, inv, updated) {
+    var st = K.invoiceState(inv);
+    return 'Hi ' + b.guest.first + ',\n\n' + (updated === 'staff' ? 'Please find your invoice ' + inv.no + ' for ' + standById(b.stand).name + ', ' + fd(b.ci, LONGD) + ' to ' + fd(b.co, LONGD) + ', attached.' : updated ? 'Your booking ' + b.ref + ' was changed, so here is your updated invoice ' + inv.no + '.' : 'Thank you for booking ' + standById(b.stand).name + ' from ' + fd(b.ci, LONGD) + ' to ' + fd(b.co, LONGD) + '. Your invoice ' + inv.no + ' is attached.') + '\n\n' +
+      (st.k === 'due' ? st.t + '. Pay by EFT using reference ' + b.ref + '; our banking details are on the invoice. When you have paid, press "I have paid" under Change my booking at www.kyleu.co.za/manage.html.' : st.t) + '\n\nSee you in the bush!\nThe Kyleu team';
+  }
+  function invSec(b) {
+    var list = (b.invoices || []).slice().reverse();
+    return '<section class="d-sec"><h4 class="h4-row">Invoices &amp; quotes<button type="button" class="link-btn" data-act="inv-new" data-ref="' + b.ref + '">' + ic('plus') + 'New invoice or quote</button></h4>' +
+      (list.length ? '<div class="list">' + list.map(function (x) { return '<button type="button" class="brow" data-act="inv-view" data-ref="' + b.ref + '|' + esc(x.no) + '"><span class="brow-st">' + esc(x.no) + '</span><span class="brow-g"><b>' + esc(x.kind) + ' · ' + money(x.total) + '</b><small>' + fd(x.date) + ' · made by ' + esc(x.by || 'staff') + (x.sent ? ' · sent by ' + esc(x.sent.via) + ' ' + esc(x.sent.at) : ' · not sent yet') + '</small></span>' + ic('chev-r') + '</button>'; }).join('') + '</div>'
+        : '<p class="muted small">No invoice or quote yet. Website bookings get one by email straight away.</p>') +
+      '<div class="row-btns"><button type="button" class="btn ghost sm" data-act="inv-cur" data-ref="' + b.ref + '">' + ic('note') + 'Preview the current invoice</button></div></section>';
+  }
+  function invView(b, inv, fresh) {
+    modal(esc(inv.kind) + ' ' + esc(inv.no), '<div class="inv-admin">' + K.invoiceHTML(inv) + '</div>' +
+      '<div class="row-btns inv-admin-acts"><button type="button" class="btn ghost" data-act="inv-dl" data-ref="' + b.ref + '|' + esc(inv.no) + '">' + ic('download') + 'Download PDF</button><button type="button" class="btn" data-act="inv-send" data-ref="' + b.ref + '|' + esc(inv.no) + '">' + ic('send') + (inv.sent ? 'Send again' : 'Send to ' + esc(b.guest.first)) + '</button></div>' +
+      (inv.sent ? '<p class="muted small">Sent by ' + esc(inv.sent.via) + ' on ' + esc(inv.sent.at) + (inv.sent.to ? ' to ' + esc(inv.sent.to) : '') + '.</p>' : fresh ? '<p class="muted small">Saved, not sent yet. Press Send to choose WhatsApp or email.</p>' : ''),
+      null, null, { xl: true, noFocus: true });
+  }
+  // current invoice: not kept until it is sent
+  var CUR_INV = {};
+  function invGet(b, no) { return invByNo(b, no) || CUR_INV[b.ref + '|' + no]; }
+  function sendInvoice(b, inv) {
+    sendBox({ b: b, title: 'Send ' + inv.kind.toLowerCase() + ' ' + inv.no, value: 'inv', choices: [['inv', inv.kind]], load: function () {
+      return { subject: (inv.kind === 'Quote' ? 'Your Kyleu quote ' : 'Your Kyleu invoice ') + inv.no, text: inv.kind === 'Quote' ? 'Hi ' + b.guest.first + ',\n\nHere is your quote ' + inv.no + ' for ' + standById(b.stand).name + ', ' + fd(b.ci, LONGD) + ' to ' + fd(b.co, LONGD) + '. The total is ' + money(inv.total) + (inv.validTo ? ', valid until ' + fd(inv.validTo, LONGD) : '') + '.\n\nYour stand is held once the deposit is paid. Our banking details are on the quote.\n\nThe Kyleu team' : invMailBody(b, inv, 'staff'), docs: [invDoc(inv)] };
+    } });
+  }
+  function actInvNew(ref) {
+    var b = byRef(ref), locked = paid(b) > 0, lines = invLines(b);
+    var row = function (l) { return '<div class="inv-ed-row"><input name="t" value="' + esc(l.t) + '" aria-label="Description"><input name="a" inputmode="decimal" value="' + Math.round(l.amt) + '" aria-label="Amount in rand"' + (locked ? ' readonly' : '') + '>' + (locked ? '' : '<button type="button" class="icon-btn sm" data-inv-rm aria-label="Remove line">' + ic('x') + '</button>') + '</div>'; };
+    modal('New invoice or quote · ' + esc(guestName(b)),
+      '<div class="grid2"><label class="fld"><span>What is it?</span><select name="kind"><option>Invoice</option><option>Quote</option></select></label><label class="fld" data-valid hidden><span>Quote valid until</span><input type="date" name="valid" value="' + add(TODAY, 14) + '"></label></div>' +
+      (locked ? '<p class="callout warn cflex">' + ic('lock') + '<span><b>Prices are locked</b> because ' + esc(b.guest.first) + ' has already paid ' + money(paid(b)) + '. You can still make and send a new invoice with the current amounts. To change the stay itself, use Edit booking.</span></p>'
+        : '<p class="hint">' + ic('info') + ' Change any amount, or add a line (a discount is a minus amount, e.g. -200). The booking total changes to match when you save.</p>') +
+      '<div class="inv-ed-head"><span>Description</span><span>Amount (R)</span></div><div class="inv-ed" data-inv-lines>' + lines.map(row).join('') + '</div>' +
+      (locked ? '' : '<button type="button" class="btn ghost sm" data-inv-add>' + ic('plus') + 'Add a line</button>') +
+      '<div class="inv-ed-tot" data-inv-tot></div>' +
+      '<label class="fld"><span>Note on the invoice (optional)</span><input name="note" placeholder="e.g. Includes the 10% discount we agreed on"></label>' +
+      (locked ? '' : '<label class="fld"><span>Reason for a price change (saved in the booking notes)</span><input name="why" placeholder="e.g. Loyal guest discount"></label>'),
+      'Save and preview', function (f) {
+        var ls = $$('.inv-ed-row', f).map(function (r) { return { t: $('[name=t]', r).value.trim(), amt: Math.round(parseFloat(String($('[name=a]', r).value).replace(/[^\d.-]/g, '')) || 0), tag: 'line' }; }).filter(function (l) { return l.t || l.amt; });
+        if (!ls.length) { toast('Add at least one line'); return false; }
+        var total = ls.reduce(function (a, l) { return a + l.amt; }, 0), kind = fval(f, 'kind'), why = fval(f, 'why');
+        if (total < 0) { toast('The total cannot be below R0'); return false; }
+        if (!locked && Math.round(total) !== Math.round(b.total)) {
+          var d = total - b.total; b.charges = b.charges || [];
+          b.charges.push({ d: TODAY, desc: 'Price adjustment' + (why ? ': ' + why : ''), e: d, c: d, adj: true }); b.eft += d; b.card += d; b.total += d;
+          b.notes.push({ at: nowStamp(), by: ME.name, text: 'Price adjusted by ' + (d > 0 ? '+' : '-') + money(Math.abs(d)) + ' on a new ' + kind.toLowerCase() + '. Total is now ' + money(b.total) + '.' + (why ? ' Reason: ' + why : '') });
+        }
+        var inv = invFor(b, kind, ls, { note: fval(f, 'note'), validTo: kind === 'Quote' ? fval(f, 'valid') : '', by: ME.name });
+        b.invoices = b.invoices || []; b.invoices.push(inv);
+        log(kind + ' ' + inv.no + ' made for ' + guestName(b), b.ref); save(); refresh();
+        setTimeout(function () { invView(b, inv, true); }, 50);
+      }, { wide: true, noFocus: true, onOpen: function (f) {
+        var box = $('[data-inv-lines]', f);
+        var upd = function () { var t = $$('[name=a]', f).reduce(function (a, i) { return a + (parseFloat(String(i.value).replace(/[^\d.-]/g, '')) || 0); }, 0); $('[data-inv-tot]', f).innerHTML = 'Total <b>' + money(t) + '</b>' + (!locked && Math.round(t) !== Math.round(b.total) ? ' <span class="pill warn">was ' + money(b.total) + ', changes by ' + (t > b.total ? '+' : '-') + money(Math.abs(t - b.total)) + '</span>' : ''); };
+        f.addEventListener('input', upd);
+        f.elements.kind.addEventListener('change', function () { $('[data-valid]', f).hidden = f.elements.kind.value !== 'Quote'; });
+        f.addEventListener('click', function (e) {
+          if (e.target.closest('[data-inv-rm]')) { e.target.closest('.inv-ed-row').remove(); upd(); }
+          if (e.target.closest('[data-inv-add]')) { box.insertAdjacentHTML('beforeend', row({ t: '', amt: 0 })); $$('.inv-ed-row', box).pop().querySelector('input').focus(); upd(); }
+        });
+        upd();
+      } });
+  }
   function docBooking(b, title) {
+    if (title === 'Invoice') { var cur = invFor(b, 'Invoice'); CUR_INV[b.ref + '|' + cur.no] = cur; return invDoc(cur); }
     return { name: 'Kyleu ' + title.toLowerCase() + ' ' + b.ref + '.pdf', build: function (doc, k) {
       k.head(title, (title === 'Invoice' ? 'Invoice ' : 'Reference ') + b.ref + ' · ' + fd(TODAY, LONGD));
       k.pairs(stayRows(b)); k.h('Your stay'); moneyLines(b, k); k.y(k.y() + 3);
@@ -1492,7 +1608,7 @@
       else if (b.status === 'pending') k.box('A deposit of ' + money(deposit(b)) + ' secures your stand and is due by ' + fd(depositDue(b), LONGD) + '. Pay by EFT to ' + BIZ.bank + ', using reference ' + b.ref + '. Then upload your proof of payment at www.kyleu.co.za/pop.html.');
       else if (balance(b) > 0) k.box('The balance of ' + money(balance(b)) + ' is due by ' + fd(balanceDue(b), LONGD) + '. Pay by EFT to ' + BIZ.bank + ', using reference ' + b.ref + '.');
       else k.box('Paid in full. Thank you!');
-      k.para('Dinokeng Game Reserve conservation and self-drive fees are paid to the reserve, not to Kyleu. We send you a Dinokeng partner code for each vehicle, for the partner rate of R85 instead of R100 per adult per night.', 8.5);
+      k.para('Dinokeng Game Reserve conservation and self-drive fees are paid to the reserve, not to Kyleu. Kyleu is a proud DGR CP member: we send you a Conservation Fee Discount Voucher code for each vehicle, for R85 instead of R100 per adult per night.', 8.5);
       k.foot();
     } };
   }
@@ -1521,11 +1637,11 @@
     } };
   }
   function docCodes(b, cars) {
-    return { name: 'Dinokeng partner codes ' + b.ref + '.pdf', build: function (doc, k) {
+    return { name: 'Dinokeng discount vouchers ' + b.ref + '.pdf', build: function (doc, k) {
       k.head('Dinokeng codes', 'Booking ' + b.ref);
       k.pairs([['Guest', guestName(b)], ['Stand', standById(b.stand).name], ['Arrive', fd(b.ci, LONGD)], ['Depart', fd(b.co, LONGD)]]);
-      k.box('Kyleu is a Dinokeng Certified Partner, so you pay the partner conservation fee of R85 per adult per night instead of R100. Each vehicle has its own code below.');
-      k.table(['Vehicle', 'Driver', 'Dinokeng partner code'], [56, 56, 62], cars.map(function (c) { var r = [carLabel(c, b.cars.indexOf(c)), c.driver || '', c.dgr]; r.strongLast = true; return r; }));
+      k.box('Kyleu is a proud DGR CP member, so you qualify for Dinokeng Conservation Fee Discount Vouchers: R85 per adult per night instead of R100. Each vehicle has its own code below.');
+      k.table(['Vehicle', 'Driver', 'Discount voucher code'], [56, 56, 62], cars.map(function (c) { var r = [carLabel(c, b.cars.indexOf(c)), c.driver || '', c.dgr]; r.strongLast = true; return r; }));
       k.para('Use the code when you buy your conservation fees online at https://dinokeng.plnktn.io before you arrive. Each vehicle that uses the self-drive route also needs a Self Drive Permit (R250 once off). Please give each driver their own code.');
       k.foot();
     } };
@@ -1559,6 +1675,7 @@
           lg.insertAdjacentHTML('beforeend', '<div class="sx-l ' + via + '">' + ic(via === 'wa' ? 'wa' : 'check') + '<span>' + esc(text) + '</span><small>' + nowStamp().slice(11) + '</small></div>');
           $(via === 'wa' ? '[data-sx-wa]' : '[data-sx-mail]', f).innerHTML = ic(via === 'wa' ? 'wa' : 'mail') + (via === 'wa' ? 'WhatsApp again' : 'Email again');
           if (o.onSent) o.onSent(via, cur);
+          docs().forEach(function (d) { if (d.inv) recordInv(b, d.inv, via === 'wa' ? 'WhatsApp' : 'Email', via === 'wa' ? fval(f, 'wa') : fval(f, 'to')); });
           log((via === 'wa' ? 'WhatsApp' : 'Email') + ' sent to ' + guestName(b) + ': ' + fval(f, 's'), b.ref); save(); refresh();
         }
         if (f.elements.tpl) f.elements.tpl.addEventListener('change', function () { load(f.elements.tpl.value); });
@@ -2307,7 +2424,7 @@
     if (SET === 'emails') body = '<div class="tpl-grid">' + Object.keys(TEMPLATES).map(function (k) { var t = TEMPLATES[k]; return '<section class="card"><header class="card-h"><h3>' + t.t + '</h3><span class="muted small">' + ({ confirm: 'Sent when a booking is made', eft: 'Sent 3 days after an unpaid EFT invoice', balance: 'Sent 10 days before arrival', arrival: 'Sent 3 days before arrival', thanks: 'Sent the day after departure' })[k] + '</span></header><p class="small"><b>' + esc(t.s) + '</b></p><pre class="tpl">' + esc(t.b({})) + '</pre></section>'; }).join('') + '</div><p class="demo-note">' + ic('info') + 'Words in {curly brackets} are filled in for each guest. In the live version these send automatically.</p>';
     if (SET === 'maps') body = '<p class="muted small me-intro">Move campsites, text and buildings, draw roads and footpaths, add new campsites, and change the game drive route and story of the "A day at Kyleu" scroll map. Press Save in the editor when you are done.</p><div class="me-wrap"><iframe class="me-frame" src="map-editor.html" title="Map editor"></iframe></div><div class="row-btns"><a class="btn ghost sm" href="map-editor.html" target="_blank" rel="noopener">' + ic('ext') + 'Open the editor full screen</a></div><p class="demo-note">' + ic('info') + 'Demo: Save updates the website maps in this browser. For the live site, press "Download map file" in the editor and replace assets/js/campmap-layout.js with it (or the live version saves it on the server).</p>';
     if (SET === 'camp') body = '<div class="cols"><section class="card"><header class="card-h"><h3>Indemnity form</h3><button class="btn ghost sm" data-act="ind-print" data-ref="">' + ic('note') + 'Print a blank form</button></header><p class="muted small">Every adult signs it when their vehicle checks in, and staff tick it off per vehicle. The printed form has the booking and vehicle filled in.</p><label class="fld"><span>Wording</span><textarea data-indemnity rows="11">' + esc(indText()) + '</textarea></label><p class="hint">' + ic('alert') + ' This is example wording. Replace it with Kyleu\'s own indemnity, checked by a lawyer.</p></section>' +
-      '<section class="card"><header class="card-h"><h3>Dinokeng partner codes</h3></header><p class="small">Kyleu is a Dinokeng Certified Partner. For each booking, staff make one code per vehicle on the Dinokeng partner site, paste the codes on the booking and send them to the client from here, by WhatsApp or email. Dinokeng does not send the codes.</p><p class="small">The guest enters the code when they buy conservation fees on Dinokeng\'s permit site (dinokeng.plnktn.io) and pays the partner rate: R85 instead of R100 per adult per night. Children, pensioners and international guests pay the same either way. Each vehicle that uses the self-drive route also needs a Self Drive Permit, R250 once off.</p><label class="fld"><span>Link to Dinokeng\'s partner site</span><input data-dgrlink value="' + esc(dgrLink()) + '" placeholder="https://"></label><p class="hint">Paste the link you use to request codes. The booking panel opens it for you.</p></section></div>';
+      '<section class="card"><header class="card-h"><h3>Dinokeng discount vouchers (DGR CP)</h3></header><p class="small">Kyleu is a proud DGR CP member, allowed to issue Conservation Fee Discount Vouchers. For each booking, staff make one code per vehicle on the Dinokeng partner site, paste the codes on the booking and send them to the client from here, by WhatsApp or email. Dinokeng does not send the codes.</p><p class="small">The guest enters the code when they buy conservation fees on Dinokeng\'s permit site (dinokeng.plnktn.io) and pays the partner rate: R85 instead of R100 per adult per night. Children, pensioners and international guests pay the same either way. Each vehicle that uses the self-drive route also needs a Self Drive Permit, R250 once off.</p><label class="fld"><span>Link to Dinokeng\'s partner site</span><input data-dgrlink value="' + esc(dgrLink()) + '" placeholder="https://"></label><p class="hint">Paste the link you use to request codes. The booking panel opens it for you.</p></section></div>';
     if (SET === 'data') body = '<div class="cols"><section class="card"><header class="card-h"><h3>Privacy (POPIA)</h3></header><p class="small">Guest details are only used to manage bookings. Guests can ask for their details to be removed; deleting a guest keeps the booking for tax records but removes their contact details.</p><p class="small">Only staff with an account can open this admin, and every change is logged.</p></section>' +
       '<section class="card"><header class="card-h"><h3>Demo data</h3></header><p class="small">Everything in this admin is made-up demo data kept only in this browser. Bookings you make on the website demo show up here too.</p><div class="row-btns"><button class="btn ghost" data-act="export-json">' + ic('download') + 'Download a backup</button><button class="btn ghost danger-t" data-act="reset">Reset demo data</button></div></section></div>' +
       '<section class="card"><header class="card-h"><h3>Activity log</h3><div class="ph-act">' + fsearch('LOGF:q', LOGF.q, 'Search the log') + fsel('LOGF:by', LOGF.by, [['', 'Everyone']].concat(STAFF.map(function (x) { return [x.name, x.name]; })).concat([['Website', 'Website']])) + '</div></header><ul class="feed">' + DB.log.filter(function (l) { return (!LOGF.by || l.by === LOGF.by) && (!LOGF.q || (l.text + ' ' + l.by + ' ' + l.at).toLowerCase().indexOf(LOGF.q.toLowerCase()) >= 0); }).slice(0, 60).map(function (l) { return '<li' + (l.ref ? ' data-open="' + l.ref + '"' : '') + '><span>' + esc(l.text) + '</span><small>' + esc(l.by) + ' · ' + esc(l.at) + '</small></li>'; }).join('') + '</ul></section>';
@@ -2328,7 +2445,7 @@
         (b.vehTbc ? 'not sure yet how many vehicles' : !t ? 'all ' + n + ' sent' : t === n ? n + ' vehicle' + (n === 1 ? '' : 's') + ', none sent' : t + ' of ' + n + ' vehicles still to send') + (b.status === 'pending' ? ' · deposit not paid yet' : '') + '</small></span>' +
         (t ? '<button class="btn sm ghost" data-act="dgr" data-ref="' + b.ref + '">' + ic('gift') + 'Add codes</button>' : '<span class="pill ok">' + ic('check') + 'Sent</span>') + '</div>';
     };
-    return '<div class="page-h"><div><h1>Dinokeng codes</h1><p class="muted">Kyleu is a Dinokeng Certified Partner, so overnight guests pay R85 instead of R100 per adult per night. Make one code per vehicle on the Dinokeng site, paste it on the booking and send it to the client yourself by WhatsApp or email. Dinokeng does not send them.</p></div><div class="ph-act"><a class="btn ghost" href="' + esc(dgrLink()) + '" target="_blank" rel="noopener">' + ic('ext') + 'Open Dinokeng site</a></div></div>' +
+    return '<div class="page-h"><div><h1>Dinokeng vouchers</h1><p class="muted">Kyleu is a proud DGR CP member, so overnight guests qualify for Conservation Fee Discount Vouchers and pay R85 instead of R100 per adult per night. Make one code per vehicle on the Dinokeng site, paste it on the booking and send it to the client yourself by WhatsApp or email. Dinokeng does not send them.</p></div><div class="ph-act"><a class="btn ghost" href="' + esc(dgrLink()) + '" target="_blank" rel="noopener">' + ic('ext') + 'Open Dinokeng site</a></div></div>' +
       '<div class="kpis">' + tile('Still to send this week', todo.length, todo.length ? 'Bookings arriving in the next 7 days' : 'All sent for this week', null, todo.length ? 'warn' : 'ok') + tile('Codes sent this month', sentMonth, 'one per vehicle') + tile('Arriving in the next 30 days', up.length, up.reduce(function (a, b) { return a + ensureCars(b).length; }, 0) + ' vehicles') + '</div>' +
       '<section class="card"><header class="card-h"><h3>Arriving in the next 7 days</h3><span class="count">' + week.length + '</span></header>' + (week.length ? week.map(row).join('') : '<p class="empty">Nobody arriving in the next 7 days.</p>') + '</section>' +
       '<section class="card"><header class="card-h"><h3>Later this month</h3><span class="count">' + later.length + '</span></header>' + (later.length ? later.map(row).join('') : '<p class="empty">No other arrivals in the next 30 days.</p>') + '</section>';
@@ -2485,6 +2602,15 @@
     if (act === 'client-add') return actClient(null);
     if (act === 'news-new') return actPost(null);
     if (act === 'dgr') return openBooking(ref);
+    if (act === 'inv-new') return actInvNew(ref);
+    if (act === 'inv-cur') { var cb = byRef(ref), ci_ = invFor(cb, 'Invoice'); CUR_INV[cb.ref + '|' + ci_.no] = ci_; return invView(cb, ci_); }
+    if (act === 'inv-view' || act === 'inv-dl' || act === 'inv-send') {
+      var ip = ref.split('|'), ib = byRef(ip[0]), iv = invGet(ib, ip[1]); if (!iv) { toast('Invoice not found'); return; }
+      if (act === 'inv-view') return invView(ib, iv);
+      if (act === 'inv-send') { closeModal(); return sendInvoice(ib, iv); }
+      var mk = K.invoicePDF(iv); if (mk) downloadFile(mk.blob, mk.name); else toast('The PDF maker did not load. Check the internet connection.'); return;
+    }
+    if (act === 'claim-no') { var nb = byRef(ref); nb.notes.push({ at: nowStamp(), by: ME.name, text: 'Checked the bank: the ' + money(nb.paidClaim.amt) + ' the guest told us about is not in yet.' }); nb.paidClaim = null; if (nb.status !== 'pending' || !(nb.pops || []).length) nb.pop = false; log('Payment not in the bank yet for ' + nb.ref, nb.ref); save(); refresh(); toast('Noted. Use Send a message to let ' + esc(nb.guest.first) + ' know.'); return; }
     if (act === 'veh-ok') { var vb = byRef(ref); vb.vehTbc = false; log('Number of vehicles confirmed on ' + vb.ref, vb.ref); save(); refresh(); toast('Marked as confirmed'); return; }
     if (act === 'req-done') { var rb = byRef(ref); rb.changeReq.done = { at: nowStamp(), by: ME.name }; rb.notes.push({ at: nowStamp(), by: ME.name, text: 'Change request from the website dealt with.' }); log('Change request on ' + rb.ref + ' dealt with', rb.ref); save(); refresh(); toast('Change request marked as dealt with'); return; }
     if (act === 'send-doc') { var sd = ref.split('|'); return sendTemplate(byRef(sd[0]), sd[1]); }

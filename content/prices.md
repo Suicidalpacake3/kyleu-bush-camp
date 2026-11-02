@@ -43,8 +43,8 @@ Rates year: 2026
 
 ## Dinokeng Game Reserve fees (paid to Dinokeng, not to Kyleu)
 > Charged by the reserve online or at the gate, not part of your Kyleu booking. Effective 1 July 2026 (dinokengreserve.co.za/visit-us).
-> Kyleu is a Dinokeng Certified Partner, so our overnight guests pay the partner rate below. Before your stay we send you a Dinokeng partner code for each vehicle.
-- Conservation fee adult per night: R85 · Partner rate with the Dinokeng partner code we send you (R100 without it)
+> Kyleu is a proud DGR CP (Dinokeng Game Reserve Certified Partner) member, so our overnight guests qualify for Conservation Fee Discount Vouchers and pay the lower rate below. Before your stay we send you a voucher code for each vehicle.
+- Conservation fee adult per night: R85 · With the Conservation Fee Discount Voucher we send you (R100 without it)
 - Conservation fee child 2-12 per night: R50
 - Conservation fee pensioner per night: R85 · RSA pensioners, Mon to Thu, at the gate only
 - Conservation fee international adult per night: R200

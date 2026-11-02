@@ -403,6 +403,7 @@
     booking.ref = ref;
     var isCard = pay === 'full' || pay === 'deposit';
     var paid = pay === 'full' ? q.cardTotal : pay === 'deposit' ? q.cardDeposit : pay === 'eft' ? (q.payFull ? q.total : q.deposit) : 0;
+    var inv = makeInvoice(ref, q, isCard, paid, cv);
     // Demo only: keep a copy in THIS browser so it shows up in the admin mock-up (/admin). Never any card details.
     try {
       var saved = JSON.parse(localStorage.getItem('kyleu-web-bookings') || '[]'), now = new Date();
@@ -410,7 +411,7 @@
         adults: booking.g.adults, pens: booking.g.pens, kids: booking.g.kids, extras: { pp: extras.pp || 0 }, first: f('first'), last: f('last'), email: f('email'), phone: f('phone'), eta: f('eta'), notes: f('notes'),
         vehicles: cv.count, vehTbc: !cv.count, cars: cv.cars,
         shop: SHOP.filter(function (it) { return shopQty[it.label]; }).map(function (it) { return { label: it.label, qty: shopQty[it.label], each: it.each }; }),
-        pay: pay, paid: paid, eft: q.total, card: q.cardTotal });
+        pay: pay, paid: paid, eft: q.total, card: q.cardTotal, invoice: inv });
       localStorage.setItem('kyleu-web-bookings', JSON.stringify(saved.slice(-50)));
     } catch (e) {}
     var box = $('[data-success]', modal);
@@ -419,18 +420,38 @@
       '<h2 style="margin-top:6px">' + (paid ? 'Your reservation is confirmed' : 'Your reservation request is in') + '</h2>' +
       '<p class="muted">' + K.esc(booking.stand.name) + ' · ' + nice(booking.ci, { weekday: 'long', day: 'numeric', month: 'long' }) + ' to ' + nice(booking.co, { weekday: 'long', day: 'numeric', month: 'long' }) + '</p>' +
       '<div class="ref">' + ref + '</div>' +
-      '<p class="muted" style="font-size:.9rem">' + (paid ? K.money(paid) + ' received' + (isCard ? '' : ' by instant EFT') + '. ' : '') + 'A confirmation has been sent to <b>' + K.esc(f('email')) + '</b>.</p>' +
-      '<ol class="next-steps">' +
-      (pay === 'invoice' ? '<li><b>1</b><span>We\'ll email your invoice. Pay the ' + (q.payFull ? 'full amount' : q.depPct + '% deposit (' + K.money(q.deposit) + ') within 5 days') + ' using reference <b>' + ref + '</b>, then <a href="pop.html?ref=' + encodeURIComponent(ref) + '&email=' + encodeURIComponent(f('email')) + '">upload your proof of payment</a>. It goes straight onto your booking.</span></li>' : '') +
+      (paid ? '<p class="muted" style="font-size:.9rem">' + K.money(paid) + ' received' + (isCard ? '' : ' by instant EFT') + '.</p>' : '') +
+      // the invoice is emailed straight away, then shown here too
+      '<div class="inv-sent" data-inv-sent role="status"><span class="spin"></span>Emailing your invoice to ' + K.esc(f('email')) + '…</div>' +
+      '<div class="inv-wrap">' + K.invoiceHTML(inv) + '</div>' +
+      '<div class="inv-acts"><button class="btn btn-ghost" type="button" data-inv-pdf><svg><use href="#i-doc"/></svg>Download PDF</button><button class="btn btn-ghost" type="button" data-inv-print><svg><use href="#i-doc"/></svg>Print</button>' + (paid < inv.total ? '<button class="btn btn-green" type="button" data-inv-paid><svg><use href="#i-check"/></svg>I have paid</button>' : '') + '</div>' +
+      '<div class="paid-box" data-paid-box></div>' +
+      '<h3 style="margin:26px 0 6px">What happens next</h3><ol class="next-steps">' +
+      (pay === 'invoice' ? '<li><b>1</b><span>Pay the ' + (q.payFull ? 'full amount of ' + K.money(q.total) : q.depPct + '% deposit of ' + K.money(q.deposit)) + ' by EFT within ' + depDays() + ' days, using reference <b>' + ref + '</b>. Then press <b>I have paid</b>, here or later under <a href="manage.html?ref=' + encodeURIComponent(ref) + '">Change my booking</a>. We check the bank and confirm.</span></li>' : '') +
       (!q.payFull && pay !== 'full' ? '<li><b>' + (pay === 'invoice' ? 2 : 1) + '</b><span>Balance of ' + K.money(isCard ? q.cardTotal - q.cardDeposit : q.total - q.deposit) + ' is due by ' + nice(q.balanceDue, { day: 'numeric', month: 'long' }) + '. We\'ll send a reminder.</span></li>' : '') +
-      '<li><b>✓</b><span>Pay your Dinokeng conservation &amp; self-drive fees online or at the gate. Before your stay we send you a Dinokeng <b>partner code</b> for each vehicle, for the lower partner rate. <a href="dinokeng.html#fees">Dinokeng fees</a></span></li>' +
+      '<li><b>✓</b><span>Pay your Dinokeng conservation &amp; self-drive fees online or at the gate. Kyleu is a proud DGR CP member, so before your stay we send you a <b>Conservation Fee Discount Voucher</b> code for each vehicle (R85 instead of R100 per adult per night). <a href="dinokeng.html#fees">Dinokeng fees</a></span></li>' +
       (cv.count && cv.cars.every(function (c) { return c.reg && c.driver; }) ? '' : '<li><b>✓</b><span>Before you arrive, add ' + (cv.count ? 'the missing vehicle details and passengers' : 'how many vehicles are coming, with each registration, driver and passengers') + ' under <a href="manage.html?ref=' + encodeURIComponent(ref) + '">Change my booking</a>. Keep your reference <b>' + ref + '</b> handy.</span></li>') +
       (cv.count && cv.cars.every(function (c) { return c.reg && c.driver; }) ? '<li><b>✓</b><span>Need to change something? Use <a href="manage.html?ref=' + encodeURIComponent(ref) + '">Change my booking</a> with your reference <b>' + ref + '</b>.</span></li>' : '') +
       '<li><b>✓</b><span>Enter at Dinokeng <b>Tau Gate</b>, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km. <a href="contact.html">Directions</a></span></li></ol>' +
       '<div class="cta-actions"><button class="btn" type="button" data-ics><svg><use href="#i-cal"/></svg>Add to calendar</button><a class="btn btn-green" target="_blank" rel="noopener" href="https://wa.me/27604584478?text=' + encodeURIComponent('Hi Kyleu! My booking reference is ' + ref + ' (' + booking.stand.name + ', ' + iso(booking.ci) + ' to ' + iso(booking.co) + ').') + '"><svg><use href="#i-wa"/></svg>Share with Kyleu</a></div>' +
       '<div class="demo-flag" style="margin:22px 0 0;text-align:left"><svg><use href="#i-info"/></svg><span>Demo mode: this is a mock-up. No booking was made, nothing was charged and no details were sent anywhere. A copy stays in this browser only, so you can see it in the admin demo.</span></div></div>';
     $('[data-ics]', box).onclick = downloadICS;
+    setTimeout(function () { var s = $('[data-inv-sent]', box); if (s) { s.className = 'inv-sent ok'; s.innerHTML = '<svg><use href="#i-check"/></svg>Invoice sent to ' + K.esc(f('email')) + ' by email'; } }, 1400);
+    $('[data-inv-pdf]', box).onclick = function () { K.downloadInvoice(inv).catch(function () { K.toast('The PDF could not be made. Check your internet connection.'); }); };
+    $('[data-inv-print]', box).onclick = function () { window.print(); };
+    var pb = $('[data-inv-paid]', box); if (pb) pb.onclick = function () { var pbx = $('[data-paid-box]', box); K.paidForm(pbx, inv, function (c) { if (c) pb.remove(); }); pbx.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
     goStep(4); confetti();
+  }
+  function depDays() { return P.num('Booking rules', 'Deposit due within days of invoice', 5); }
+  // the booking's invoice: same look on the website, in the email and in the admin
+  function makeInvoice(ref, q, isCard, paid, cv) {
+    var g = booking.g, a = g.adults + g.pens, t = today(), due = addDays(t, depDays()), fv = function (n) { var el = $('[name=' + n + ']', modal); return el ? el.value.trim() : ''; };
+    var lines = q.lines.map(function (l) { return { t: l.t.replace(/ × (\d+) × (R[\d\s,.]+)$/, ' × $1 people at $2 each'), amt: isCard ? l.c : l.v, free: !!l.free, tag: 'stay' }; })
+      .concat(q.exLines.map(function (l) { return { t: l.t, amt: isCard ? l.c : l.v, tag: l.shop ? 'shop' : 'extra' }; }));
+    return { kind: 'Invoice', no: K.invoiceNo(ref, 'Invoice', 1), date: iso(t), ref: ref,
+      guest: { name: (fv('first') + ' ' + fv('last')).trim(), email: fv('email'), phone: fv('phone') },
+      stay: { stand: booking.stand.name, ci: iso(booking.ci), co: iso(booking.co), nights: q.nights, guests: a + ' adult' + (a === 1 ? '' : 's') + (g.pens ? ' (' + g.pens + ' pensioner' + (g.pens === 1 ? '' : 's') + ')' : '') + (g.kids ? ', ' + g.kids + ' child' + (g.kids === 1 ? '' : 'ren') : ''), vehicles: cv.count || 'Not sure yet' },
+      lines: lines, total: isCard ? q.cardTotal : q.total, paid: paid, deposit: isCard ? q.cardDeposit : q.deposit, depPct: q.depPct, depositDue: iso(q.payFull ? (due < booking.ci ? due : t) : due), balanceDue: iso(q.balanceDue), payFull: q.payFull };
   }
   function downloadICS() {
     var b = booking, d = function (x) { return iso(x).replace(/-/g, ''); };

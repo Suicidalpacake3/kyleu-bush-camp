@@ -1138,3 +1138,14 @@ html:has(body.lock) { overflow: hidden; }
 .callout.bad { background: var(--bad-bg, #fbeceb); }
 .callout.cflex > div { flex: 1; line-height: 1.5; }
 .callout.cflex .row-btns { margin-top: 10px; }
+
+/* invoices and quotes */
+.inv-admin .inv { box-shadow: none; }
+.inv-admin-acts { justify-content: flex-end; margin-top: 12px; }
+.inv-ed-head, .inv-ed-row { display: grid; grid-template-columns: 1fr 120px 36px; gap: 8px; align-items: center; }
+.inv-ed-head { font-size: .78rem; font-weight: 800; color: var(--muted); margin: 6px 0 4px; }
+.inv-ed { display: grid; gap: 6px; margin-bottom: 8px; }
+.inv-ed-row input { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; }
+.inv-ed-row input[name=a] { text-align: right; }
+.inv-ed-row input[readonly] { background: var(--line-2); color: var(--muted); }
+.inv-ed-tot { margin: 10px 0 12px; font-size: 1.05rem; text-align: right; }

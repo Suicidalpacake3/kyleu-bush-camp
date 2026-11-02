@@ -27,6 +27,14 @@
 - Distance from Pretoria: 50 km
 - Reserve size: 21 000 ha
 
+## Banking details
+> Printed on every invoice and quote. CHECK THESE WITH THE BANK BEFORE GOING LIVE (these are placeholders).
+- Bank: FNB
+- Account name: Kyleu Bush Camp
+- Account number: 62000000000
+- Branch code: 250655
+- Account type: Cheque
+
 ## Booking
 > "demo" = the on-site booking form shows a demo confirmation (no data sent).
 > Online payments: "off" = guests get an EFT invoice (for now). "on" = card and instant EFT through the payment provider (same prices).

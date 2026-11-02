@@ -59,14 +59,15 @@
     return { ref: b.ref, status: b.status, first: b.guest.first || '', last: b.guest.last || '', email: b.guest.email || '', phone: b.guest.phone || '', stand: b.stand, ci: b.ci, co: b.co, adults: b.adults || 0, pens: b.pens || 0, kids: b.kids || 0,
       vehicles: b.vehTbc ? 0 : (cs.length || b.vehicles || 1), cars: cs.map(function (c) { return { reg: c.reg || '', driver: c.driver || '', guests: (c.guests || []).slice() }; }),
       eta: b.eta || '', shop: pre && pre.items ? clone(pre.items) : {}, total: b.total || 0, paid: (b.payments || []).reduce(function (a, p) { return a + p.amt; }, 0), method: b.method || 'eft',
-      request: b.changeReq && !b.changeReq.done ? b.changeReq : null };
+      request: b.changeReq && !b.changeReq.done ? b.changeReq : null, invoice: (b.invoices || []).filter(function (x) { return x.kind === 'Invoice'; }).slice(-1)[0] || null,
+      claim: b.paidClaim && !b.paidClaim.done ? b.paidClaim : null, created: (b.created || '').slice(0, 10) };
   }
   function fromWeb(w) {
     var card = w.pay === 'deposit' || w.pay === 'full', shop = {};
     (w.shop || []).forEach(function (x) { shop[x.label] = x.qty; });
     return { ref: w.ref, status: w.paid ? 'confirmed' : 'pending', first: w.first || '', last: w.last || '', email: w.email || '', phone: w.phone || '', stand: w.stand, ci: w.ci, co: w.co, adults: w.adults || 0, pens: w.pens || 0, kids: w.kids || 0,
       vehicles: w.vehTbc ? 0 : Math.max(1, +w.vehicles || 1), cars: (w.cars || []).map(function (c) { return { reg: c.reg || '', driver: c.driver || '', guests: (c.guests || []).slice() }; }),
-      eta: w.eta || '', shop: shop, total: card ? w.card : w.eft, paid: w.paid || 0, method: card ? 'card' : 'eft', request: null };
+      eta: w.eta || '', shop: shop, total: card ? w.card : w.eft, paid: w.paid || 0, method: card ? 'card' : 'eft', request: null, invoice: w.invoice || null, claim: null, created: (w.created || '').slice(0, 10) };
   }
   function applyAmend(v, a) {
     if (a.guests && a.guests.mode === 'direct') { v.adults = a.guests.adults; v.pens = a.guests.pens; v.kids = a.guests.kids; v.total += a.guests.diff || 0; }
@@ -75,6 +76,7 @@
     if (a.eta != null) v.eta = a.eta;
     if (a.shop) { v.total += a.shopDiff || 0; v.shop = clone(a.shop); }
     if (a.request) v.request = Object.assign({ at: a.at }, a.request);
+    if (a.invoice) v.invoice = clone(a.invoice);
     return v;
   }
   function allBookings() {
@@ -82,12 +84,63 @@
     read(WEB, []).forEach(function (w) { if (w && w.ref) map[key(w.ref)] = fromWeb(w); });
     if (db && db.bookings) db.bookings.forEach(function (b) { map[key(b.ref)] = fromAdmin(b); });
     read(AMEND, []).forEach(function (a) { var v = map[key(a.ref)]; if (v && !seen[a.id]) applyAmend(v, a); });
+    var pseen = (db && db.paidSeen) || {};
+    K.paidClaims().forEach(function (c) { var v = map[key(c.ref)]; if (v && !pseen[c.id]) v.claim = c; });
     return map;
   }
   function findBooking(ref, who) {
     var v = allBookings()[key(ref)]; if (!v) return { err: 'ref' };
     var w = String(who || '').trim().toLowerCase(), ok = (w.indexOf('@') > 0 && w === v.email.toLowerCase()) || (digits(w) && digits(w) === digits(v.phone));
     return ok ? { v: v } : { err: 'who' };
+  }
+
+  /* ---------- invoice ---------- */
+  function depDays() { return P ? P.num('Booking rules', 'Deposit due within days of invoice', 5) : 5; }
+  function addD(s, n) { var d = D(s); d.setDate(d.getDate() + n); return iso(d); }
+  function invoiceFor(v) {
+    var depPct = P ? P.num('Booking rules', 'Deposit percentage', 50) : 50, base0 = v.invoice ? clone(v.invoice) : null;
+    var stayInfo = { stand: stand(v.stand).name, ci: v.ci, co: v.co, nights: nights(v.ci, v.co), guests: peopleText(v), vehicles: v.vehicles || 'Not sure yet' };
+    if (base0) {
+      base0.guest = { name: (v.first + ' ' + v.last).trim(), email: v.email, phone: v.phone }; base0.stay = stayInfo; base0.paid = v.paid;
+      var sum = base0.lines.reduce(function (a, l) { return a + (l.amt || 0); }, 0);
+      if (Math.round(sum) !== Math.round(v.total)) base0.lines.push({ t: 'Changes made by Kyleu since this invoice', amt: v.total - sum, tag: 'adj' });
+      base0.total = v.total; return base0;
+    }
+    // no invoice kept yet: build one from the booking
+    var sl = shopList(v.shop), shopAmt = price(v, shopSum(v.shop));
+    return { kind: 'Invoice', no: K.invoiceNo(v.ref, 'Invoice', 1), date: v.created || today(), ref: v.ref, guest: { name: (v.first + ' ' + v.last).trim(), email: v.email, phone: v.phone }, stay: stayInfo,
+      lines: [{ t: nights(v.ci, v.co) + ' night' + (nights(v.ci, v.co) === 1 ? '' : 's') + ' at ' + stand(v.stand).name + ' · ' + peopleText(v), amt: v.total - shopAmt, tag: 'stay' }].concat(sl.map(function (x) { return { t: x.qty + ' × ' + x.label, amt: price(v, x.qty * x.each), tag: 'shop' }; })),
+      total: v.total, paid: v.paid, deposit: Math.round(v.total * depPct / 100), depPct: depPct, depositDue: addD(v.created || today(), depDays()), balanceDue: addD(v.ci, -balDays()), payFull: nights(v.created || today(), v.ci) <= balDays() };
+  }
+  // a new invoice after a change that alters the price
+  function nextInvoice(v, a) {
+    var cur = invoiceFor(v), n = (parseInt(String(cur.no).split('-').pop(), 10) || 1) + 1, lines = cur.lines.filter(function (l) { return l.tag !== 'adj'; });
+    if (a.guests && a.guests.mode === 'direct') {
+      var stayAmt = lines.filter(function (l) { return l.tag === 'stay'; }).reduce(function (x, l) { return x + (l.amt || 0); }, 0) + (a.guests.diff || 0);
+      lines = [{ t: nights(v.ci, v.co) + ' night' + (nights(v.ci, v.co) === 1 ? '' : 's') + ' · ' + peopleText(a.guests), amt: stayAmt, tag: 'stay' }].concat(lines.filter(function (l) { return l.tag !== 'stay'; }));
+    }
+    if (a.shopItems) lines = lines.filter(function (l) { return l.tag !== 'shop'; }).concat(a.shopItems.map(function (x) { return { t: x.qty + ' × ' + x.label, amt: price(v, x.qty * x.each), tag: 'shop' }; }));
+    var total = lines.reduce(function (x, l) { return x + (l.amt || 0); }, 0);
+    return Object.assign(cur, { no: K.invoiceNo(v.ref, 'Invoice', n), date: today(), lines: lines, total: total, deposit: cur.paid ? cur.deposit : Math.round(total * (cur.depPct || 50) / 100), note: 'Updated invoice: replaces ' + cur.no + '.' });
+  }
+  function invModal(v) {
+    var inv = invoiceFor(v), st = K.invoiceState(inv), m = document.createElement('div');
+    m.className = 'inv-modal'; m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true'); m.setAttribute('aria-label', 'Your invoice');
+    m.innerHTML = '<div class="inv-modal-card"><div class="inv-modal-h"><h2>Your invoice</h2><button type="button" class="inv-x" data-inv-close aria-label="Close">' + svg('i-x') + '</button></div>' + K.invoiceHTML(inv) +
+      '<div class="inv-acts"><button class="btn btn-ghost" type="button" data-inv-pdf>' + svg('i-doc') + 'Download PDF</button><button class="btn btn-ghost" type="button" data-inv-print>' + svg('i-doc') + 'Print</button>' +
+      (st.bal > 0 && !v.claim ? '<button class="btn btn-green" type="button" data-inv-paid>' + svg('i-check') + 'I have paid</button>' : '') + '</div><div class="paid-box" data-paid-box>' + (v.claim ? K.paidThanks(v.claim, inv) : '') + '</div></div>';
+    document.body.appendChild(m); document.body.classList.add('lock');
+    var close = function () { m.remove(); document.body.classList.remove('lock'); drawSecs(); };
+    m.addEventListener('click', function (e) {
+      if (e.target === m || e.target.closest('[data-inv-close]')) { close(); return; }
+      if (e.target.closest('[data-inv-pdf]')) { K.downloadInvoice(inv).catch(function () { K.toast('The PDF could not be made. Check your internet connection.'); }); return; }
+      if (e.target.closest('[data-inv-print]')) { window.print(); return; }
+      var pb = e.target.closest('[data-inv-paid]');
+      if (pb) K.paidForm($('[data-paid-box]', m), inv, function (c) { if (c) { pb.remove(); base.claim = c; } });
+    });
+    document.addEventListener('keydown', function esc0(e) { if (e.key === 'Escape' && document.body.contains(m)) { close(); document.removeEventListener('keydown', esc0); } });
+    $('[data-inv-close]', m).focus();
+    if (v._paid) { var b0 = $('[data-inv-paid]', m); if (b0) b0.click(); }
   }
 
   /* ---------- steps ---------- */
@@ -143,7 +196,9 @@
     return '<div class="mg-booking"><div class="mg-bk-top"><span class="mg-ref">' + esc(v.ref) + '</span><span class="mg-st ' + (v.status === 'pending' ? 'warn' : 'ok') + '">' + (v.status === 'pending' ? 'Waiting for your deposit' : v.status === 'in' ? 'In camp now' : 'Confirmed') + '</span></div>' +
       '<h3>' + esc(st.name) + '</h3><p>' + svg('i-cal') + '<span><b>' + esc(nice(v.ci, true)) + '</b> to <b>' + esc(nice(v.co, true)) + '</b> (' + nights(v.ci, v.co) + ' night' + (nights(v.ci, v.co) === 1 ? '' : 's') + ')</span></p>' +
       '<p>' + svg('i-users') + '<span>' + esc(peopleText(v)) + '</span></p>' +
-      '<p class="mg-money">Total <b>' + K.money(v.total) + '</b> · Paid <b>' + K.money(v.paid) + '</b> · Still to pay <b>' + K.money(bal) + '</b></p></div>' +
+      '<p class="mg-money">Total <b>' + K.money(v.total) + '</b> · Paid <b>' + K.money(v.paid) + '</b> · Still to pay <b>' + K.money(bal) + '</b></p>' +
+      (v.claim ? '<p class="mg-claim">' + svg('i-clock') + '<span>You told us you paid <b>' + K.money(v.claim.amt) + '</b> on ' + esc(nice(v.claim.date)) + '. We are checking the bank.</span></p>' : '') +
+      '<div class="mg-bk-acts"><button type="button" class="btn btn-light btn-sm" data-inv-open>' + svg('i-doc') + 'View my invoice</button>' + (bal > 0 && !v.claim ? '<button type="button" class="btn btn-green btn-sm" data-inv-open="paid">' + svg('i-check') + 'I have paid</button>' : '') + '</div></div>' +
       (locked(v) ? '<div class="mg-callout">' + svg('i-info') + '<p><b>Your stay starts within ' + balDays() + ' days.</b> You can still update your vehicles and passengers, arrival time, contact details, shop order and send us a message here. To change the <b>number of guests or your dates</b>, please call or WhatsApp us.</p></div>' : '');
   }
   function editor(id) {
@@ -153,7 +208,7 @@
       '<div class="grid-2"><div class="field"><label for="e-email">Email</label><input id="e-email" name="email" type="email" value="' + esc(d.email) + '" autocomplete="email"></div><div class="field"><label for="e-phone">Mobile number</label><input id="e-phone" name="phone" type="tel" value="' + esc(d.phone) + '" autocomplete="tel"></div></div>';
     if (id === 'cars') {
       var opts = ''; for (var i = 1; i <= 10; i++) opts += '<option value="' + i + '"' + (d.vehicles === i ? ' selected' : '') + '>' + i + ' vehicle' + (i === 1 ? '' : 's') + '</option>';
-      return '<p class="mg-help-t">For each vehicle, give the <b>registration</b>, the <b>driver</b> and <b>everyone else in it</b>. Every person in a vehicle signs an indemnity form at the gate, and we make one Dinokeng partner code per vehicle, so this makes your arrival much quicker. Fill in what you know; you can come back and add the rest later.</p>' +
+      return '<p class="mg-help-t">For each vehicle, give the <b>registration</b>, the <b>driver</b> and <b>everyone else in it</b>. Every person in a vehicle signs an indemnity form at the gate, and we send one Dinokeng Conservation Fee Discount Voucher per vehicle, so this makes your arrival much quicker. Fill in what you know; you can come back and add the rest later.</p>' +
         '<div class="field"><label for="e-veh">How many vehicles are coming?</label><select id="e-veh" name="veh">' + opts + '<option value="0"' + (!d.vehicles ? ' selected' : '') + '>Not sure yet, I\'ll tell you later</option></select></div><div class="cars-list" data-cars></div>';
     }
     if (id === 'eta') return '<p class="mg-help-t">Check-in is from 12:00. Knowing roughly when you arrive helps us have your stand, firewood and ice ready.</p>' +
@@ -309,6 +364,8 @@
     if (changed('dates')) { a.request = Object.assign(a.request || {}, clone(d.request)); a.summary.push('asked to change the dates'); }
     if (a.request) { var gg = a.guests && a.guests.mode === 'request' ? a.guests : b; a.request.adults = gg.adults; a.request.pens = gg.pens; a.request.kids = gg.kids; a.request.paid = b.paid; }
     if (changed('note')) { a.note = d.note; a.summary.push('a message'); }
+    var money0 = (a.shopItems ? 1 : 0) + (a.guests && a.guests.mode === 'direct' && a.guests.diff ? 1 : 0);
+    if (money0) a.invoice = nextInvoice(b, a);
     var list = read(AMEND, []); list.push(a);
     try { localStorage.setItem(AMEND, JSON.stringify(list.slice(-80))); } catch (e) { K.toast('Your browser could not save the changes. Please WhatsApp us.'); return; }
     var was = clone(base); base = applyAmend(clone(base), a); draft = Object.assign(clone(base), { note: '', request: null, guests: null });
@@ -318,6 +375,7 @@
     if (a.guests && a.guests.mode === 'direct') steps.push(a.guests.extra ? '<b>You have paid in full, so the extra ' + K.money(a.guests.diff) + ' for the added guests is outstanding.</b> We send you a new invoice for just that amount. Pay it by EFT with reference <b>' + esc(base.ref) + '</b> before you arrive.' : 'Your booking is now for <b>' + esc(peopleText(base)) + '</b>' + (a.guests.diff ? ' and your new total is <b>' + K.money(base.total) + '</b>' : '') + '.');
     if (a.request) steps.push('We look at your ' + (a.guests && a.guests.mode === 'request' && changed0(was, a, 'dates') ? 'new dates and number of guests' : a.guests && a.guests.mode === 'request' ? 'new number of guests' : 'new dates') + ' and get back to you by email or WhatsApp, usually within one working day. <b>Your booking stays as it is until we confirm.</b>');
     if (base.vehicles === 0 || base.cars.some(function (c) { return !c.reg || !c.driver; })) steps.push('Still missing some vehicle details? Come back here any time before ' + esc(nice(base.ci)) + ' to add them.');
+    if (a.invoice) steps.unshift('We have emailed your <b>updated invoice</b> to <b>' + esc(base.email) + '</b>. <button type="button" class="link-btn" data-inv-open>View it here</button>.');
     $('[data-pane="4"]').innerHTML = '<div class="success mg-done"><div class="success-badge"><svg class="ring" viewBox="0 0 110 110" fill="none" stroke="#3f7d3a" stroke-width="6" stroke-linecap="round"><circle cx="55" cy="55" r="50"/><path d="M34 57l14 14 28-30"/></svg></div>' +
       '<p class="bw-of">Step 4 of 4</p><h2>Your changes are saved</h2><p class="muted">Booking <b>' + esc(base.ref) + '</b> · ' + esc(stand(base.stand).name) + ' · ' + esc(nice(base.ci)) + ' to ' + esc(nice(base.co)) + '</p>' +
       '<p class="mg-small">You changed: ' + esc(a.summary.join(', ')) + '.</p>' +
@@ -368,6 +426,7 @@
       if (t.closest('[data-done]')) { var was = openSec; if (!takeEditor()) return; openSec = ''; drawSecs(); scrollToSec(was); if (changed(was)) K.toast('Got it. You can change something else, or press Next at the bottom.'); return; }
       if (t.closest('[data-cancel]')) { var c0 = openSec; openSec = ''; drawSecs(); scrollToSec(c0); return; }
       if (t.closest('[data-undo]')) { var u = openSec; undo(u); openSec = ''; drawSecs(); scrollToSec(u); K.toast('Put back the way it was'); return; }
+      var io_ = t.closest('[data-inv-open]'); if (io_) { var vv = clone(base); vv._paid = io_.dataset.invOpen === 'paid'; vv.claim = base.claim; invModal(vv); return; }
       if (t.closest('[data-back1]')) { go(1); return; }
       if (t.closest('[data-next3]')) {
         if (openSec) { if (!takeEditor()) { scrollToSec(openSec); return; } openSec = ''; drawSecs(); }

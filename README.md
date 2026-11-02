@@ -8,7 +8,7 @@ A fast, static website (plain HTML, CSS and JavaScript) for Kyleu Bush Camp in t
 
 | Page | What's on it |
 |---|---|
-| `index.html` | Home (kept calm on purpose): one slowly drifting photo, intro, DGR certified partner badge, family story, camp areas (each links to its stand photos), why campers come back, FAQ |
+| `index.html` | Home (kept calm on purpose): one slowly drifting photo, intro, DGR CP (Dinokeng Game Reserve Certified Partner) badge, family story, camp areas (each links to its stand photos), why campers come back, FAQ |
 | `experience.html` | Experience Kyleu: scroll-animated "day at Kyleu" map, what campers love, guest stories (links in `content/settings.md` under "Guest stories"), camp news (only shows when there are posts) |
 | `stands.html` | Our stands: photos and details of every stand, grouped by area, each with "Book this stand" |
 | `stay.html` | Book now: guests choose dates first, then only the free stands show; site map, stand details, checkout (EFT invoice while "Online payments" is off in settings). Guests give each vehicle's registration, driver and passengers (or "Not sure yet"), and can order camp shop items to be waiting on arrival |
@@ -23,7 +23,11 @@ A fast, static website (plain HTML, CSS and JavaScript) for Kyleu Bush Camp in t
 
 **One price for everyone:** `content/prices.md` holds the price. "Card payment fee percentage" is kept at 0, so guests never pay the card company's fee. Guests pay by EFT for now; when a payment provider is connected, set "Online payments: on" in `content/settings.md` and the prices stay the same.
 
-**Dinokeng:** the reserve's fees (effective 1 July 2026) are in `content/prices.md`. Kyleu is a Dinokeng Certified Partner: staff make one partner code per vehicle on the Dinokeng site, paste the codes on the booking in the admin and send them to the client by WhatsApp or email (Dinokeng does not send them). Guests then pay R85 instead of R100 per adult per night.
+**Dinokeng:** the reserve's fees (effective 1 July 2026) are in `content/prices.md`. Kyleu is a DGR CP (Dinokeng Game Reserve Certified Partner) member, so guests qualify for Conservation Fee Discount Vouchers: staff make one voucher code per vehicle on the Dinokeng site, paste the codes on the booking in the admin and send them to the client by WhatsApp or email (Dinokeng does not send them). Guests then pay R85 instead of R100 per adult per night.
+
+**Invoices and quotes:** every website booking gets an invoice straight away, in the site's colours (the same design on the website, in the admin and as a PDF; `assets/js/invoice.js`). The guest sees "Invoice sent by email" and the invoice on screen, can download or print it and press **I have paid** (there, or later under Change my booking). Staff then see "says they paid" on the booking and confirm it with one click. Changes that alter the price (camp shop, more guests) email an updated invoice. In the admin, each booking lists its invoices and quotes; staff can make a new invoice or quote and change amounts or add lines (a discount is a minus amount) until a payment is made, after which prices are locked. Banking details printed on invoices are in `content/settings.md` under "Banking details" (placeholders until checked with the bank). Demo: nothing is really emailed.
+
+**DGR CP:** Dinokeng asks partners to say "DGR CP" and to call the codes "Conservation Fee Discount Vouchers"; the site, invoices and admin now do. The logo is the approved dark green version, on a light background with clear space around it and no effects (Dinokeng logo guide).
 
 **Cancellations:** no refunds; what the guest paid is kept as a credit (the admin records it and offers it on the guest's next booking).
 
