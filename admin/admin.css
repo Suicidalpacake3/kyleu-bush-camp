@@ -1121,4 +1121,7 @@ html:has(body.lock) { overflow: hidden; }
 .btn.wa:hover { background: #17864a; }
 .car-docs { margin-top: 8px; }
 @media (max-width: 560px) { .sx-acts .btn { flex: 1 1 100%; justify-content: center; } .sx-sp { display: none; } }
+.dgr-steps { margin: 0 0 10px; padding-left: 20px; font-size: .86rem; line-height: 1.45; display: grid; gap: 3px; }
+.dgr-acts { align-items: center; }
+.dgr-acts .muted { margin-right: auto; }
 

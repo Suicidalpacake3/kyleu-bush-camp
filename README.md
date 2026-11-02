@@ -22,7 +22,7 @@ A fast, static website (plain HTML, CSS and JavaScript) for Kyleu Bush Camp in t
 
 **One price for everyone:** `content/prices.md` holds the price. "Card payment fee percentage" is kept at 0, so guests never pay the card company's fee. Guests pay by EFT for now; when a payment provider is connected, set "Online payments: on" in `content/settings.md` and the prices stay the same.
 
-**Dinokeng:** the reserve's fees (effective 1 July 2026) are in `content/prices.md`. Kyleu is a Dinokeng Certified Partner: create the partner code under Vouchers in the admin and it is emailed to each guest in the week of their stay.
+**Dinokeng:** the reserve's fees (effective 1 July 2026) are in `content/prices.md`. Kyleu is a Dinokeng Certified Partner: staff make one partner code per vehicle on the Dinokeng site, paste the codes on the booking in the admin and send them to the client by WhatsApp or email (Dinokeng does not send them). Guests then pay R85 instead of R100 per adult per night.
 
 **Cancellations:** no refunds; what the guest paid is kept as a credit (the admin records it and offers it on the guest's next booking).
 
