@@ -46,6 +46,8 @@ Each file has instructions at the top. Lines starting with `>` are notes and don
 
 **The maps:** the camp map and the "A day at Kyleu" scroll map are edited in the admin under **Settings > Maps**. Staff can move campsites, text and buildings, draw roads and footpaths, add new campsites, and change the game drive route and the scroll map's story. In the demo, "Save to website" updates the maps in that browser. To publish for everyone, press "Download map file" and replace `assets/js/campmap-layout.js` with the downloaded file (the live version can save it on the server instead).
 
+**Social media from the admin:** under **Social media** staff set the Instagram, Facebook and TikTok links (shown on the Experience page and in every page's footer), the hashtag, and the posts shown under "Stories from our campers" (add, hide, reorder, remove; Instagram and Facebook posts show as the post itself). Live feeds: the Facebook page's latest posts appear through Facebook's free page plugin as soon as the Facebook link is filled in; the newest Instagram photos need a free Behold.so feed connected to Kyleu's Instagram (Business or Creator account), whose feed ID is pasted in. In the demo the settings stay in the browser; "Copy as settings.md text" gives the text for `content/settings.md`.
+
 **Camp news from the admin:** posts can also be written under **Camp news** in the admin. In the demo they show on the website in the same browser; "Copy as blog.md text" gives the text to paste into `content/blog.md`.
 
 **Adding stand photos:** use landscape photos (wider than tall) at least 1200px wide. Save them as `1.jpg`, `2.jpg` and so on in the stand's folder, and list them after `Photos:` in `stands.md`.

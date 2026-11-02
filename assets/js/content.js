@@ -74,8 +74,12 @@
       var items = bullets(sec.lines); if (sec.title) secs[norm(sec.title)] = items;
       items.forEach(function (it) { map[norm(it.label)] = it.value; });
     });
+    var so = socialLocal();
+    if (so) { map.instagram = so.instagram || ''; map.facebook = so.facebook || ''; map.tiktok = so.tiktok || ''; if (so.hashtag) map.hashtag = so.hashtag; }
     return { raw: map, list: function (title) { return secs[norm(title)] || []; }, get: function (k, d) { var v = map[norm(k)]; return (v === undefined || v === '') ? d : v; } };
   }
+  // social media set on the admin's Social media page (demo: this browser; live: from the server)
+  function socialLocal() { try { return JSON.parse(localStorage.getItem('kyleu-web-social') || 'null'); } catch (e) { return null; } }
 
   // ---------- prices ----------
   function parsePrices(md) {
@@ -200,6 +204,7 @@
 
   // ---------- public API ----------
   var K = window.Kyleu = window.Kyleu || {};
+  K.social = socialLocal;
   K.money = money; K.markdown = markdown; K.norm = norm; K.AREA = AREA; K.esc = esc;
   // Card vs EFT: prices.md holds the normal (EFT) price; card payments add the card fee.
   K.cardFee = function (P) { return P ? P.num('Booking rules', 'Card payment fee percentage', 3) : 3; };

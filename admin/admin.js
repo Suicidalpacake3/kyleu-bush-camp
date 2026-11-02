@@ -429,9 +429,9 @@
     { id: 'leuan', name: 'Leuan', role: 'Front desk', email: 'leuan@kyleu.co.za' }
   ];
   var ROLES = {
-    Owner: ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'rates', 'settings', 'news'],
-    Manager: ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'news'],
-    'Front desk': ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'shop', 'drives', 'news']
+    Owner: ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'rates', 'settings', 'news', 'social'],
+    Manager: ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'news', 'social'],
+    'Front desk': ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'shop', 'drives', 'news', 'social']
   };
   var NAV = [
     { id: 'dashboard', t: 'Dashboard', i: 'home', g: '' },
@@ -449,7 +449,8 @@
     { id: 'stands', t: 'Stands & blocks', i: 'tent', g: 'Setup' },
     { id: 'rates', t: 'Rates & fees', i: 'tag', g: 'Setup' },
     { id: 'settings', t: 'Settings', i: 'cog', g: 'Setup' },
-    { id: 'news', t: 'Camp news', i: 'note', g: 'Website' }
+    { id: 'news', t: 'Camp news', i: 'note', g: 'Website' },
+    { id: 'social', t: 'Social media', i: 'image', g: 'Website' }
   ];
   function can(view) { return ME && ROLES[ME.role].indexOf(view) >= 0; }
   function ic(n, cls) { return '<svg class="ic' + (cls ? ' ' + cls : '') + '" aria-hidden="true"><use href="#i-' + n + '"/></svg>'; }
@@ -974,6 +975,66 @@
       '<div class="card flush"><table class="tbl"><thead><tr><th>Post</th><th>Date</th><th>Tags</th><th>Status</th></tr></thead><tbody>' +
       (ps.length ? ps.map(function (p) { return '<tr data-post="' + esc(p.key) + '" tabindex="0"><td data-l="Post"><span class="post-row">' + (p.image ? '<img src="' + esc(imgSrc(p.image)) + '" alt="">' : '<span class="post-noimg">' + ic('image') + '</span>') + '<span><b>' + esc(p.title) + '</b><small>' + esc(p.summary || '') + '</small></span></span></td><td data-l="Date" data-s="' + esc(p.date) + '">' + fd(p.date, { day: 'numeric', month: 'short', year: 'numeric' }) + '</td><td data-l="Tags">' + ((p.tags || []).map(function (t) { return '<span class="tag">' + esc(t) + '</span>'; }).join('') || '<span class="muted">None</span>') + '</td><td data-l="Status">' + pill(postState(p)) + '</td></tr>'; }).join('') : '<tr><td colspan="4" class="empty">No posts yet.</td></tr>') + '</tbody></table></div>' +
       '<p class="demo-note">' + ic('info') + 'Demo: posts you publish here show on the website\'s news page in this browser. In the live version they are saved on the server (or in WordPress), so every visitor sees them.</p>';
+  }
+  /* =========================================================
+     Social media: the accounts, the live feeds and the hand-picked posts
+     shown on the Experience Kyleu page and in the website footer.
+     Demo: saved in this browser and handed to the website through
+     localStorage "kyleu-web-social". Live: saved on the server.
+     ========================================================= */
+  var SOCK = 'kyleu-web-social';
+  function socDB() {
+    if (!DB.social) {
+      DB.social = { instagram: '', facebook: '', tiktok: '', hashtag: '#KyleuBushCamp', igFeed: '', igCount: 6, fbFeed: true, posts: [] };
+      if (K.settings) K.settings().then(function (S) {   // start from content/settings.md
+        var so = DB.social; so.instagram = S.get('Instagram', ''); so.facebook = S.get('Facebook', ''); so.tiktok = S.get('TikTok', ''); so.hashtag = S.get('Hashtag', so.hashtag);
+        so.posts = (S.list('Guest stories') || []).filter(function (it) { return /^https?:/.test(it.value); }).map(function (it) { var pp = it.value.split(' · '); return { id: uid('sp'), url: pp[0].trim(), title: it.label, by: (pp[1] || '').trim(), show: true }; });
+        socSave(); if (route() === 'social') render();
+      }).catch(function () {});
+    }
+    return DB.social;
+  }
+  function socSave() { save(); try { localStorage.setItem(SOCK, JSON.stringify(DB.social)); } catch (e) {} }
+  function socKind(u) { return /instagram\.com/i.test(u) ? 'ig' : /facebook\.com|fb\.watch/i.test(u) ? 'fb' : /tiktok\.com/i.test(u) ? 'tt' : /youtu/i.test(u) ? 'yt' : 'web'; }
+  var SOC_KIND = { ig: 'Instagram post', fb: 'Facebook post', tt: 'TikTok', yt: 'YouTube', web: 'Article or blog' };
+  function vSocial() {
+    var so = socDB(), shown = so.posts.filter(function (x) { return x.show; }).length;
+    var fld = function (k, label, ph, hint) { return '<label class="fld"><span>' + label + '</span><input data-soc="' + k + '" value="' + esc(so[k] || '') + '" placeholder="' + esc(ph) + '" autocomplete="off"></label>' + (hint ? '<p class="hint">' + hint + '</p>' : ''); };
+    return '<div class="page-h"><div><h1>Social media</h1><p class="muted">Kyleu\'s accounts, the live feeds and the posts shown on the website (Experience Kyleu page, "Stories from our campers", and the footer of every page).</p></div><div class="ph-act"><a class="btn ghost" href="../experience.html#stories" target="_blank" rel="noopener">' + ic('ext') + 'See it on the website</a></div></div>' +
+      '<div class="cols"><section class="card"><header class="card-h"><h3>Your accounts</h3></header>' +
+      fld('instagram', 'Instagram', 'https://www.instagram.com/kyleubushcamp') + fld('facebook', 'Facebook page', 'https://www.facebook.com/kyleubushcamp') + fld('tiktok', 'TikTok (optional)', 'https://www.tiktok.com/@kyleubushcamp') + fld('hashtag', 'Hashtag for guests', '#KyleuBushCamp') +
+      '<p class="hint">' + ic('info') + ' Empty links are hidden on the website. Changes save as you type.</p></section>' +
+      '<section class="card"><header class="card-h"><h3>Live feeds</h3></header>' +
+      '<h5>Facebook</h5><label class="check"><input type="checkbox" data-soc-chk="fbFeed"' + (so.fbFeed ? ' checked' : '') + '><span>Show our Facebook page\'s latest posts on the website</span></label>' +
+      '<p class="hint">' + (so.facebook ? '<span class="pill ok">' + ic('check') + 'Live</span> Uses Facebook\'s free page plugin: new posts appear by themselves, nothing to log in to.' : '<span class="pill muted">Waiting</span> Add the Facebook page link under Your accounts first.') + '</p>' +
+      '<h5>Instagram</h5>' + fld('igFeed', 'Instagram feed ID', 'e.g. a1B2c3D4e5F6g7', '') +
+      '<label class="fld"><span>How many photos</span><select data-soc-sel="igCount">' + [6, 9, 12].map(function (n) { return '<option' + (+so.igCount === n ? ' selected' : '') + '>' + n + '</option>'; }).join('') + '</select></label>' +
+      '<p class="hint">' + (so.igFeed ? '<span class="pill ok">' + ic('check') + 'Connected</span> The newest Instagram photos show on the website by themselves.' : '<span class="pill muted">Not connected</span> Instagram only allows a live feed through an account connection. Free and once only:') + '</p>' +
+      (so.igFeed ? '' : '<ol class="soc-steps"><li>Make a free account at <a href="https://behold.so" target="_blank" rel="noopener">behold.so</a>.</li><li>Connect Kyleu\'s Instagram (it must be a Business or Creator account; switching is free in the Instagram app).</li><li>Create a <b>JSON feed</b>, copy its <b>feed ID</b> and paste it above.</li></ol>') +
+      '</section></div>' +
+      '<section class="card"><header class="card-h"><h3>Featured posts</h3><span class="count">' + shown + ' shown</span><div class="ph-act"><button class="btn sm" data-act="soc-add">' + ic('plus') + 'Add a post</button></div></header>' +
+      '<p class="muted small">Hand-picked posts under "Stories from our campers": a guest\'s Instagram or Facebook post (shown as the post itself), a blog or an article (shown as a link). The post must be public.</p>' +
+      (so.posts.length ? '<div class="list soc-list">' + so.posts.map(function (x, i) {
+        var k = socKind(x.url);
+        return '<div class="brow soc-row' + (x.show ? '' : ' off') + '"><span class="soc-ic ' + k + '">' + ic(k === 'ig' || k === 'fb' ? 'image' : 'ext') + '</span><span class="brow-g"><b>' + esc(x.title || 'Untitled') + '</b><small>' + SOC_KIND[k] + (x.by ? ' · ' + esc(x.by) : '') + ' · ' + esc(x.url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 48)) + '</small></span>' +
+          '<span class="soc-acts"><button type="button" class="btn ghost sm" data-act="soc-show" data-ref="' + x.id + '">' + (x.show ? 'Shown' : 'Hidden') + '</button>' +
+          '<button type="button" class="icon-btn sm" data-act="soc-up" data-ref="' + x.id + '" aria-label="Move up"' + (i ? '' : ' disabled') + '>' + ic('chev-l', 'up') + '</button><button type="button" class="icon-btn sm" data-act="soc-down" data-ref="' + x.id + '" aria-label="Move down"' + (i < so.posts.length - 1 ? '' : ' disabled') + '>' + ic('chev-r', 'down') + '</button>' +
+          '<button type="button" class="icon-btn sm" data-act="soc-edit" data-ref="' + x.id + '" aria-label="Edit">' + ic('edit') + '</button><button type="button" class="icon-btn sm danger-t" data-act="soc-del" data-ref="' + x.id + '" aria-label="Remove">' + ic('x') + '</button></span></div>';
+      }).join('') + '</div>' : '<p class="empty">No posts yet. Press Add a post.</p>') + '</section>' +
+      '<p class="demo-note">' + ic('info') + 'Demo: changes show on the website in this browser straight away. In the live version they are saved on the server, so every visitor sees them. <button type="button" class="link-btn" data-act="soc-md">Copy as settings.md text</button></p>';
+  }
+  function actSocPost(id) {
+    var so = socDB(), x = id ? so.posts.filter(function (p) { return p.id === id; })[0] : null, d = x || { url: '', title: '', by: '' };
+    modal(x ? 'Edit post' : 'Add a post', '<label class="fld"><span>Link to the post</span><input name="url" value="' + esc(d.url) + '" placeholder="https://www.instagram.com/p/..." autocomplete="off"></label>' +
+      '<div class="grid2"><label class="fld"><span>Title</span><input name="title" value="' + esc(d.title) + '" placeholder="e.g. Sunrise from Stand 4"></label><label class="fld"><span>By (optional)</span><input name="by" value="' + esc(d.by) + '" placeholder="e.g. @campwiththeventers"></label></div>' +
+      '<p class="hint">' + ic('info') + ' Instagram and Facebook posts show as the post itself; anything else shows as a link card. The post must be public, and it is polite to ask the guest first.</p>',
+      x ? 'Save' : 'Add post', function (f) {
+        var url = fval(f, 'url');
+        if (!/^https?:\/\/\S+\.\S+/.test(url)) { toast('Paste the full link, starting with https://'); return false; }
+        var row = { url: url, title: fval(f, 'title') || SOC_KIND[socKind(url)], by: fval(f, 'by') };
+        if (x) Object.assign(x, row); else so.posts.unshift(Object.assign({ id: uid('sp'), show: true }, row));
+        log((x ? 'Updated' : 'Added') + ' social post: ' + row.title); socSave(); render(); toast(x ? 'Post saved' : 'Post added. It shows on the website now.');
+      });
   }
   function postImgHTML(img) { return (img ? '<img src="' + esc(imgSrc(img)) + '" alt=""><button type="button" class="btn ghost sm" data-post-noimg>' + ic('x') + 'Remove photo</button>' : '') + '<label class="btn ghost sm">' + ic('image') + (img ? 'Change photo' : 'Add a photo') + '<input type="file" accept="image/*" data-post-file hidden></label>'; }
   function uniqueSlug(s) { var all = allPosts().map(function (p) { return p.slug; }), x = s || 'post', n = 2; while (all.indexOf(x) >= 0) x = s + '-' + n++; return x; }
@@ -2534,7 +2595,7 @@
     return { items: list.slice(p * size, p * size + size), bar: pages > 1 ? '<div class="pager"><span>' + (p * size + 1) + ' to ' + Math.min(list.length, p * size + size) + ' of ' + list.length + '</span><button class="icon-btn sm" data-pg="' + key + '|-1"' + (p ? '' : ' disabled') + ' aria-label="Previous page">' + ic('chev-l') + '</button><button class="icon-btn sm" data-pg="' + key + '|1"' + (p < pages - 1 ? '' : ' disabled') + ' aria-label="Next page">' + ic('chev-r') + '</button></div>' : '' };
   }
 
-  var VIEWS = { dashboard: vDashboard, bookings: vBookings, eft: vEft, calendar: vCalendar, clients: vClients, payments: vPayments, shop: vShop, drives: vDrives, products: vProducts, vouchers: vVouchers, enquiries: vEnquiries, stands: vStands, rates: vRates, reports: vReports, news: vNews, settings: vSettings };
+  var VIEWS = { social: vSocial, dashboard: vDashboard, bookings: vBookings, eft: vEft, calendar: vCalendar, clients: vClients, payments: vPayments, shop: vShop, drives: vDrives, products: vProducts, vouchers: vVouchers, enquiries: vEnquiries, stands: vStands, rates: vRates, reports: vReports, news: vNews, settings: vSettings };
   function route() { var v = (location.hash.match(/^#\/(\w+)/) || [])[1] || 'dashboard'; if (v === 'guests') v = 'clients'; return VIEWS[v] && can(v) ? v : 'dashboard'; }
 
   /* ---------- shell ---------- */
@@ -2633,6 +2694,21 @@
     if (act === 'news-new') return actPost(null);
     if (act === 'dgr') return openBooking(ref);
     if (act === 'inv-new') return actInvNew(ref);
+    if (act === 'soc-add') return actSocPost(null);
+    if (act === 'soc-edit') return actSocPost(ref);
+    if (/^soc-(show|up|down|del)$/.test(act)) {
+      var so = socDB(), sx = so.posts.filter(function (x) { return x.id === ref; })[0], si = so.posts.indexOf(sx); if (!sx) return;
+      if (act === 'soc-show') { sx.show = !sx.show; toast(sx.show ? 'Shown on the website' : 'Hidden from the website'); }
+      if (act === 'soc-up' && si > 0) { so.posts.splice(si, 1); so.posts.splice(si - 1, 0, sx); }
+      if (act === 'soc-down' && si < so.posts.length - 1) { so.posts.splice(si, 1); so.posts.splice(si + 1, 0, sx); }
+      if (act === 'soc-del') { closeModal(); modal('Remove this post?', '<p>' + esc(sx.title) + ' is taken off the website. The post itself stays on ' + SOC_KIND[socKind(sx.url)].split(' ')[0] + '.</p>', 'Remove', function () { so.posts.splice(so.posts.indexOf(sx), 1); log('Removed social post: ' + sx.title); socSave(); render(); toast('Post removed'); }, { danger: true }); return; }
+      socSave(); render(); return;
+    }
+    if (act === 'soc-md') {
+      var sm = socDB(), md = '## Links\n- Facebook: ' + sm.facebook + '\n- Instagram: ' + sm.instagram + '\n- TikTok: ' + sm.tiktok + '\n- Hashtag: ' + sm.hashtag + '\n- Instagram feed ID: ' + sm.igFeed + '\n- Instagram photos: ' + sm.igCount + '\n- Facebook feed: ' + (sm.fbFeed ? 'on' : 'off') + '\n\n## Guest stories\n' + sm.posts.filter(function (x) { return x.show; }).map(function (x) { return '- ' + x.title + ': ' + x.url + (x.by ? ' · ' + x.by : ''); }).join('\n');
+      modal('Text for content/settings.md', '<p class="muted small">Replace these two parts of content/settings.md with this text to publish the social media settings for every visitor.</p><textarea rows="14" readonly style="width:100%;font-family:monospace;font-size:.82rem">' + esc(md) + '</textarea>', null, null, { wide: true });
+      return;
+    }
     if (act === 'link-copy') { var lb = byRef(ref), lk = bookingLink(lb); try { navigator.clipboard.writeText(lk).then(function () { toast('Link copied'); }, function () { prompt('Copy the link', lk); }); } catch (e) { prompt('Copy the link', lk); } return; }
     if (act === 'fin-mark') { var fb = byRef(ref); fb.finalised = { at: nowStamp(), by: ME.name }; fb.notes.push({ at: nowStamp(), by: ME.name, text: 'Booking finalised by staff.' }); log('Booking ' + fb.ref + ' finalised', fb.ref); save(); refresh(); toast('Marked as finalised'); return; }
     if (act === 'inv-cur') { var cb = byRef(ref), ci_ = invFor(cb, 'Invoice'); CUR_INV[cb.ref + '|' + ci_.no] = ci_; return invView(cb, ci_); }
@@ -2708,6 +2784,7 @@
     if (t.matches('[data-inq],[data-payq],[data-shopq],[data-prodq]')) { var key = t.matches('[data-inq]') ? 'inq' : t.matches('[data-payq]') ? 'payq' : t.matches('[data-shopq]') ? 'shopq' : 'prodq'; if (key === 'inq') IN.q = t.value; if (key === 'payq') PAYF.q = t.value; if (key === 'shopq') SHOP.q = t.value; if (key === 'prodq') PROD.q = t.value; var ps = t.selectionStart; render(); var ni = $('[data-' + key + ']'); if (ni) { ni.focus(); ni.setSelectionRange(ps, ps); } return; }
     if (t.matches('[data-prod-price]')) { var pv = parseFloat(t.value.replace(/[^\d.]/g, '')), pcard = $('[data-prod-card]'); if (pcard) pcard.value = isNaN(pv) ? '' : money(toCard(pv)); return; }
     if (t.matches('[data-dgr-code]')) { var cc = carOf(t.dataset.dgrCode); if (cc.c && t.value.trim().toUpperCase() !== (cc.c.dgr || '')) { var tk = $('[data-dgr-tick="' + t.dataset.dgrCode + '"]'); if (tk && t.value.trim()) tk.checked = true; } return; }
+    if (t.matches('[data-soc]')) { socDB()[t.dataset.soc] = t.value.trim(); socSave(); return; }
     if (t.matches('[data-indemnity]')) { DB.settings.indemnity = t.value; save(); return; }
     if (t.matches('[data-dgrlink]')) { DB.settings.dgrLink = t.value.trim(); save(); return; }
     if (t.matches('[data-provfee]')) { DB.settings.providerFee = parseFloat(t.value) || 0; save(); return; }
@@ -2728,6 +2805,9 @@
   }
   function onChange(e) {
     var t = e.target;
+    if (t.matches('[data-soc-chk]')) { socDB()[t.dataset.socChk] = t.checked; socSave(); render(); return; }
+    if (t.matches('[data-soc-sel]')) { socDB()[t.dataset.socSel] = +t.value; socSave(); return; }
+    if (t.matches('[data-soc="igFeed"],[data-soc="facebook"]')) { render(); return; }
     if (t.matches('[data-fk]')) { var fk = t.dataset.fk.split(':'); FO(fk[0])[fk[1]] = t.value; if (t.dataset.fk === 'F:area') F.stand = ''; resetPages(); render(); return; }
     if (t.matches('[data-sortm]')) { var sm = t.value.split('|'); SORT[t.dataset.sortm] = t.value ? { col: +sm[0], dir: +sm[1] } : null; delete TPG[t.dataset.sortm]; render(); return; }
     if (t.matches('[data-payr],[data-paym],[data-shopr]')) resetPages();

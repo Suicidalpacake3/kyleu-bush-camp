@@ -875,3 +875,32 @@ body.header-hidden .searchbar-wrap, body.header-hidden .subnav { top: 0; }
 .bk-link p { margin: 2px 0 6px; color: var(--ink-soft); font-size: .92rem; }
 .bk-link a { font-weight: 800; word-break: break-all; font-size: .9rem; }
 
+/* social media on the Experience page: live Instagram and Facebook, then hand-picked posts */
+.soc-wrap { display: grid; gap: 28px; }
+.soc-live { display: grid; gap: 22px; }
+.soc-live.two { grid-template-columns: 1.4fr 1fr; align-items: start; }
+.soc-live h3 { display: flex; align-items: center; gap: 8px; font-size: 1.15rem; margin: 0 0 12px; }
+.soc-live h3 svg { width: 20px; height: 20px; color: var(--ember); }
+.ig-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.ig-tile { position: relative; display: block; aspect-ratio: 1; border-radius: 12px; overflow: hidden; background: var(--sand-2); }
+.ig-tile img { width: 100%; height: 100%; object-fit: cover; transition: transform .4s var(--ease, ease); }
+.ig-tile:hover img { transform: scale(1.05); }
+.ig-vid { position: absolute; right: 8px; top: 8px; color: #fff; font-size: .8rem; text-shadow: 0 1px 4px rgba(0,0,0,.6); }
+.fb-feed { background: #fff; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+.fb-feed iframe { display: block; width: 100%; height: 620px; border: 0; }
+.soc-embeds { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; align-items: start; }
+.soc-embed { margin: 0; background: #fff; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+.soc-embed iframe { display: block; width: 100%; border: 0; }
+.soc-embed.ig iframe { height: 560px; }
+.soc-embed.fb iframe { height: 520px; }
+.soc-embed figcaption { padding: 10px 14px; font-size: .86rem; font-weight: 700; color: var(--ink-soft); border-top: 1px solid var(--line); }
+.foot-social { display: flex; gap: 8px; margin: 0 0 12px; }
+.foot-social a { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.1); color: #fff; transition: background .2s; }
+.foot-social a:hover { background: var(--sun); }
+.foot-social a[hidden] { display: none; }
+.foot-social svg { width: 18px; height: 18px; }
+@media (max-width: 860px) { .soc-live.two { grid-template-columns: 1fr; } }
+@media (max-width: 520px) { .ig-grid { grid-template-columns: repeat(2, 1fr); } }
+
+/* Facebook's page plugin is at most 500px wide */
+.soc-live:not(.two) .soc-live-fb { max-width: 520px; }

@@ -18,6 +18,10 @@
 - Google reviews: https://www.google.com/maps/search/?api=1&query=Kyleu+Bush+Camp+Dinokeng
 - Facebook: 
 - Instagram: 
+- TikTok: 
+- Instagram feed ID: 
+- Instagram photos: 6
+- Facebook feed: on
 - Hashtag: #KyleuBushCamp
 - Tracks4Africa feature: https://blog.tracks4africa.co.za/a-weekend-at-dinokengs-kyleu-bush-camp/
 
