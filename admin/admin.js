@@ -105,6 +105,53 @@
   function byRef(ref) { return DB.bookings.filter(function (b) { return b.ref === ref; })[0]; }
   function log(text, ref) { DB.log.unshift({ at: nowStamp(), by: ME ? ME.name : 'System', text: text, ref: ref || '' }); DB.log = DB.log.slice(0, 200); }
 
+  /* ---------- clients: one card per person, linked to all their bookings ---------- */
+  function normPhone(p) { var d = String(p || '').replace(/\D/g, ''); if (d.indexOf('27') === 0 && d.length === 11) d = '0' + d.slice(2); return d; }
+  function normEmail(e) { return String(e || '').trim().toLowerCase(); }
+  function clientName(c) { return (c.first + ' ' + c.last).trim(); }
+  function clientById(id) { return (DB.clients || []).filter(function (c) { return c.id === id; })[0]; }
+  function findClient(email, phone, skipId) {
+    var e = normEmail(email), p = normPhone(phone);
+    return DB.clients.filter(function (c) { return c.id !== skipId && ((e && normEmail(c.email) === e) || (p.length >= 9 && (normPhone(c.phone) === p || normPhone(c.phone2) === p))); })[0];
+  }
+  function newClient(g, at) { var c = { id: uid('cl'), first: g.first || '', last: g.last || '', email: g.email || '', phone: g.phone || '', phone2: g.phone2 || '', town: g.town || '', notes: g.notes || '', consent: !!g.consent, created: at || nowStamp() }; DB.clients.push(c); return c; }
+  function clientFor(g, at) { var c = findClient(g.email, g.phone); if (c) { if (g.consent) c.consent = true; return c; } return newClient(g, at); }
+  function syncBooking(b) { var c = clientById(b.cid); if (!c) return; b.guest.first = c.first; b.guest.last = c.last; b.guest.email = c.email; b.guest.phone = c.phone; b.guest.consent = c.consent; }
+  function linkBooking(b) { if (!b.cid || !clientById(b.cid)) b.cid = clientFor(b.guest, b.created).id; syncBooking(b); }
+  function ensureClients() { DB.clients = DB.clients || []; DB.bookings.slice().sort(function (a, b) { return a.created < b.created ? -1 : 1; }).forEach(linkBooking); }
+  function clientBookings(c) { return DB.bookings.filter(function (b) { return b.cid === c.id; }).sort(function (a, b) { return a.ci < b.ci ? 1 : -1; }); }
+  function clientStats(c) {
+    var s = { stays: 0, nights: 0, spent: 0, last: '', next: '', now: false, pens: false, gd: false, refs: [] };
+    clientBookings(c).forEach(function (b) {
+      s.refs.push(b.ref); if (!live(b)) return;
+      s.stays++; s.nights += diff(b.ci, b.co); s.spent += paid(b); if (b.ci <= TODAY && TODAY < b.co) s.now = true; if (b.pens) s.pens = true; if (b.extras && b.extras.gd) s.gd = true;
+      if (b.co <= TODAY && b.ci > s.last) s.last = b.ci; if (b.ci >= TODAY && (!s.next || b.ci < s.next)) s.next = b.ci;
+    });
+    return s;
+  }
+  // earlier stays by the same client, for the "returning" badge on a booking
+  function staysBefore(b) { return DB.bookings.filter(function (x) { return x.cid === b.cid && x !== b && live(x) && x.ci < b.ci; }).length; }
+  function nth(n) { var s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
+  function retPill(stays, short) { return stays > 1 ? '<span class="pill ok ret">' + ic('return') + (short ? 'Returning' : 'Returning · ' + stays + ' stays') + '</span>' : stays === 1 ? '<span class="pill muted">1 stay</span>' : '<span class="pill info">New client</span>'; }
+  function clientChanges(c, v) {
+    var L = { first: 'First name', last: 'Surname', email: 'Email', phone: 'Mobile', phone2: 'Other number', town: 'Town', notes: 'Notes', consent: 'Mailing list' }, out = [];
+    Object.keys(L).forEach(function (k) {
+      if (v[k] === undefined || String(c[k] || '') === String(v[k] || '')) return;
+      out.push(k === 'notes' ? 'client notes changed' : k === 'consent' ? (v.consent ? 'joined the mailing list' : 'left the mailing list') : L[k] + ' ' + (c[k] || 'blank') + ' to ' + (v[k] || 'blank'));
+    });
+    return out;
+  }
+  function applyClient(c, v) {
+    var oldE = normEmail(c.email), newE = normEmail(v.email !== undefined ? v.email : c.email);
+    Object.keys(v).forEach(function (k) { c[k] = v[k]; });
+    if (oldE && newE && oldE !== newE) {   // credits, vouchers and emails follow the new address
+      DB.credits.forEach(function (x) { if (x.email === oldE) x.email = newE; });
+      DB.vouchers.forEach(function (x) { var i = (x.emails || []).indexOf(oldE); if (i >= 0) x.emails[i] = newE; });
+      DB.threads.forEach(function (t) { if (normEmail(t.email) === oldE) t.email = c.email; });
+    }
+    clientBookings(c).forEach(syncBooking);
+  }
+
   /* ---------- demo data ---------- */
   function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
   var FIRST = ['Thandi', 'Johan', 'Lerato', 'Pieter', 'Ayesha', 'Sipho', 'Megan', 'Riaan', 'Naledi', 'Werner', 'Zanele', 'Craig', 'Anika', 'Bongani', 'Chantel', 'Dewald', 'Precious', 'Kobus', 'Fatima', 'Ruan', 'Nomsa', 'Gareth', 'Lindiwe', 'Hendrik', 'Kayla', 'Musa', 'Elmarie', 'Tshepo', 'Jessica', 'Andile', 'Marike', 'Kyle', 'Palesa', 'Jacques', 'Refilwe', 'Ettienne'];
@@ -252,7 +299,7 @@
     if (DB.stands) STANDS = DB.stands;   // stands added or changed in this admin
     if (!DB.products) DB.products = defaultProducts();
     DB.threads = DB.threads || []; DB.popSeen = DB.popSeen || {}; applyHol();
-    importWeb(); importPop();
+    ensureClients(); importWeb(); importPop();
   }
   // proof of payment uploaded on the website (pop.html), same browser in the demo
   var POPK = 'kyleu-web-pop';
@@ -285,7 +332,7 @@
       if (nowPaid) b.payments.push({ d: w.created.slice(0, 10), amt: nowPaid, m: card ? 'card' : 'eft', type: w.pay === 'full' ? 'Full payment' : 'Deposit', ref: card ? 'Card (website)' : 'Instant EFT' });
       if (w.voucher) { var wv = DB.vouchers.filter(function (x) { return x.code === w.voucher; })[0]; if (wv) wv.uses.push({ ref: b.ref, at: w.created, by: 'Website' }); b.notes.push({ at: w.created, by: 'Website', text: 'Voucher ' + w.voucher + ' used: ' + money(w.discount || 0) + ' off.' }); }
       if (b.extras) delete b.extras.__voucher;
-      DB.bookings.push(b); added++;
+      linkBooking(b); DB.bookings.push(b); added++;
       DB.log.unshift({ at: w.created, by: 'Website', text: 'New website booking ' + b.ref + ' for ' + guestName(b), ref: b.ref });
     });
     if (added) { DB.bookings.sort(function (a, b) { return a.ci < b.ci ? -1 : 1; }); save(); }
@@ -300,16 +347,16 @@
     { id: 'leuan', name: 'Leuan', role: 'Front desk', email: 'leuan@kyleu.co.za' }
   ];
   var ROLES = {
-    Owner: ['dashboard', 'bookings', 'calendar', 'enquiries', 'guests', 'vouchers', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'rates', 'settings'],
-    Manager: ['dashboard', 'bookings', 'calendar', 'enquiries', 'guests', 'vouchers', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands'],
-    'Front desk': ['dashboard', 'bookings', 'calendar', 'enquiries', 'guests', 'vouchers', 'shop', 'drives']
+    Owner: ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'rates', 'settings'],
+    Manager: ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands'],
+    'Front desk': ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'shop', 'drives']
   };
   var NAV = [
     { id: 'dashboard', t: 'Dashboard', i: 'home', g: '' },
     { id: 'bookings', t: 'Bookings', i: 'list', g: 'Front desk' },
     { id: 'calendar', t: 'Calendar', i: 'cal', g: 'Front desk' },
     { id: 'enquiries', t: 'Inbox', i: 'mail', g: 'Front desk' },
-    { id: 'guests', t: 'Guests', i: 'users', g: 'Front desk' },
+    { id: 'clients', t: 'Clients', i: 'users', g: 'Front desk' },
     { id: 'vouchers', t: 'Vouchers', i: 'gift', g: 'Front desk' },
     { id: 'eft', t: 'EFT payments', i: 'bank', g: 'Money' },
     { id: 'payments', t: 'Payments', i: 'card', g: 'Money' },
@@ -366,12 +413,12 @@
     if (b.status === 'confirmed' && b.ci <= TODAY) acts.push('<button class="btn green" data-act="checkin" data-ref="' + b.ref + '">' + ic('in') + 'Check in</button>');
     if (b.status === 'in') acts.push('<button class="btn green" data-act="checkout" data-ref="' + b.ref + '">' + ic('out') + 'Check out</button>');
     if (b.status !== 'cancelled' && b.status !== 'out') acts.push('<button class="btn ghost" data-act="remind" data-ref="' + b.ref + '">' + ic('send') + 'Send message</button>');
-    if (b.status !== 'cancelled' && b.status !== 'out' && b.status !== 'in') acts.push('<button class="btn ghost" data-act="move" data-ref="' + b.ref + '">' + ic('cal') + 'Change dates or stand</button>');
+    acts.push('<button class="btn ghost" data-act="edit" data-ref="' + b.ref + '">' + ic('edit') + 'Edit booking</button>');
     if (b.status !== 'cancelled' && b.status !== 'out') acts.push('<button class="btn ghost danger-t" data-act="cancel" data-ref="' + b.ref + '">' + ic('x') + 'Cancel booking</button>');
     return '<header class="d-head"><div><span class="muted small">Booking</span><h2>' + esc(b.ref) + '</h2>' + pill(s) + (b.pop && b.status === 'pending' ? ' <span class="pill info">' + ic('note') + 'Check bank</span>' : '') + '</div><button class="icon-btn" data-dclose aria-label="Close">' + ic('x') + '</button></header>' +
       '<div class="d-body">' +
       '<div class="d-actions">' + acts.join('') + '</div>' +
-      '<section class="d-sec"><h4>Guest</h4><div class="guest-line"><span class="avatar">' + esc(b.guest.first[0] + b.guest.last.split(' ').pop()[0]) + '</span><div><b>' + esc(guestName(b)) + '</b><div class="muted small">' + esc(b.guest.email) + '</div></div></div>' +
+      (function () { var cl = clientById(b.cid), sb = staysBefore(b); return '<section class="d-sec"><h4 class="h4-row">Guest' + (cl ? '<button type="button" class="link-btn" data-client="' + cl.id + '">Client card' + ic('chev-r') + '</button>' : '') + '</h4><div class="guest-line"><span class="avatar">' + esc((b.guest.first[0] || '?') + ((b.guest.last.split(' ').pop() || '?')[0] || '')) + '</span><div><b>' + esc(guestName(b)) + '</b> ' + (sb ? '<span class="pill ok ret">' + ic('return') + 'Returning · ' + nth(sb + 1) + ' stay</span>' : '<span class="pill info">First stay</span>') + '<div class="muted small">' + esc(b.guest.email || 'No email') + '</div></div></div>' + (cl && cl.notes ? '<p class="cl-note">' + ic('note') + '<span>' + esc(cl.notes) + '</span></p>' : ''); })() +
       '<div class="chips"><a class="chip" href="tel:' + esc(b.guest.phone.replace(/\s/g, '')) + '">' + ic('phone') + esc(b.guest.phone) + '</a><a class="chip" target="_blank" rel="noopener" href="https://wa.me/' + wa + '">' + ic('wa') + 'WhatsApp</a><a class="chip" href="mailto:' + esc(b.guest.email) + '">' + ic('mail') + 'Email</a></div></section>' +
       '<section class="d-sec"><h4>Stay</h4><dl class="kv">' +
       '<dt>Stand</dt><dd><b>' + esc(st.name) + '</b> · ' + AREA_SHORT[st.area] + '</dd>' +
@@ -393,7 +440,7 @@
       '<h5>Payments</h5>' + ((b.payments || []).length ? '<ul class="timeline">' + b.payments.map(function (p) { return '<li><span class="dot ' + (p.amt < 0 ? 'bad' : 'pm-' + p.m) + '"></span><div><b>' + money(p.amt) + '</b> ' + esc(p.type) + ' · ' + methodLabel(p.m) + '<div class="muted small">' + fd(p.d, { day: 'numeric', month: 'short', year: 'numeric' }) + ' · ' + esc(p.ref || '') + '</div></div></li>'; }).join('') + '</ul>' : '<p class="muted small">No payments yet.</p>') + '</section>' +
       (function () { var v = bookingDgr(b), u = v && v.uses.filter(function (x) { return x.ref === b.ref; })[0]; if (b.status === 'cancelled') return ''; return '<section class="d-sec"><h4>Dinokeng partner code</h4>' + (v ? '<p class="small"><b class="code">' + esc(v.code) + '</b> sent ' + esc(u.at) + '</p><button class="btn ghost sm" data-act="v-send" data-ref="' + b.ref + '">' + ic('send') + 'Send it again</button>' : '<p class="muted small">Not sent yet. It goes out in the week before arrival.</p>' + (dgrFor(b) ? '<button class="btn sm" data-act="v-send" data-ref="' + b.ref + '">' + ic('send') + 'Send ' + esc(dgrFor(b).code) + ' now</button>' : '<p class="small">No active Dinokeng code fits this booking. <a href="#/vouchers" data-dclose>Create one</a>.</p>')) + (creditLeft(b.guest.email) ? '<p class="small" style="margin-top:10px">' + ic('info') + ' This guest has <b>' + money(creditLeft(b.guest.email)) + '</b> credit from a cancelled booking.</p>' : '') + '</section>'; })() +
       (function () { var ts = DB.threads.filter(function (t) { return t.ref === b.ref || t.email === b.guest.email; }); return '<section class="d-sec"><h4>Emails</h4>' + (ts.length ? '<div class="list">' + ts.map(function (t) { return '<button type="button" class="brow" data-thread-go="' + t.id + '"><span class="brow-g"><b>' + esc(t.subject) + '</b><small>' + t.msgs.length + ' email' + (t.msgs.length > 1 ? 's' : '') + ' · last ' + when(lastMsg(t).at) + '</small></span>' + ic('chev-r') + '</button>'; }).join('') + '</div>' : '<p class="muted small">No emails yet.</p>') + '</section>'; })() +
-      '<section class="d-sec"><h4>Notes</h4>' + (b.notes.length ? '<ul class="notes">' + b.notes.map(function (n) { return '<li><p>' + esc(n.text) + '</p><span class="muted small">' + esc(n.by) + ' · ' + esc(n.at) + '</span></li>'; }).join('') + '</ul>' : '<p class="muted small">No notes yet.</p>') +
+      '<section class="d-sec"><h4>Notes</h4>' + (b.notes.length ? '<ul class="notes">' + b.notes.map(function (n, i) { return '<li><p>' + esc(n.text) + '</p><span class="muted small">' + esc(n.by) + ' · ' + esc(n.at) + (n.edited ? ' · edited by ' + esc(n.edited.by) + ' ' + esc(n.edited.at) : '') + '</span><span class="note-acts"><button type="button" class="icon-btn sm" data-note-edit="' + b.ref + '|' + i + '" aria-label="Edit note" title="Edit note">' + ic('edit') + '</button><button type="button" class="icon-btn sm" data-note-del="' + b.ref + '|' + i + '" aria-label="Delete note" title="Delete note">' + ic('x') + '</button></span></li>'; }).join('') + '</ul>' : '<p class="muted small">No notes yet.</p>') +
       '<form class="note-form" data-note="' + b.ref + '"><input name="t" placeholder="Add a note for the team" aria-label="Add a note"><button class="btn ghost" type="submit">Add</button></form></section>' +
       '</div>';
   }
@@ -432,6 +479,7 @@
     balance: { t: 'Balance reminder', s: 'Your Kyleu stay is coming up', b: function (b) { return 'Hi {first},\n\nYour stay at {stand} starts on {ci}. The balance of {balance} is due by {baldue}. Pay by EFT with reference {ref}, or reply and we will send a card payment link.\n\nThe Kyleu team'; } },
     arrival: { t: 'Pre-arrival information', s: 'Getting to Kyleu Bush Camp', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}.\n\nDirections: enter Dinokeng at Tau Gate, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km.\n\nYour Dinokeng partner code is {voucher}. Use it when you pay your conservation and self-drive fees online (https://dinokeng.plnktn.io/south) or show it at the gate, to get the partner rate.\n\nCheck-in from 12:00. Gate questions: 060 458 4478.\n\nThe Kyleu team'; } },
     thanks: { t: 'Thank you & review', s: 'Thanks for staying at Kyleu', b: function (b) { return 'Hi {first},\n\nThank you for camping with us at {stand}. We hope you loved the bush! If you have a minute, a Google review helps our small family camp a lot.\n\nThe Kyleu team'; } },
+    update: { t: 'Booking updated', s: 'Your Kyleu booking {ref} has been updated', b: function (b) { return 'Hi {first},\n\nWe have updated your booking {ref}: {stand}, {ci} to {co}.\nTotal {total}, paid {paid}, balance {balance}.\n\nIf anything looks wrong, just reply to this email.\n\nThe Kyleu team'; } },
     confirm: { t: 'Booking confirmation', s: 'Booking confirmed: {ref}', b: function (b) { return 'Hi {first},\n\nYour booking {ref} is confirmed: {stand}, {ci} to {co}.\nTotal {total}, paid {paid}, balance {balance} due by {baldue}.\n\nThe Kyleu team'; } }
   };
   function fill(t, b) {
@@ -473,18 +521,89 @@
   }
   function creditsFor(email) { email = (email || '').toLowerCase(); return email ? DB.credits.filter(function (c) { return c.email === email && c.amt - c.used > 0; }) : []; }
   function creditLeft(email) { return creditsFor(email).reduce(function (a, c) { return a + c.amt - c.used; }, 0); }
-  function actMove(ref) {
-    var b = byRef(ref);
-    modal('Change dates or stand', '<div class="grid2"><label class="fld"><span>Arrive</span><input type="date" name="ci" value="' + b.ci + '"></label><label class="fld"><span>Depart</span><input type="date" name="co" value="' + b.co + '"></label></div>' +
-      '<label class="fld"><span>Stand</span><select name="stand">' + standOptions(b.stand) + '</select></label><p class="hint" data-hint></p>',
+  function actEdit(ref) {
+    var b = byRef(ref), cl = clientById(b.cid), closed = b.status === 'out' || b.status === 'cancelled', inCamp = b.status === 'in';
+    var lockAll = closed ? ' disabled' : '', lockCi = closed || inCamp ? ' disabled' : '', n = cl ? clientBookings(cl).length : 1, ex = b.extras || {};
+    var srcs = ['Website', 'Phone', 'WhatsApp', 'Email', 'Walk-in']; if (srcs.indexOf(b.source) < 0) srcs.push(b.source);
+    var tellTouched = false;
+    var read = function (f) { return { ci: fval(f, 'ci'), co: fval(f, 'co'), stand: fval(f, 'stand'), adults: +fval(f, 'adults') || 0, pens: +fval(f, 'pens') || 0, kids: +fval(f, 'kids') || 0, vehicles: +fval(f, 'veh') || 1, setup: fval(f, 'setup'), gd: +fval(f, 'gd') || 0 }; };
+    var priceOf = function (s) { var q0 = quote(b.stand, b.ci, b.co, b, ex), q1 = quote(s.stand, s.ci, s.co, s, Object.assign({}, ex, { gd: s.gd })); return { de: q1.eft - q0.eft, dc: q1.card - q0.card, nights: q1.nights }; };
+    modal('Edit booking ' + esc(b.ref),
+      '<h5 class="m-h">Guest</h5>' +
+      '<div class="grid2"><label class="fld"><span>First name</span><input name="first" value="' + esc(b.guest.first) + '"></label><label class="fld"><span>Surname</span><input name="last" value="' + esc(b.guest.last) + '"></label></div>' +
+      '<div class="grid2"><label class="fld"><span>Mobile</span><input name="phone" inputmode="tel" value="' + esc(b.guest.phone) + '"></label><label class="fld"><span>Email</span><input name="email" type="email" value="' + esc(b.guest.email) + '"></label></div>' +
+      (n > 1 ? '<p class="hint">' + ic('info') + ' These are ' + esc(b.guest.first) + '\'s client details, so ' + (n === 2 ? 'their other booking updates' : 'their other ' + (n - 1) + ' bookings update') + ' too.</p>' : '') +
+      '<h5 class="m-h">Stay</h5>' + (closed ? '<p class="hint">' + (b.status === 'out' ? 'This stay is over' : 'This booking is cancelled') + ', so the dates, stand and guests are locked.</p>' : inCamp ? '<p class="hint">' + esc(b.guest.first) + ' is in camp, so the arrival date and stand stay as they are. You can still extend or shorten the stay.</p>' : '') +
+      '<div class="grid2"><label class="fld"><span>Arrive</span><input type="date" name="ci" value="' + b.ci + '"' + lockCi + '></label><label class="fld"><span>Depart</span><input type="date" name="co" value="' + b.co + '"' + lockAll + '></label></div>' +
+      '<label class="fld"><span>Stand</span><select name="stand"' + lockCi + '>' + standOptions(b.stand) + '</select></label>' +
+      '<div class="grid3"><label class="fld"><span>Adults</span><input type="number" min="0" max="12" name="adults" value="' + b.adults + '"' + lockAll + '></label><label class="fld"><span>Pensioners</span><input type="number" min="0" max="12" name="pens" value="' + b.pens + '"' + lockAll + '></label><label class="fld"><span>Kids under 12</span><input type="number" min="0" max="12" name="kids" value="' + b.kids + '"' + lockAll + '></label></div>' +
+      '<div class="grid3"><label class="fld"><span>Vehicles</span><input type="number" min="1" max="6" name="veh" value="' + (b.vehicles || 1) + '"' + lockAll + '></label><label class="fld"><span>Setup</span><input name="setup" value="' + esc(b.setup || '') + '" placeholder="e.g. Rooftop tent"' + lockAll + '></label><label class="fld"><span>Game drive (people)</span><input type="number" min="0" max="10" name="gd" value="' + (ex.gd || 0) + '"' + lockAll + '></label></div>' +
+      '<label class="fld"><span>Booked via</span><select name="source">' + srcs.map(function (x) { return '<option' + (x === b.source ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select></label>' +
+      '<div class="quote-box" data-q></div>' +
+      '<label class="fld"><span>Reason for the change (optional, saved in the notes)</span><input name="why" placeholder="e.g. Guest phoned to add a night"></label>' +
+      '<label class="check"><input type="checkbox" name="tell"><span>Email ' + esc(b.guest.first) + ' the updated booking</span></label>',
       'Save changes', function (f) {
-        var ci = fval(f, 'ci'), co = fval(f, 'co'), stid = fval(f, 'stand');
-        if (co <= ci) { toast('Departure must be after arrival'); return false; }
-        if (overlaps(stid, ci, co, b.ref)) { toast('That stand is not free for those nights'); return false; }
-        var q = quote(stid, ci, co, b, b.extras); b.ci = ci; b.co = co; b.stand = stid; b.eft = q.eft; b.card = q.card; b.total = b.method === 'card' ? q.card : q.eft;
-        b.notes.push({ at: nowStamp(), by: ME.name, text: 'Moved to ' + standById(stid).name + ', ' + fd(ci) + ' to ' + fd(co) + '.' });
-        log('Booking ' + b.ref + ' moved', b.ref); save(); refresh(); toast('Booking updated. New total ' + money(b.total));
-      }, { onOpen: function (f) { var u = function () { var ci = fval(f, 'ci'), co = fval(f, 'co'), s = fval(f, 'stand'), h = $('[data-hint]', f); if (co <= ci) { h.textContent = ''; return; } var q = quote(s, ci, co, b, b.extras); h.innerHTML = (overlaps(s, ci, co, b.ref) ? '<span class="bad-t">Not free for those nights.</span> ' : '<span class="ok-t">Free.</span> ') + 'New total: <b>' + money(b.method === 'card' ? q.card : q.eft) + '</b> (' + methodLabel(b.method) + ')'; }; $$('input,select', f).forEach(function (x) { x.addEventListener('change', u); }); u(); } });
+        var g = { first: fval(f, 'first'), last: fval(f, 'last'), email: fval(f, 'email'), phone: fval(f, 'phone') }, s = read(f), why = fval(f, 'why'), src = fval(f, 'source'), changes = [];
+        if (!g.first || !g.last) { toast('Add the guest\'s name'); return false; }
+        if (!g.phone && !g.email) { toast('Add a mobile number or an email address'); return false; }
+        if (g.email && !/.+@.+\..+/.test(g.email)) { toast('That email address does not look right'); return false; }
+        var moved = s.ci !== b.ci || s.co !== b.co || s.stand !== b.stand;
+        if (!closed) {
+          if (s.co <= s.ci) { toast('Departure must be after arrival'); return false; }
+          if (!s.adults && !s.pens) { toast('Add at least one adult'); return false; }
+          if (moved && overlaps(s.stand, s.ci, s.co, b.ref)) { toast('That stand is not free for those nights'); return false; }
+        }
+        var dup = findClient(g.email, g.phone, b.cid);
+        if (dup && cl && clientBookings(cl).length > 1) { toast('That ' + (g.email && normEmail(dup.email) === normEmail(g.email) ? 'email address' : 'number') + ' belongs to ' + esc(clientName(dup)) + '. Open their client card instead.'); return false; }
+        if (dup) {   // the booking was made under the wrong details: move it to the client who already has them
+          var lone = cl; b.cid = dup.id; syncBooking(b); changes.push('linked to existing client ' + clientName(dup));
+          if (lone && !clientBookings(lone).length) DB.clients.splice(DB.clients.indexOf(lone), 1);
+        } else if (cl) { var cc = clientChanges(cl, g); if (cc.length) { applyClient(cl, g); changes = changes.concat(cc); } }
+        if (!closed) {
+          var p = priceOf(s), st0 = standById(b.stand), ppl = function (x) { return (x.adults + x.pens) + ' adult' + (x.adults + x.pens === 1 ? '' : 's') + (x.kids ? ' + ' + x.kids + ' kid' + (x.kids > 1 ? 's' : '') : ''); };
+          if (s.ci !== b.ci) changes.push('arrive ' + fd(b.ci) + ' to ' + fd(s.ci));
+          if (s.co !== b.co) changes.push('depart ' + fd(b.co) + ' to ' + fd(s.co));
+          if (s.stand !== b.stand) changes.push('stand ' + st0.name + ' to ' + standById(s.stand).name);
+          if (s.adults !== b.adults || s.pens !== b.pens || s.kids !== b.kids) changes.push('guests ' + ppl(b) + ' to ' + ppl(s));
+          if (s.vehicles !== (b.vehicles || 1)) changes.push('vehicles ' + (b.vehicles || 1) + ' to ' + s.vehicles);
+          if (s.setup !== (b.setup || '')) changes.push('setup ' + (b.setup || 'blank') + ' to ' + (s.setup || 'blank'));
+          if (s.gd !== (ex.gd || 0)) changes.push('game drive ' + (ex.gd || 0) + ' to ' + s.gd + ' people');
+          var oldTotal = b.total;
+          b.ci = s.ci; b.co = s.co; b.stand = s.stand; b.adults = s.adults; b.pens = s.pens; b.kids = s.kids; b.vehicles = s.vehicles; b.setup = s.setup; b.extras = Object.assign({}, ex, { gd: s.gd });
+          // shift the price by the difference, so discounts and shop charges already on the booking stay
+          b.eft += p.de; b.card += p.dc; b.total += b.method === 'card' ? p.dc : p.de;
+          if (b.total !== oldTotal) changes.push('total ' + money(oldTotal) + ' to ' + money(b.total));
+        }
+        if (src !== b.source) { changes.push('booked via ' + b.source + ' to ' + src); b.source = src; }
+        if (!changes.length) { toast('Nothing was changed'); return; }
+        if (b.status === 'pending' && paid(b) > 0 && paid(b) >= deposit(b)) b.status = 'confirmed';
+        var txt = changes.join('; '); txt = txt.charAt(0).toUpperCase() + txt.slice(1);
+        b.notes.push({ at: nowStamp(), by: ME.name, text: 'Booking edited: ' + txt + '.' + (why ? ' Reason: ' + why : '') });
+        if (fval(f, 'tell') && b.guest.email) { var T = TEMPLATES.update; logEmail(b, fill(T.s, b), fill(T.b(b), b)); }
+        log('Booking ' + b.ref + ' edited', b.ref); save(); refresh();
+        toast('Booking updated' + (fval(f, 'tell') && b.guest.email ? ' and ' + esc(b.guest.first) + ' emailed (demo)' : ''));
+      }, { wide: true, noFocus: true, onOpen: function (f) {
+        var box = $('[data-q]', f), tell = f.elements.tell;
+        tell.addEventListener('change', function () { tellTouched = true; });
+        var u = function () {
+          if (closed) { box.hidden = true; return; }
+          var s = read(f);
+          if (s.co <= s.ci) { box.innerHTML = '<span class="bad-t">Departure must be after arrival.</span>'; return; }
+          var p = priceOf(s), nt = b.total + (b.method === 'card' ? p.dc : p.de), pd = paid(b), moved = s.ci !== b.ci || s.co !== b.co || s.stand !== b.stand, st = standById(s.stand);
+          box.innerHTML = (moved ? (overlaps(s.stand, s.ci, s.co, b.ref) ? '<span class="pill bad"><i></i>Stand not free for those nights</span>' : '<span class="pill ok"><i></i>Stand free</span>') : '') + (s.adults + s.pens + s.kids > st.guests ? ' <span class="pill warn"><i></i>Over ' + st.guests + ' guests</span>' : '') +
+            '<div class="qb-row"><span>' + p.nights + ' night' + (p.nights > 1 ? 's' : '') + ' · ' + methodLabel(b.method) + '</span><span class="price-pair">' + (nt !== b.total ? '<s>' + money(b.total) + '</s> ' : '') + '<b>' + money(nt) + '</b></span></div>' +
+            '<div class="muted small">Paid ' + money(pd) + ' · ' + (nt >= pd ? 'balance ' + money(nt - pd) : '<span class="warn-t">' + money(pd - nt) + ' more than the new total. Keep it as credit or refund it.</span>') + '</div>';
+          if (!tellTouched) tell.checked = !!b.guest.email && (moved || nt !== b.total);
+        };
+        $$('input,select', f).forEach(function (x) { if (x.name === 'tell') return; x.addEventListener('input', u); x.addEventListener('change', u); }); u();
+      } });
+  }
+  function actNote(ref, i) {
+    var b = byRef(ref), n = b.notes[i]; if (!n) return;
+    modal('Edit note', '<p class="muted small">' + esc(n.by) + ' · ' + esc(n.at) + '</p><label class="fld"><span>Note</span><textarea name="t" rows="4">' + esc(n.text) + '</textarea></label>', 'Save note', function (f) {
+      var v = fval(f, 't'); if (!v) { toast('A note cannot be empty. Delete it instead.'); return false; }
+      if (v === n.text) return; n.text = v; n.edited = { by: ME.name, at: nowStamp() }; save(); refresh(); toast('Note saved');
+    });
   }
   function standOptions(sel, onlyFree) {
     return ['fenced', 'unfenced', 'self-sufficient'].map(function (a) {
@@ -495,8 +614,13 @@
     pre = pre || {};
     var ci = pre.ci || TODAY, co = pre.co || add(ci, 2);
     modal('New booking', '<p class="muted small">For phone, WhatsApp, email and walk-in bookings. Website bookings arrive here by themselves.</p>' +
-      '<div class="grid2"><label class="fld"><span>First name</span><input name="first" value="' + esc(pre.first || '') + '" required></label><label class="fld"><span>Surname</span><input name="last" value="' + esc(pre.last || '') + '" required></label></div>' +
-      '<div class="grid2"><label class="fld"><span>Mobile</span><input name="phone" inputmode="tel" value="' + esc(pre.phone || '') + '"></label><label class="fld"><span>Email</span><input name="email" type="email" value="' + esc(pre.email || '') + '"></label></div>' +
+      '<div class="cl-pick"><input type="hidden" name="cid" value="">' +
+      '<div data-clfind><span class="fld-l">Client</span><label class="search">' + ic('search') + '<input name="clq" autocomplete="off" placeholder="Search returning clients by name, mobile or email" aria-label="Find a client"></label><div class="cl-results" data-clres hidden></div>' +
+      '<button type="button" class="btn ghost sm cl-newbtn" data-clnew>' + ic('plus') + 'New client</button></div>' +
+      '<div class="cl-chosen" data-clchosen hidden></div>' +
+      '<div class="cl-new" data-clform hidden><div class="cl-new-h"><b>New client</b><button type="button" class="link-btn" data-clback>Search clients instead</button></div>' +
+      '<div class="grid2"><label class="fld"><span>First name</span><input name="first" value="' + esc(pre.first || '') + '"></label><label class="fld"><span>Surname</span><input name="last" value="' + esc(pre.last || '') + '"></label></div>' +
+      '<div class="grid2"><label class="fld"><span>Mobile</span><input name="phone" inputmode="tel" value="' + esc(pre.phone || '') + '"></label><label class="fld"><span>Email</span><input name="email" type="email" value="' + esc(pre.email || '') + '"></label></div><div data-clmatch></div></div></div>' +
       '<div class="grid2"><label class="fld"><span>Arrive</span><input type="date" name="ci" value="' + ci + '"></label><label class="fld"><span>Depart</span><input type="date" name="co" value="' + co + '"></label></div>' +
       '<label class="fld"><span>Stand</span><select name="stand">' + standOptions(pre.stand || '') + '</select></label>' +
       '<div class="grid3"><label class="fld"><span>Adults</span><input type="number" min="0" max="12" name="adults" value="2"></label><label class="fld"><span>Pensioners</span><input type="number" min="0" max="12" name="pens" value="0"></label><label class="fld"><span>Kids under 12</span><input type="number" min="0" max="12" name="kids" value="0"></label></div>' +
@@ -505,17 +629,21 @@
       '<div class="quote-box" data-q></div><div data-credit-box></div>',
       'Create booking', function (f) {
         var g = { adults: +fval(f, 'adults') || 0, pens: +fval(f, 'pens') || 0, kids: +fval(f, 'kids') || 0 }, sid = fval(f, 'stand'), a = fval(f, 'ci'), z = fval(f, 'co'), m = $('[name=m]:checked', f).value;
-        if (!fval(f, 'first') || !fval(f, 'last')) { toast('Add the guest\'s name'); return false; }
+        var cl = clientById(fval(f, 'cid')), ng = { first: fval(f, 'first'), last: fval(f, 'last'), email: fval(f, 'email'), phone: fval(f, 'phone') };
+        if (!cl && (!ng.first || !ng.last)) { toast('Choose a client, or add a new one with their name'); return false; }
+        if (!cl && !ng.phone && !ng.email) { toast('Add a mobile number or email for the new client'); return false; }
+        if (!cl && ng.email && !/.+@.+\..+/.test(ng.email)) { toast('That email address does not look right'); return false; }
         if (z <= a) { toast('Departure must be after arrival'); return false; }
         if (overlaps(sid, a, z)) { toast('That stand is not free for those nights'); return false; }
         if (!g.adults && !g.pens) { toast('Add at least one adult'); return false; }
-        var ex = { gd: +fval(f, 'gd') || 0 }, q = quote(sid, a, z, g, ex);
-        var b = { ref: 'KY' + a.slice(2, 4) + '-' + Math.random().toString(36).slice(2, 6).toUpperCase(), created: nowStamp(), source: fval(f, 'source'), guest: { first: fval(f, 'first'), last: fval(f, 'last'), email: fval(f, 'email'), phone: fval(f, 'phone'), consent: false }, stand: sid, ci: a, co: z, adults: g.adults, pens: g.pens, kids: g.kids, vehicles: 1, setup: '', extras: ex, method: m, eft: q.eft, card: q.card, total: m === 'card' ? q.card : q.eft, payments: [], status: 'pending', notes: [], pop: false };
+        var ex = { gd: +fval(f, 'gd') || 0 }, q = quote(sid, a, z, g, ex), linked = false;
+        if (!cl) { cl = findClient(ng.email, ng.phone); linked = !!cl; if (!cl) cl = newClient(ng); }
+        var b = { ref: 'KY' + a.slice(2, 4) + '-' + Math.random().toString(36).slice(2, 6).toUpperCase(), created: nowStamp(), source: fval(f, 'source'), cid: cl.id, guest: { first: cl.first, last: cl.last, email: cl.email, phone: cl.phone, consent: cl.consent }, stand: sid, ci: a, co: z, adults: g.adults, pens: g.pens, kids: g.kids, vehicles: 1, setup: '', extras: ex, method: m, eft: q.eft, card: q.card, total: m === 'card' ? q.card : q.eft, payments: [], status: 'pending', notes: [], pop: false };
         if (m !== 'eft') b.status = 'confirmed';
         if (fval(f, 'usecredit')) { var need = b.total; creditsFor(b.guest.email).forEach(function (c) { var take = Math.min(need, c.amt - c.used); if (take <= 0) return; c.used += take; need -= take; b.payments.push({ d: TODAY, amt: take, m: 'credit', type: 'Credit', ref: 'Credit from ' + c.from }); }); if (paid(b) >= deposit(b)) b.status = 'confirmed'; }
         DB.bookings.push(b); DB.bookings.sort(function (x, y) { return x.ci < y.ci ? -1 : 1; });
         log('New ' + b.source.toLowerCase() + ' booking ' + b.ref + ' for ' + guestName(b), b.ref); save(); render(); openBooking(b.ref);
-        toast('Booking ' + b.ref + ' created' + (m === 'eft' ? '. Invoice emailed (demo)' : ''));
+        toast('Booking ' + b.ref + ' created' + (linked ? ' for returning client ' + esc(clientName(cl)) : '') + (m === 'eft' ? '. Invoice emailed (demo)' : ''));
       }, { wide: true, onOpen: function (f) {
         var u = function () {
           var g = { adults: +fval(f, 'adults') || 0, pens: +fval(f, 'pens') || 0, kids: +fval(f, 'kids') || 0 }, sid = fval(f, 'stand'), a = fval(f, 'ci'), z = fval(f, 'co'), m = $('[name=m]:checked', f).value, box = $('[data-q]', f);
@@ -524,11 +652,56 @@
           box.innerHTML = (free ? '<span class="pill ok"><i></i>Stand free</span>' : '<span class="pill bad"><i></i>Stand not free</span>') + (g.adults + g.pens + g.kids > st.guests ? ' <span class="pill warn"><i></i>Over ' + st.guests + ' guests</span>' : '') +
             '<div class="qb-row"><span>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + '</span><span class="price-pair">' + (!hasFee() ? '<b>' + money(q.eft) + '</b>' : m === 'card' ? '<b>' + money(q.card) + '</b> <small>card price</small>' : '<s>' + money(q.card) + '</s> <b>' + money(q.eft) + '</b> <small>' + methodLabel(m) + '</small>') + '</span></div>' +
             '<div class="muted small">Deposit ' + depPct() + '%: ' + money(Math.round((m === 'card' ? q.card : q.eft) * depPct() / 100)) + '</div>';
-          var cl = creditLeft(fval(f, 'email')), cb = $('[data-credit-box]', f), was = f.elements.usecredit ? f.elements.usecredit.checked : true;
+          var pc = clientById(fval(f, 'cid')), cl = creditLeft(pc ? pc.email : fval(f, 'email')), cb = $('[data-credit-box]', f), was = f.elements.usecredit ? f.elements.usecredit.checked : true;
           cb.innerHTML = cl ? '<label class="check credit-use"><input type="checkbox" name="usecredit"' + (was ? ' checked' : '') + '><span>Use <b>' + money(cl) + '</b> credit from a cancelled booking</span></label>' : '';
         };
-        $$('input,select', f).forEach(function (x) { x.addEventListener('input', u); x.addEventListener('change', u); }); u();
+        $$('input,select', f).forEach(function (x) { if (x.name === 'clq') return; x.addEventListener('input', u); x.addEventListener('change', u); });
+        clientPicker(f, pre, u); u();
       } });
+  }
+  // "find a client" box on New booking: search, pick, or add a new one (with a check for clients we already know)
+  function clientPicker(f, pre, onChange) {
+    var find = $('[data-clfind]', f), res = $('[data-clres]', f), chosen = $('[data-clchosen]', f), form = $('[data-clform]', f), match = $('[data-clmatch]', f), q = f.elements.clq, cid = f.elements.cid;
+    var line = function (c) { var s = clientStats(c); return '<span class="avatar">' + esc((c.first[0] || '?') + (c.last[0] || '')) + '</span><span class="cl-r-g"><b>' + esc(clientName(c)) + '</b><small>' + esc([c.phone, c.email].filter(Boolean).join(' · ')) + '</small></span>' + retPill(s.stays); };
+    var show = function (mode) { find.hidden = mode !== 'find'; chosen.hidden = mode !== 'chosen'; form.hidden = mode !== 'new'; res.hidden = true; };
+    var choose = function (id) {
+      var c = clientById(id); if (!c) return; var s = clientStats(c), cr = creditLeft(c.email); cid.value = c.id;
+      chosen.innerHTML = '<div class="cl-card"><div class="cl-r">' + line(c) + '<button type="button" class="btn ghost sm" data-clchange>Change</button></div>' +
+        (s.stays ? '<p class="small cl-hist">' + ic('return') + '<span>' + (s.stays > 1 ? 'Returning client: ' : '') + s.stays + ' stay' + (s.stays === 1 ? '' : 's') + ', ' + s.nights + ' nights' + (s.last ? ', last here ' + fd(s.last, { day: 'numeric', month: 'short', year: 'numeric' }) : '') + (s.next ? '. Already booked for ' + fd(s.next) : '') + '.</span></p>' : '<p class="small muted">No stays yet.</p>') +
+        (c.notes ? '<p class="cl-note">' + ic('note') + '<span>' + esc(c.notes) + '</span></p>' : '') + (cr ? '<p class="small"><b>' + money(cr) + '</b> credit to use.</p>' : '') + '</div>';
+      show('chosen'); onChange();
+    };
+    var search = function () {
+      var t = q.value.trim().toLowerCase(), td = normPhone(t);
+      if (t.length < 2) { res.hidden = true; return; }
+      var hits = DB.clients.filter(function (c) { return (clientName(c) + ' ' + c.email + ' ' + (c.town || '')).toLowerCase().indexOf(t) >= 0 || (td.length >= 3 && (normPhone(c.phone).indexOf(td) >= 0 || normPhone(c.phone2).indexOf(td) >= 0)); })
+        .sort(function (a, b) { return clientStats(b).stays - clientStats(a).stays; }).slice(0, 6);
+      res.innerHTML = hits.map(function (c) { return '<button type="button" class="cl-r" data-clpick="' + c.id + '">' + line(c) + '</button>'; }).join('') +
+        '<button type="button" class="cl-r cl-add" data-cladd>' + ic('plus') + '<span>Add <b>' + esc(q.value.trim()) + '</b> as a new client</span></button>';
+      res.hidden = false;
+    };
+    var checkNew = function () {
+      var c = findClient(fval(f, 'email'), fval(f, 'phone'));
+      match.innerHTML = c ? '<div class="cl-match">' + ic('return') + '<span><b>' + esc(clientName(c)) + '</b> already has this ' + (fval(f, 'email') && normEmail(c.email) === normEmail(fval(f, 'email')) ? 'email address' : 'number') + ' (' + clientStats(c).stays + ' stays).</span><button type="button" class="btn sm" data-cluse="' + c.id + '">Use this client</button></div>' : '';
+      onChange();
+    };
+    q.addEventListener('input', search); q.addEventListener('focus', search);
+    q.addEventListener('keydown', function (e) { if (e.key !== 'Enter') return; e.preventDefault(); var h = $('[data-clpick]', res); if (h && !res.hidden) choose(h.dataset.clpick); });
+    ['email', 'phone'].forEach(function (k) { f.elements[k].addEventListener('input', checkNew); });
+    f.addEventListener('click', function (e) {
+      var t = e.target, p = t.closest('[data-clpick],[data-cluse]');
+      if (p) { choose(p.dataset.clpick || p.dataset.cluse); return; }
+      if (t.closest('[data-clchange]')) { cid.value = ''; q.value = ''; show('find'); onChange(); setTimeout(function () { q.focus(); }, 30); return; }
+      if (t.closest('[data-cladd]') || t.closest('[data-clnew]')) {
+        var w = q.value.trim(); if (w && !/[@\d]/.test(w) && !fval(f, 'first')) { var parts = w.split(/\s+/); f.elements.first.value = parts[0]; f.elements.last.value = parts.slice(1).join(' '); }
+        else if (/@/.test(w) && !fval(f, 'email')) f.elements.email.value = w; else if (/\d{3}/.test(w) && !fval(f, 'phone')) f.elements.phone.value = w;
+        cid.value = ''; show('new'); checkNew(); setTimeout(function () { (f.elements.first.value ? f.elements.phone : f.elements.first).focus(); }, 30); return;
+      }
+      if (t.closest('[data-clback]')) { show('find'); onChange(); setTimeout(function () { q.focus(); }, 30); return; }
+      if (!t.closest('[data-clfind]')) res.hidden = true;
+    });
+    var known = pre.cid ? clientById(pre.cid) : findClient(pre.email, pre.phone);
+    if (known) choose(known.id); else if (pre.first || pre.email || pre.phone) { show('new'); checkNew(); } else { show('find'); setTimeout(function () { q.focus(); }, 40); }
   }
 
   /* ---------- charts (single colour; two-series uses card orange + EFT blue) ---------- */
@@ -628,7 +801,7 @@
       '<div class="card flush"><table class="tbl"><thead><tr><th>Guest</th><th>Stand</th><th>Dates</th><th>Guests</th><th class="r">Total</th><th class="r">Balance</th><th>Status</th></tr></thead><tbody>' +
       (list.length ? list.map(function (b) {
         var st = standById(b.stand);
-        return '<tr data-open="' + b.ref + '" tabindex="0"><td data-l="Guest"><b>' + esc(guestName(b)) + '</b>' + (b.isNew ? ' <span class="new">New</span>' : '') + '<small>' + esc(b.ref) + ' · ' + esc(b.source) + '</small></td><td data-l="Stand">' + esc(st.name) + '<small>' + AREA_SHORT[st.area] + '</small></td>' +
+        return '<tr data-open="' + b.ref + '" tabindex="0"><td data-l="Guest"><b>' + esc(guestName(b)) + '</b>' + (b.isNew ? ' <span class="new">New</span>' : '') + (staysBefore(b) ? ' <span class="ret-dot" title="Returning client">' + ic('return') + '</span>' : '') + '<small>' + esc(b.ref) + ' · ' + esc(b.source) + '</small></td><td data-l="Stand">' + esc(st.name) + '<small>' + AREA_SHORT[st.area] + '</small></td>' +
           '<td data-l="Dates" data-s="' + b.ci + '">' + fd(b.ci) + ' to ' + fd(b.co) + '<small>' + diff(b.ci, b.co) + ' nights · ' + rel(b.ci) + '</small></td><td data-l="Guests">' + people(b) + '</td>' +
           '<td data-l="Total" class="r">' + money(b.total) + '<small>' + methodLabel(b.method) + (b.method !== 'card' && hasFee() ? ' · card ' + money(b.card) : '') + '</small></td><td data-l="Balance" class="r">' + (balance(b) ? money(balance(b)) : '<span class="muted">0</span>') + '</td><td data-l="Status">' + pill(stateOf(b)) + '</td></tr>';
       }).join('') : '<tr><td colspan="7" class="empty">No bookings match.</td></tr>') + '</tbody></table></div>';
@@ -679,40 +852,69 @@
   }
 
   function guestsList() {
-    var map = {};
-    DB.bookings.forEach(function (b) {
-      var k = b.guest.email || guestName(b);
-      var g = map[k] = map[k] || { name: guestName(b), email: b.guest.email, phone: b.guest.phone, consent: b.guest.consent, stays: 0, nights: 0, spent: 0, last: '', next: '', refs: [], pens: false, gd: false };
-      g.refs.push(b.ref);
-      if (!live(b)) return;
-      g.stays++; g.nights += diff(b.ci, b.co); g.spent += paid(b); if (b.ci <= TODAY && TODAY < b.co) g.now = true; if (b.pens) g.pens = true; if (b.extras && b.extras.gd) g.gd = true;
-      if (b.co <= TODAY && b.ci > g.last) g.last = b.ci; if (b.ci >= TODAY && (!g.next || b.ci < g.next)) g.next = b.ci;
-    });
-    return Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) { return b.spent - a.spent; });
+    return DB.clients.map(function (c) { var s = clientStats(c); return Object.assign(s, { id: c.id, name: clientName(c), email: c.email, phone: c.phone, consent: c.consent, town: c.town, notes: c.notes, created: c.created }); }).sort(function (a, b) { return b.spent - a.spent; });
   }
   var GQ = '', GF = { tag: '', area: '' };
-  var GTAGS = [['', 'All guests', function () { return true; }], ['now', 'In camp now', function (g) { return g.now; }], ['next', 'Coming up', function (g) { return g.next; }], ['ret', 'Returning', function (g) { return g.stays > 1; }], ['first', 'First-timers', function (g) { return g.stays === 1; }], ['mail', 'On the mailing list', function (g) { return g.consent; }], ['pens', 'Pensioners', function (g) { return g.pens; }], ['gd', 'Game drives', function (g) { return g.gd; }]];
-  function vGuests() {
-    var all = guestsList(), q = GQ.toLowerCase(), tagF = GTAGS.filter(function (t) { return t[0] === GF.tag; })[0] || GTAGS[0];
-    var list = all.filter(function (g) { return tagF[2](g) && (!q || (g.name + ' ' + g.email + ' ' + g.phone).toLowerCase().indexOf(q) >= 0); });
-    return '<div class="page-h"><div><h1>Guests</h1><p class="muted">' + all.length + ' guests · ' + all.filter(function (g) { return g.stays > 1; }).length + ' returning · ' + all.filter(function (g) { return g.consent; }).length + ' agreed to news and specials</p></div><div class="ph-act"><button class="btn ghost" data-act="csv-guests">' + ic('download') + 'Export mailing list</button></div></div>' +
-      '<div class="filters"><label class="search">' + ic('search') + '<input type="search" data-gq placeholder="Search name, email or phone" value="' + esc(GQ) + '" aria-label="Search guests"></label></div>' +
+  var GTAGS = [['', 'All clients', function () { return true; }], ['ret', 'Returning', function (g) { return g.stays > 1; }], ['first', 'First-timers', function (g) { return g.stays === 1; }], ['now', 'In camp now', function (g) { return g.now; }], ['next', 'Coming up', function (g) { return g.next; }], ['mail', 'On the mailing list', function (g) { return g.consent; }], ['pens', 'Pensioners', function (g) { return g.pens; }], ['gd', 'Game drives', function (g) { return g.gd; }], ['none', 'No stay yet', function (g) { return !g.stays; }]];
+  function vClients() {
+    var all = guestsList(), q = GQ.toLowerCase(), qd = normPhone(GQ), tagF = GTAGS.filter(function (t) { return t[0] === GF.tag; })[0] || GTAGS[0];
+    var list = all.filter(function (g) { return tagF[2](g) && (!q || (g.name + ' ' + g.email + ' ' + g.phone + ' ' + (g.town || '')).toLowerCase().indexOf(q) >= 0 || (qd.length >= 3 && normPhone(g.phone).indexOf(qd) >= 0)); });
+    var booked = all.filter(function (g) { return g.stays; }).length, ret = all.filter(function (g) { return g.stays > 1; }).length;
+    return '<div class="page-h"><div><h1>Clients</h1><p class="muted">Everyone who has booked with Kyleu. Tap a client to see their stays or change their details.</p></div><div class="ph-act"><button class="btn ghost" data-act="csv-guests">' + ic('download') + 'Export mailing list</button><button class="btn" data-act="client-add">' + ic('plus') + 'Add client</button></div></div>' +
+      '<div class="kpis">' + tile('Clients', all.length, all.filter(function (g) { return g.stays === 1; }).length + ' first-timers') + tile('Returning clients', ret, (booked ? Math.round(ret / booked * 100) : 0) + '% came back for another stay', null, 'ok') +
+      tile('Returning soon', all.filter(function (g) { return g.next && g.stays > 1; }).length, 'returning clients with a stay booked') + tile('On the mailing list', all.filter(function (g) { return g.consent; }).length, 'agreed to news and specials') + '</div>' +
+      '<div class="filters"><label class="search">' + ic('search') + '<input type="search" data-gq placeholder="Search name, mobile, email or town" value="' + esc(GQ) + '" aria-label="Search clients"></label></div>' +
       '<div class="chips scroll">' + GTAGS.map(function (t) { return '<button class="chip' + (GF.tag === t[0] ? ' on' : '') + '" data-gtag="' + t[0] + '">' + t[1] + ' <span>' + all.filter(t[2]).length + '</span></button>'; }).join('') + '</div>' +
-      '<div class="card flush"><table class="tbl"><thead><tr><th>Guest</th><th>Contact</th><th class="r">Stays</th><th class="r">Nights</th><th class="r">Spent</th><th>Last / next visit</th><th>Tags</th></tr></thead><tbody>' +
-      list.map(function (g) {
-        var tags = (g.stays > 1 ? '<span class="tag">Returning</span>' : '') + (g.pens ? '<span class="tag">Pensioner</span>' : '') + (g.gd ? '<span class="tag">Game drives</span>' : '') + (g.consent ? '<span class="tag ok">Mailing list</span>' : '') + (creditLeft(g.email) ? '<span class="tag">Credit ' + money(creditLeft(g.email)) + '</span>' : '');
-        return '<tr data-guest="' + esc(g.email) + '" tabindex="0"><td data-l="Guest"><b>' + esc(g.name) + '</b></td><td data-l="Contact">' + esc(g.phone) + '<small>' + esc(g.email) + '</small></td><td data-l="Stays" class="r">' + g.stays + '</td><td data-l="Nights" class="r">' + g.nights + '</td><td data-l="Spent" class="r">' + money(g.spent) + '</td><td data-l="Visits" data-s="' + (g.next || g.last || '') + '">' + (g.last ? fd(g.last, { day: 'numeric', month: 'short', year: 'numeric' }) : '<span class="muted">None yet</span>') + (g.next ? '<small>Next: ' + fd(g.next) + '</small>' : '') + '</td><td data-l="Tags">' + (tags || '<span class="muted">None</span>') + '</td></tr>';
-      }).join('') + '</tbody></table></div>';
+      '<div class="card flush"><table class="tbl"><thead><tr><th>Client</th><th>Contact</th><th class="r">Stays</th><th class="r">Nights</th><th class="r">Spent</th><th>Last / next visit</th><th>Tags</th></tr></thead><tbody>' +
+      (list.length ? list.map(function (g) {
+        var tags = (g.pens ? '<span class="tag">Pensioner</span>' : '') + (g.gd ? '<span class="tag">Game drives</span>' : '') + (g.consent ? '<span class="tag ok">Mailing list</span>' : '') + (creditLeft(g.email) ? '<span class="tag">Credit ' + money(creditLeft(g.email)) + '</span>' : '') + (g.notes ? '<span class="tag" title="' + esc(g.notes) + '">' + ic('note') + 'Notes</span>' : '');
+        return '<tr data-client="' + g.id + '" tabindex="0"><td data-l="Client"><b>' + esc(g.name) + '</b>' + (g.stays > 1 ? ' <span class="pill ok ret">' + ic('return') + 'Returning</span>' : '') + (g.town ? '<small>' + esc(g.town) + '</small>' : '') + '</td><td data-l="Contact">' + esc(g.phone || '') + '<small>' + esc(g.email || '') + '</small></td><td data-l="Stays" class="r">' + g.stays + '</td><td data-l="Nights" class="r">' + g.nights + '</td><td data-l="Spent" class="r">' + money(g.spent) + '</td><td data-l="Visits" data-s="' + (g.next || g.last || '') + '">' + (g.last ? fd(g.last, { day: 'numeric', month: 'short', year: 'numeric' }) : '<span class="muted">None yet</span>') + (g.next ? '<small>Next: ' + fd(g.next) + '</small>' : '') + '</td><td data-l="Tags">' + (tags || '<span class="muted">None</span>') + '</td></tr>';
+      }).join('') : '<tr><td colspan="7" class="empty">No clients match.</td></tr>') + '</tbody></table></div>';
   }
-  function openGuest(email) {
-    var g = guestsList().filter(function (x) { return x.email === email; })[0]; if (!g) return;
-    var bs = DB.bookings.filter(function (b) { return b.guest.email === email; });
-    modal(esc(g.name), '<div class="chips"><a class="chip" href="tel:' + esc(g.phone.replace(/\s/g, '')) + '">' + ic('phone') + esc(g.phone) + '</a><a class="chip" href="mailto:' + esc(g.email) + '">' + ic('mail') + esc(g.email) + '</a></div>' +
-      '<div class="mini-kpis"><div><b>' + g.stays + '</b><span>stays</span></div><div><b>' + g.nights + '</b><span>nights</span></div><div><b>' + money(g.spent) + '</b><span>spent</span></div></div>' +
-      (creditLeft(g.email) ? '<p class="callout"><b>' + money(creditLeft(g.email)) + ' credit</b> from a cancelled booking. Use it on their next booking.</p>' : '') +
-      '<label class="check"><input type="checkbox" name="consent"' + (g.consent ? ' checked' : '') + '><span>Agreed to receive news and specials (POPIA consent)</span></label>' +
-      '<h5>Bookings</h5><div class="list">' + bs.map(function (b) { return '<button type="button" class="brow" data-open="' + b.ref + '"><span class="brow-st">' + esc(standById(b.stand).name) + '</span><span class="brow-g"><b>' + fd(b.ci, { day: 'numeric', month: 'short', year: 'numeric' }) + '</b><small>' + diff(b.ci, b.co) + ' nights · ' + money(b.total) + '</small></span>' + pill(stateOf(b)) + '</button>'; }).join('') + '</div>',
-      'Save', function (f) { var c = fval(f, 'consent'); DB.bookings.forEach(function (b) { if (b.guest.email === email) b.guest.consent = c; }); save(); render(); toast('Guest updated'); }, { noFocus: true });
+  function openGuest(key) { var c = clientById(key) || findClient(key, key); if (c) openClient(c.id); }
+  function openClient(id) {
+    var c = clientById(id); if (!c) return; var s = clientStats(c), bs = clientBookings(c), cr = creditLeft(c.email);
+    var ts = c.email ? DB.threads.filter(function (t) { return normEmail(t.email) === normEmail(c.email); }) : [];
+    var wa = c.phone ? '27' + normPhone(c.phone).replace(/^0/, '') : '';
+    modal(esc(clientName(c)),
+      '<div class="cl-top">' + retPill(s.stays) + (s.now ? '<span class="pill ok"><i></i>In camp now</span>' : '') + (s.next ? '<span class="pill info"><i></i>Next stay ' + fd(s.next) + '</span>' : '') + '</div>' +
+      '<div class="mini-kpis"><div><b>' + s.stays + '</b><span>stay' + (s.stays === 1 ? '' : 's') + '</span></div><div><b>' + s.nights + '</b><span>nights</span></div><div><b>' + money(s.spent) + '</b><span>paid</span></div></div>' +
+      '<dl class="kv cl-kv"><dt>Mobile</dt><dd>' + (c.phone ? esc(c.phone) : '<span class="muted">Not given</span>') + (c.phone2 ? '<br>' + esc(c.phone2) + ' <span class="muted small">(other)</span>' : '') + '</dd>' +
+      '<dt>Email</dt><dd>' + (c.email ? esc(c.email) : '<span class="muted">Not given</span>') + '</dd>' +
+      '<dt>Town</dt><dd>' + (c.town ? esc(c.town) : '<span class="muted">Not given</span>') + '</dd>' +
+      '<dt>Client since</dt><dd>' + fd(c.created.slice(0, 10), { day: 'numeric', month: 'short', year: 'numeric' }) + '</dd>' +
+      '<dt>Mailing list</dt><dd>' + (c.consent ? 'Yes, agreed to news and specials' : 'No') + '</dd></dl>' +
+      (c.notes ? '<p class="cl-note">' + ic('note') + '<span>' + esc(c.notes) + '</span></p>' : '') +
+      (cr ? '<p class="callout"><b>' + money(cr) + ' credit</b> from a cancelled booking. It is offered on their next booking.</p>' : '') +
+      '<div class="chips">' + (c.phone ? '<a class="chip" href="tel:' + esc(c.phone.replace(/\s/g, '')) + '">' + ic('phone') + 'Call</a><a class="chip" target="_blank" rel="noopener" href="https://wa.me/' + wa + '">' + ic('wa') + 'WhatsApp</a>' : '') + (c.email ? '<button type="button" class="chip" data-act="client-mail" data-ref="' + c.id + '">' + ic('mail') + 'Email</button>' : '') + '</div>' +
+      '<h5>Stays</h5>' + (bs.length ? '<div class="list">' + bs.map(function (b) { return '<button type="button" class="brow" data-open="' + b.ref + '"><span class="brow-st">' + esc(standById(b.stand).name) + '</span><span class="brow-g"><b>' + fd(b.ci, { day: 'numeric', month: 'short', year: 'numeric' }) + '</b><small>' + esc(b.ref) + ' · ' + diff(b.ci, b.co) + ' night' + (diff(b.ci, b.co) === 1 ? '' : 's') + ' · ' + people(b) + ' guests · ' + money(b.total) + '</small></span>' + pill(stateOf(b)) + '</button>'; }).join('') + '</div>' : '<p class="muted small">No bookings yet.</p>') +
+      '<h5>Emails</h5>' + (ts.length ? '<div class="list">' + ts.map(function (t) { return '<button type="button" class="brow" data-thread-go="' + t.id + '"><span class="brow-g"><b>' + esc(t.subject) + '</b><small>' + t.msgs.length + ' email' + (t.msgs.length > 1 ? 's' : '') + ' · last ' + when(lastMsg(t).at) + '</small></span>' + ic('chev-r') + '</button>'; }).join('') + '</div>' : '<p class="muted small">No emails yet.</p>') +
+      '<div class="m-acts"><button type="button" class="btn ghost" data-act="client-edit" data-ref="' + c.id + '">' + ic('edit') + 'Edit details</button><button type="button" class="btn" data-act="client-book" data-ref="' + c.id + '">' + ic('plus') + 'New booking</button></div>',
+      null, null, { wide: true, noFocus: true });
+  }
+  function actClient(id, reopen) {
+    var c = id ? clientById(id) : null, d = c || { first: '', last: '', email: '', phone: '', phone2: '', town: '', notes: '', consent: false }, n = c ? clientBookings(c).length : 0;
+    modal(c ? 'Edit ' + esc(clientName(c)) : 'Add a client',
+      (n ? '<p class="hint">' + ic('info') + ' Changes show on ' + (n === 1 ? 'their booking' : 'all ' + n + ' of their bookings') + ' too.</p>' : '') +
+      '<div class="grid2"><label class="fld"><span>First name</span><input name="first" value="' + esc(d.first) + '"></label><label class="fld"><span>Surname</span><input name="last" value="' + esc(d.last) + '"></label></div>' +
+      '<div class="grid2"><label class="fld"><span>Mobile</span><input name="phone" inputmode="tel" value="' + esc(d.phone) + '"></label><label class="fld"><span>Other number</span><input name="phone2" inputmode="tel" value="' + esc(d.phone2 || '') + '"></label></div>' +
+      '<div class="grid2"><label class="fld"><span>Email</span><input name="email" type="email" value="' + esc(d.email) + '"></label><label class="fld"><span>Town</span><input name="town" value="' + esc(d.town || '') + '" placeholder="e.g. Pretoria"></label></div>' +
+      '<label class="fld"><span>Client notes (staff only, shown on every booking)</span><textarea name="notes" rows="3" placeholder="e.g. Likes Stand 6, brings two dogs on a lead, prefers WhatsApp">' + esc(d.notes || '') + '</textarea></label>' +
+      '<label class="check"><input type="checkbox" name="consent"' + (d.consent ? ' checked' : '') + '><span>Agreed to receive news and specials (POPIA consent)</span></label><p class="hint" data-dup></p>',
+      c ? 'Save changes' : 'Add client', function (f) {
+        var v = { first: fval(f, 'first'), last: fval(f, 'last'), email: fval(f, 'email'), phone: fval(f, 'phone'), phone2: fval(f, 'phone2'), town: fval(f, 'town'), notes: fval(f, 'notes'), consent: fval(f, 'consent') };
+        if (!v.first || !v.last) { toast('Add a first name and surname'); return false; }
+        if (!v.phone && !v.email) { toast('Add a mobile number or an email address'); return false; }
+        if (v.email && !/.+@.+\..+/.test(v.email)) { toast('That email address does not look right'); return false; }
+        var dup = findClient(v.email, v.phone, c && c.id); if (dup) { toast(esc(clientName(dup)) + ' already has that ' + (v.email && normEmail(dup.email) === normEmail(v.email) ? 'email address' : 'number')); return false; }
+        if (c) { var cc = clientChanges(c, v); if (!cc.length) { toast('Nothing was changed'); return; } applyClient(c, v); log('Client ' + clientName(c) + ' updated: ' + cc.join('; ')); }
+        else { c = newClient(v); log('Added client ' + clientName(c)); }
+        save(); refresh(); toast(id ? 'Client details saved' : 'Client added');
+        if (reopen !== false) { var cid = c.id; setTimeout(function () { openClient(cid); }, 0); }
+      }, { wide: true, onOpen: function (f) {
+        var u = function () { var dp = findClient(fval(f, 'email'), fval(f, 'phone'), c && c.id); $('[data-dup]', f).innerHTML = dp ? '<span class="warn-t">' + ic('alert') + ' ' + esc(clientName(dp)) + ' already has this ' + (fval(f, 'email') && normEmail(dp.email) === normEmail(fval(f, 'email')) ? 'email address' : 'number') + '.</span> <button type="button" class="link-btn" data-client="' + dp.id + '">Open their card</button>' : ''; };
+        ['email', 'phone'].forEach(function (k) { f.elements[k].addEventListener('input', u); }); u();
+      } });
   }
 
   var STF = { q: '', area: '', state: '' };
@@ -1758,8 +1960,8 @@
     return { items: list.slice(p * size, p * size + size), bar: pages > 1 ? '<div class="pager"><span>' + (p * size + 1) + ' to ' + Math.min(list.length, p * size + size) + ' of ' + list.length + '</span><button class="icon-btn sm" data-pg="' + key + '|-1"' + (p ? '' : ' disabled') + ' aria-label="Previous page">' + ic('chev-l') + '</button><button class="icon-btn sm" data-pg="' + key + '|1"' + (p < pages - 1 ? '' : ' disabled') + ' aria-label="Next page">' + ic('chev-r') + '</button></div>' : '' };
   }
 
-  var VIEWS = { dashboard: vDashboard, bookings: vBookings, eft: vEft, calendar: vCalendar, guests: vGuests, payments: vPayments, shop: vShop, drives: vDrives, products: vProducts, vouchers: vVouchers, enquiries: vEnquiries, stands: vStands, rates: vRates, reports: vReports, settings: vSettings };
-  function route() { var v = (location.hash.match(/^#\/(\w+)/) || [])[1] || 'dashboard'; return VIEWS[v] && can(v) ? v : 'dashboard'; }
+  var VIEWS = { dashboard: vDashboard, bookings: vBookings, eft: vEft, calendar: vCalendar, clients: vClients, payments: vPayments, shop: vShop, drives: vDrives, products: vProducts, vouchers: vVouchers, enquiries: vEnquiries, stands: vStands, rates: vRates, reports: vReports, settings: vSettings };
+  function route() { var v = (location.hash.match(/^#\/(\w+)/) || [])[1] || 'dashboard'; if (v === 'guests') v = 'clients'; return VIEWS[v] && can(v) ? v : 'dashboard'; }
 
   /* ---------- shell ---------- */
   function badges() {
@@ -1813,6 +2015,9 @@
     var cal = t.closest('[data-cal]'); if (cal) { var n = +cal.dataset.cal; CAL.start = n ? add(CAL.start, n) : add(TODAY, -2); render(); return; }
     var na = t.closest('[data-newat]'); if (na) { var p = na.dataset.newat.split('|'); actNew({ stand: p[0], ci: p[1], co: add(p[1], 2) }); return; }
     var gr = t.closest('[data-guest]'); if (gr) { openGuest(gr.dataset.guest); return; }
+    var cr = t.closest('[data-client]'); if (cr && !t.closest('[data-clfind],[data-clform]')) { e.preventDefault(); openClient(cr.dataset.client); return; }
+    var ne = t.closest('[data-note-edit]'); if (ne) { var np = ne.dataset.noteEdit.split('|'); actNote(np[0], +np[1]); return; }
+    var nd = t.closest('[data-note-del]'); if (nd) { var nq = nd.dataset.noteDel.split('|'), nb = byRef(nq[0]), ni = +nq[1], nn = nb.notes[ni]; if (!nn) return; modal('Delete this note?', '<p class="callout">' + esc(nn.text) + '</p><p class="muted small">Written by ' + esc(nn.by) + ' · ' + esc(nn.at) + '</p>', 'Delete note', function () { nb.notes.splice(ni, 1); log('Note deleted on ' + nb.ref, nb.ref); save(); refresh(); toast('Note deleted'); }, { danger: true, noFocus: true }); return; }
     if (t.closest('[data-fst],[data-payt],[data-prodcat],[data-gtag],[data-box],[data-paytab],[data-shoptab],[data-pcat]')) resetPages();
     var sth = t.closest('th.sortable'); if (sth) { var stb = sth.closest('table'), sk = stb.dataset.sortKey, sci = +sth.dataset.sortCol, cur = SORT[sk]; SORT[sk] = !cur || cur.col !== sci ? { col: sci, dir: 1 } : cur.dir === 1 ? { col: sci, dir: -1 } : null; delete TPG[sk]; render(); var nth = $('table[data-sort-key="' + sk + '"] th[data-sort-col="' + sci + '"]'); if (nth) nth.focus({ preventScroll: true }); return; }
     var tpg = t.closest('[data-tpg]'); if (tpg) { var tp = tpg.dataset.tpg.split('|'), tk = tp[0] + '|' + tp[1]; TPG[tk] = (TPG[tk] || 0) + (+tp[2]); render(); var ttb = $('table[data-sort-key="' + tk + '"]'); if (ttb) { var top = (ttb.closest('.card') || ttb).getBoundingClientRect().top + window.scrollY - 80; if (top < window.scrollY) window.scrollTo({ top: top }); } return; }
@@ -1821,7 +2026,7 @@
     var gtag = t.closest('[data-gtag]'); if (gtag) { GF.tag = gtag.dataset.gtag; render(); return; }
     var fcl = t.closest('[data-fclear]'); if (fcl) { var fc = fcl.dataset.fclear.split(':'); fc[1].split(',').forEach(function (k) { FO(fc[0])[k] = ''; }); resetPages(); render(); return; }
     var th = t.closest('[data-thread]'); if (th) { IN.id = th.dataset.thread || null; CMP_ATT = []; var tt = IN.id && thrById(IN.id); if (tt && tt.unread) { tt.unread = false; save(); } render(); window.scrollTo(0, 0); return; }
-    var tg = t.closest('[data-thread-go]'); if (tg) { IN.id = tg.dataset.threadGo; IN.box = 'all'; closeDrawer(); location.hash = '#/enquiries'; render(); return; }
+    var tg = t.closest('[data-thread-go]'); if (tg) { IN.id = tg.dataset.threadGo; IN.box = 'all'; closeDrawer(); if (!$('#modal').hidden) closeModal(); location.hash = '#/enquiries'; render(); return; }
     var bx = t.closest('[data-box]'); if (bx) { IN.box = bx.dataset.box; IN.id = null; render(); return; }
     var at_ = t.closest('[data-att]'); if (at_) { viewAtt(at_.dataset.att); return; }
     var cd = t.closest('[data-cmp-del]'); if (cd) { CMP_ATT.splice(+cd.dataset.cmpDel, 1); cmpRefresh(); return; }
@@ -1849,11 +2054,15 @@
     if (act === 'menu') { document.body.classList.toggle('nav-open'); return; }
     if (act === 'logout') { try { sessionStorage.removeItem(SESS); } catch (x) {} ME = null; location.hash = ''; login(); return; }
     if (act === 'new') return actNew();
+    if (act === 'client-add') return actClient(null);
+    if (act === 'client-edit') return actClient(ref);
+    if (act === 'client-book') { closeModal(); return actNew({ cid: ref }); }
+    if (act === 'client-mail') { var mc = clientById(ref); closeModal(); actNewMail(); var mf = $('#modal form'); if (mf && mc) mf.elements.to.value = mc.email; return; }
     if (act === 'pay') return actPay(ref);
     if (act === 'remind') return actRemind(ref);
     if (act === 'cancel') return actCancel(ref);
     if (act === 'release') return actCancel(ref);
-    if (act === 'move') return actMove(ref);
+    if (act === 'move' || act === 'edit') return actEdit(ref);
     if (act === 'block') return actBlock();
     if (act === 'stand-add') return actStand(null, null);
     if (act === 'stand-edit') return actStand(ref);
@@ -1890,7 +2099,7 @@
     if (act === 'invite') { modal('Invite a staff member', '<label class="fld"><span>Name</span><input name="n"></label><label class="fld"><span>Email</span><input name="e" type="email"></label><label class="fld"><span>Role</span><select name="r">' + Object.keys(ROLES).map(function (r) { return '<option>' + r + '</option>'; }).join('') + '</select></label>', 'Send invite', function () { toast('Invite sent (demo)'); }); return; }
     if (act === 'connect') { modal('Connect ' + esc(ref), '<p>In the live version you would sign in to your ' + esc(ref) + ' account here. Guests then pay on ' + esc(ref) + '\'s secure page and the booking is confirmed by itself the moment the payment goes through.</p><p class="muted small">Card numbers never touch the Kyleu website.</p>', null); return; }
     if (act === 'export-json') { var bl = document.createElement('a'); bl.href = URL.createObjectURL(new Blob([JSON.stringify(DB, null, 1)], { type: 'application/json' })); bl.download = 'kyleu-admin-backup.json'; bl.click(); return; }
-    if (act === 'reset') { modal('Reset demo data?', '<p>All demo bookings, payments and notes go back to the start. Bookings made on the website demo are removed too.</p>', 'Reset', function () { try { localStorage.removeItem(KEY); localStorage.removeItem(WEB); localStorage.removeItem(POPK); } catch (x) {} STANDS = CONTENT_STANDS.slice(); P.holidays = JSON.parse(ORIG_HOL); CART = {}; IN.id = null; DB = null; DB = seed(); save(); render(); toast('Demo data reset'); }, { danger: true }); return; }
+    if (act === 'reset') { modal('Reset demo data?', '<p>All demo bookings, payments and notes go back to the start. Bookings made on the website demo are removed too.</p>', 'Reset', function () { try { localStorage.removeItem(KEY); localStorage.removeItem(WEB); localStorage.removeItem(POPK); } catch (x) {} STANDS = CONTENT_STANDS.slice(); P.holidays = JSON.parse(ORIG_HOL); CART = {}; IN.id = null; DB = null; DB = seed(); ensureClients(); save(); render(); toast('Demo data reset'); }, { danger: true }); return; }
   }
   function onInput(e) {
     var t = e.target;
@@ -1962,7 +2171,7 @@
     document.addEventListener('mouseover', onOver);
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') { if (!$('#modal') || $('#modal').hidden) { if ($('#drawer') && !$('#drawer').hidden) closeDrawer(); } else closeModal(); }
-      if (e.key === 'Enter' && e.target.matches('tr[data-open],tr[data-guest],tr[data-sale],tr[data-prod],tr[data-voucher],th.sortable')) e.target.click();
+      if (e.key === 'Enter' && e.target.matches('tr[data-open],tr[data-guest],tr[data-client],tr[data-sale],tr[data-prod],tr[data-voucher],th.sortable')) e.target.click();
     });
     document.addEventListener('focusout', function (e) { if (e.target.matches('[data-global]')) setTimeout(function () { var s = $('[data-sugg]'); if (s) s.hidden = true; }, 200); });
     var rsz; window.addEventListener('resize', function () { clearTimeout(rsz); rsz = setTimeout(function () { if ($('[data-rpc]')) rpDrawCharts(true); }, 120); });

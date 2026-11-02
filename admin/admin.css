@@ -998,3 +998,47 @@ select.on, input.on { border-color: var(--sun) !important; background: #fff7ee !
   .tbl.vouchers td small { display: inline; margin-left: 6px; }
 }
 
+/* ---------- clients, edit booking, notes ---------- */
+.link-btn { border: 0; background: none; padding: 0; color: var(--sun-d, #b4570f); font-weight: 800; font-size: .8rem; cursor: pointer; display: inline-flex; align-items: center; gap: 2px; text-transform: none; letter-spacing: 0; }
+.link-btn .ic { width: 14px; height: 14px; }
+.link-btn:hover { text-decoration: underline; }
+.h4-row { display: flex; justify-content: space-between; align-items: center; }
+.pill.ret .ic { width: 12px; height: 12px; }
+.ret-dot { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--ok-bg); color: var(--ok); vertical-align: -4px; }
+.ret-dot .ic { width: 12px; height: 12px; }
+.cl-note { display: flex; gap: 8px; align-items: flex-start; background: #fff7e3; border: 1px solid #f1dfb0; border-radius: 10px; padding: 9px 12px; font-size: .86rem; margin: 10px 0 0; }
+.cl-note .ic { width: 16px; height: 16px; flex: none; margin-top: 2px; color: var(--warn); }
+.notes li { position: relative; padding-right: 76px; }
+.note-acts { position: absolute; top: 6px; right: 6px; display: flex; gap: 4px; opacity: .55; transition: opacity .15s; }
+.notes li:hover .note-acts, .note-acts:focus-within { opacity: 1; }
+.note-acts .icon-btn { width: 28px; height: 28px; background: #fff; }
+.note-acts .icon-btn .ic { width: 14px; height: 14px; }
+.note-acts [data-note-del] { color: var(--bad); }
+.m-h { margin: 4px 0 10px; font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.m-h ~ .m-h { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.m-acts { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.cl-top { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.cl-kv { margin: 14px 0 6px; }
+.cl-pick { margin-bottom: 14px; }
+.cl-pick .search { margin-bottom: 0; }
+.cl-results { border: 1px solid var(--line); border-radius: 12px; background: #fff; margin-top: 6px; overflow: hidden; box-shadow: 0 14px 30px -18px rgba(0, 0, 0, .35); }
+.cl-r { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; background: none; padding: 9px 12px; font: inherit; color: var(--ink); }
+.cl-results .cl-r { border-bottom: 1px solid var(--line-2); cursor: pointer; }
+.cl-results .cl-r:hover, .cl-results .cl-r:focus-visible { background: #fdf6ea; outline: 0; }
+.cl-r .avatar { background: var(--ink); width: 32px; height: 32px; font-size: .78rem; }
+.cl-r-g { flex: 1; min-width: 0; display: grid; }
+.cl-r-g small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cl-add { color: var(--sun-d, #b4570f); font-weight: 700; }
+.cl-add .ic { width: 18px; height: 18px; }
+.cl-newbtn { margin-top: 8px; }
+.cl-card { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: #fff; }
+.cl-card .cl-r { padding: 0; }
+.cl-hist { display: flex; gap: 6px; align-items: flex-start; margin: 8px 0 0; color: var(--ink-2); }
+.cl-hist .ic { width: 14px; height: 14px; flex: none; margin-top: 3px; color: var(--ok); }
+.cl-new { border: 1px dashed var(--line); border-radius: 12px; padding: 12px 12px 2px; background: #fffdf9; }
+.cl-new-h { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.cl-match { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--ok-bg); color: var(--ink); border-radius: 10px; padding: 9px 12px; margin-bottom: 12px; font-size: .86rem; }
+.cl-match > .ic { width: 16px; height: 16px; color: var(--ok); flex: none; }
+.cl-match span { flex: 1; min-width: 180px; }
+.tag .ic { width: 11px; height: 11px; vertical-align: -1px; margin-right: 3px; }
+.fld input:disabled, .fld select:disabled, .fld textarea:disabled { background: #f3eee5; color: var(--muted); border-style: dashed; cursor: not-allowed; }
