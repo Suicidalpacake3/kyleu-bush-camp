@@ -146,7 +146,6 @@
     Object.keys(v).forEach(function (k) { c[k] = v[k]; });
     if (oldE && newE && oldE !== newE) {   // credits, vouchers and emails follow the new address
       DB.credits.forEach(function (x) { if (x.email === oldE) x.email = newE; });
-      DB.vouchers.forEach(function (x) { var i = (x.emails || []).indexOf(oldE); if (i >= 0) x.emails[i] = newE; });
       DB.threads.forEach(function (t) { if (normEmail(t.email) === oldE) t.email = c.email; });
     }
     clientBookings(c).forEach(syncBooking);
@@ -273,15 +272,6 @@
       T('t7', 'Lost item', 'Anika Botha', 'anika.botha@icloud.com', '079 880 6612', 'closed', false, [G(y6 + ' 07:51', 'Hi,\n\nWe left a blue camping chair at Stand 3 last weekend. Did anyone find it?\n\nAnika'), St('Leuan', y6 + ' 09:02', 'Hi Anika,\n\nYes! Our team found a blue chair at Stand 3. It is safe at reception, so you can collect it any day between 08:00 and 17:00.'), G(y6 + ' 10:15', 'Thank you so much! We will fetch it on Saturday.')])
     ];
     if (mailB) db.threads.push(T('t3', 'Proof of payment ' + mailB.ref, guestName(mailB), mailB.guest.email, mailB.guest.phone, 'open', true, [G(TODAY + ' 06:58', 'Good morning,\n\nPlease find attached proof of payment for booking ' + mailB.ref + '.\n\nRegards,\n' + mailB.guest.first, [{ name: 'FNB-proof-of-payment-' + mailB.ref + '.pdf', size: 86214, type: 'application/pdf' }])], mailB.ref));
-    // vouchers: a few discount codes with different rules
-    var yr = TODAY.slice(0, 4), past = db.bookings.filter(function (b) { return live(b) && b.ci < TODAY && b.ci >= add(TODAY, -40) && b.status !== 'pending'; });
-    var ret = []; db.bookings.forEach(function (b) { if (ret.indexOf(b.guest.email) < 0 && db.bookings.filter(function (x) { return x.guest.email === b.guest.email; }).length > 1) ret.push(b.guest.email); });
-    var fut = db.bookings.filter(function (b) { return live(b) && b.ci > add(TODAY, 20); });
-    db.vouchers = [
-      { id: 'v2', code: 'WELCOMEBACK10', name: '10% off for returning guests', kind: 'discount', value: 10, unit: 'pct', who: 'guests', refs: [], emails: ret.slice(0, 4), stayFrom: '', stayTo: '', max: 4, from: add(TODAY, -10), to: add(TODAY, 80), active: true, auto: false, uses: [] },
-      { id: 'v3', code: 'VENTER-GROUP', name: 'Group discount: Venter families', kind: 'discount', value: 200, unit: 'rand', who: 'refs', refs: fut.slice(0, 2).map(function (b) { return b.ref; }), emails: [], stayFrom: '', stayTo: '', max: 2, from: TODAY, to: add(TODAY, 60), active: true, auto: false, uses: [] },
-      { id: 'v4', code: 'WINTER25', name: 'Winter weekday special', kind: 'discount', value: 25, unit: 'pct', who: 'dates', refs: [], emails: [], stayFrom: yr + '-06-01', stayTo: yr + '-08-31', max: 30, from: yr + '-05-01', to: yr + '-08-31', active: true, auto: false, uses: db.bookings.filter(function (b) { return b.ci >= yr + '-06-01' && b.ci <= yr + '-08-31'; }).slice(0, 9).map(function (b) { return { ref: b.ref, at: b.created, by: 'Website' }; }) }
-    ];
     var cx = db.bookings.filter(function (b) { return b.status === 'cancelled'; })[0];
     if (cx) db.credits.push({ id: 'c1', email: (cx.guest.email || '').toLowerCase(), name: guestName(cx), amt: 650, used: 0, from: cx.ref, d: add(TODAY, -12) });
     var recent = db.bookings.filter(function (b) { return b.created.slice(0, 10) >= add(TODAY, -3); }).slice(-6);
@@ -298,7 +288,7 @@
     if (DB.stands) { CONTENT_STANDS.forEach(function (s) { if (!DB.stands.some(function (x) { return x.id === s.id; }) && !DB.gone[s.id]) DB.stands.push(JSON.parse(JSON.stringify(s))); }); STANDS = DB.stands; }   // campsites added in the map editor join the list   // stands added or changed in this admin
     if (!DB.products) DB.products = defaultProducts();
     DB.threads = DB.threads || []; DB.popSeen = DB.popSeen || {}; applyHol();
-    migrate(); importWeb(); importPop();
+    migrate(); importWeb(); importAmend(); importPop();
   }
   // proof of payment uploaded on the website (pop.html), same browser in the demo
   var POPK = 'kyleu-web-pop';
@@ -319,6 +309,53 @@
     if (n) save();
     return n;
   }
+  /* ---------- camp shop items ordered with the booking: one charge, replaced when the guest changes it ---------- */
+  function preShop(b) { return (b.charges || []).filter(function (c) { return c.pre; })[0]; }
+  function setPreShop(b, items, at, inTotal) {
+    b.charges = b.charges || [];
+    var old = preShop(b), e = items.reduce(function (a, x) { return a + x.qty * x.each; }, 0), map = {};
+    items.forEach(function (x) { map[x.label] = x.qty; });
+    if (old) { b.charges.splice(b.charges.indexOf(old), 1); if (!inTotal) { b.eft -= old.e; b.card -= old.c; } }
+    if (items.length) b.charges.push({ d: String(at).slice(0, 10), desc: 'Shop order for arrival: ' + items.map(function (x) { return x.qty + ' × ' + x.label; }).join(', '), e: e, c: toCard(e), pre: true, items: map });
+    if (!inTotal) { b.eft += e; b.card += toCard(e); b.total = b.method === 'card' ? b.card : b.eft; }
+  }
+  /* ---------- changes guests make on the website (manage.html), same browser in the demo ---------- */
+  var AMK = 'kyleu-web-amend';
+  function applyCars(b, n, cars) {
+    var cs = ensureCars(b);
+    if (!n) { b.vehTbc = true; return; }
+    b.vehTbc = false;
+    cars.forEach(function (c, i) { var x = cs[i] || (cs[i] = newCar()); x.reg = String(c.reg || '').toUpperCase(); x.driver = c.driver || ''; x.guests = (c.guests || []).slice(); x.people = (x.driver ? 1 : 0) + x.guests.length; });
+    for (var i = cs.length - 1; i >= n; i--) if (cs[i].st === 'due' && !carTab(b, cs[i]).items.length) cs.splice(i, 1);
+    b.vehicles = cs.length;
+  }
+  function peopleTxt(x) { return (x.adults + x.pens) + ' adult' + (x.adults + x.pens === 1 ? '' : 's') + (x.pens ? ' (' + x.pens + ' pensioner' + (x.pens === 1 ? '' : 's') + ')' : '') + (x.kids ? ' + ' + x.kids + ' kid' + (x.kids > 1 ? 's' : '') : ''); }
+  function importAmend() {
+    var list = []; try { list = JSON.parse(localStorage.getItem(AMK) || '[]'); } catch (e) {}
+    DB.amendSeen = DB.amendSeen || {}; var n = 0;
+    list.forEach(function (a) {
+      if (!a || !a.id || DB.amendSeen[a.id]) return; DB.amendSeen[a.id] = 1; n++;
+      var b = byRefLoose(a.ref); if (!b) return;
+      var done = [];
+      if (a.details) { var cl = clientById(b.cid), cc = cl ? clientChanges(cl, a.details) : []; if (cl && cc.length) { applyClient(cl, a.details); done = done.concat(cc); } else if (!cl) { Object.assign(b.guest, a.details); done.push('contact details'); } }
+      if (a.cars) { applyCars(b, a.vehicles, a.cars); done.push(a.vehicles ? a.vehicles + ' vehicle' + (a.vehicles === 1 ? '' : 's') + ' with drivers and passengers' : 'not sure yet how many vehicles'); }
+      if (a.eta != null) { b.eta = a.eta; done.push('arrival time ' + (a.eta || 'cleared')); }
+      if (a.shopItems) { var before = b.total; setPreShop(b, a.shopItems, a.at); done.push('camp shop order (total ' + money(before) + ' to ' + money(b.total) + ')'); }
+      if (a.request) {
+        var r = a.request; b.changeReq = Object.assign({ at: a.at }, r);
+        var body = 'Please change my booking ' + b.ref + ' (' + standById(b.stand).name + '):\n\nDates: ' + fd(b.ci) + ' to ' + fd(b.co) + (r.ci !== b.ci || r.co !== b.co ? ', please change to ' + fd(r.ci) + ' to ' + fd(r.co) : ' (no change)') + '\nGuests: ' + peopleTxt(b) + (r.adults !== b.adults || r.pens !== b.pens || r.kids !== b.kids ? ', please change to ' + peopleTxt(r) : ' (no change)') + (r.msg ? '\n\n' + r.msg : '') + '\n\n' + b.guest.first;
+        DB.threads.push({ id: uid('t'), subject: 'Change request: ' + b.ref, name: guestName(b), email: b.guest.email, phone: b.guest.phone, status: 'open', unread: true, ref: b.ref, msgs: [{ from: 'guest', at: a.at, body: body }] });
+        done.push('asked to change the dates or guests');
+      }
+      if (a.note) { b.notes.push({ at: a.at, by: 'Guest', text: a.note }); done.push('left a message'); }
+      if (!done.length) return;
+      b.notes.push({ at: a.at, by: 'Guest', text: 'Changed on the website: ' + done.join('; ') + '.' });
+      b.guestEdit = { at: a.at, what: done, seen: false };
+      DB.log.unshift({ at: a.at, by: 'Website', text: guestName(b) + ' changed booking ' + b.ref + ' on the website', ref: b.ref });
+    });
+    if (n) save();
+    return n;
+  }
   // bookings made in the website's demo checkout (same browser)
   function importWeb() {
     var list = []; try { list = JSON.parse(localStorage.getItem(WEB) || '[]'); } catch (e) {}
@@ -326,13 +363,12 @@
     list.forEach(function (w) {
       if (byRef(w.ref)) return;
       var card = w.pay === 'deposit' || w.pay === 'full', nowPaid = w.paid || 0;
-      var b = { ref: w.ref, created: w.created, source: 'Website', guest: { first: w.first, last: w.last, email: w.email, phone: w.phone, consent: !!w.consent }, stand: w.stand, ci: w.ci, co: w.co, adults: w.adults, pens: w.pens, kids: w.kids, vehicles: Math.max(1, +w.vehicles || 1), setup: w.setup || '', extras: w.extras || {},
+      var b = { ref: w.ref, created: w.created, source: 'Website', guest: { first: w.first, last: w.last, email: w.email, phone: w.phone, consent: !!w.consent }, stand: w.stand, ci: w.ci, co: w.co, adults: w.adults, pens: w.pens, kids: w.kids, vehicles: Math.max(1, +w.vehicles || 1), vehTbc: !!w.vehTbc, eta: w.eta || '', setup: w.setup || '', extras: w.extras || {},
         method: card ? 'card' : 'eft', eft: w.eft, card: w.card, total: card ? w.card : w.eft, payments: [], status: nowPaid ? 'confirmed' : 'pending', notes: w.notes ? [{ at: w.created, by: 'Guest', text: w.notes }] : [], pop: false, isNew: true };
       if (nowPaid) b.payments.push({ d: w.created.slice(0, 10), amt: nowPaid, m: card ? 'card' : 'eft', type: w.pay === 'full' ? 'Full payment' : 'Deposit', ref: card ? 'Card (website)' : 'Instant EFT' });
-      if (w.voucher) { var wv = DB.vouchers.filter(function (x) { return x.code === w.voucher; })[0]; if (wv) wv.uses.push({ ref: b.ref, at: w.created, by: 'Website' }); b.notes.push({ at: w.created, by: 'Website', text: 'Voucher ' + w.voucher + ' used: ' + money(w.discount || 0) + ' off.' }); }
-      if (b.extras) delete b.extras.__voucher;
       linkBooking(b);
-      if (w.cars && w.cars.length) b.cars = w.cars.map(function (c, i) { return newCar({ reg: String(c.reg || '').toUpperCase(), driver: c.driver || (i ? '' : w.first + ' ' + w.last), phone: i ? '' : w.phone, people: 0 }); });
+      if (w.cars && w.cars.length) b.cars = w.cars.map(function (c, i) { var dr = c.driver || (i ? '' : w.first + ' ' + w.last), gs = (c.guests || []).slice(); return newCar({ reg: String(c.reg || '').toUpperCase(), driver: dr, phone: i ? '' : w.phone, guests: gs, people: (dr ? 1 : 0) + gs.length }); });
+      if (w.shop && w.shop.length) { b.charges = []; setPreShop(b, w.shop, w.created, true); }
       ensureCars(b); DB.bookings.push(b); added++;
       DB.log.unshift({ at: w.created, by: 'Website', text: 'New website booking ' + b.ref + ' for ' + guestName(b), ref: b.ref });
     });
@@ -358,7 +394,7 @@
     { id: 'calendar', t: 'Calendar', i: 'cal', g: 'Front desk' },
     { id: 'enquiries', t: 'Inbox', i: 'mail', g: 'Front desk' },
     { id: 'clients', t: 'Clients', i: 'users', g: 'Front desk' },
-    { id: 'vouchers', t: 'Vouchers', i: 'gift', g: 'Front desk' },
+    { id: 'vouchers', t: 'Dinokeng codes', i: 'gift', g: 'Front desk' },
     { id: 'eft', t: 'EFT payments', i: 'bank', g: 'Money' },
     { id: 'payments', t: 'Payments', i: 'card', g: 'Money' },
     { id: 'reports', t: 'Reports', i: 'chart', g: 'Money' },
@@ -397,7 +433,7 @@
   var drawerRef = null;
   function openBooking(ref) {
     var b = byRef(ref); if (!b) { toast('Booking ' + esc(ref) + ' not found'); return; }
-    drawerRef = ref; if (b.isNew) { b.isNew = false; save(); }
+    drawerRef = ref; if (b.isNew || (b.guestEdit && !b.guestEdit.seen)) { b.isNew = false; if (b.guestEdit) b.guestEdit.seen = true; save(); }
     var d = $('#drawer'); d.hidden = false; document.body.classList.add('lock');
     d.innerHTML = '<div class="d-back" data-dclose></div><aside class="d-panel" role="dialog" aria-label="Booking ' + esc(ref) + '">' + bookingHTML(b) + '</aside>';
     requestAnimationFrame(function () { d.classList.add('on'); });
@@ -422,6 +458,11 @@
     return '<header class="d-head"><div><span class="muted small">Booking</span><h2>' + esc(b.ref) + '</h2>' + pill(s) + (b.pop && b.status === 'pending' ? ' <span class="pill info">' + ic('note') + 'Check bank</span>' : '') + '</div><button class="icon-btn" data-dclose aria-label="Close">' + ic('x') + '</button></header>' +
       '<div class="d-body">' +
       '<div class="d-actions">' + acts.join('') + '</div>' +
+      (b.changeReq && !b.changeReq.done ? (function (r) { return '<div class="callout warn cflex req">' + ic('cal') + '<div><b>' + esc(b.guest.first) + ' asked to change this booking</b> on the website (' + esc(r.at) + ').' +
+        (r.ci !== b.ci || r.co !== b.co ? '<br>Dates: ' + fd(b.ci) + ' to ' + fd(b.co) + ' <b>→ ' + fd(r.ci) + ' to ' + fd(r.co) + '</b>' : '') +
+        (r.adults !== b.adults || r.pens !== b.pens || r.kids !== b.kids ? '<br>Guests: ' + peopleTxt(b) + ' <b>→ ' + peopleTxt(r) + '</b>' : '') + (r.msg ? '<br>"' + esc(r.msg) + '"' : '') +
+        '<div class="row-btns"><button type="button" class="btn sm" data-act="edit" data-ref="' + b.ref + '">' + ic('edit') + 'Edit booking</button><button type="button" class="btn ghost sm" data-act="req-done" data-ref="' + b.ref + '">' + ic('check') + 'Dealt with</button></div></div></div>'; })(b.changeReq) : '') +
+      (b.guestEdit && b.guestEdit.at >= add(TODAY, -14) ? '<p class="callout info cflex">' + ic('edit') + '<span><b>Changed by ' + esc(b.guest.first) + ' on the website</b> ' + esc(b.guestEdit.at) + ': ' + esc(b.guestEdit.what.join('; ')) + '.</span></p>' : '') +
       (function () { var cl = clientById(b.cid), sb = staysBefore(b); return '<section class="d-sec"><h4 class="h4-row">Guest' + (cl ? '<button type="button" class="link-btn" data-client="' + cl.id + '">Client card' + ic('chev-r') + '</button>' : '') + '</h4><div class="guest-line"><span class="avatar">' + esc((b.guest.first[0] || '?') + ((b.guest.last.split(' ').pop() || '?')[0] || '')) + '</span><div><b>' + esc(guestName(b)) + '</b> ' + (sb ? '<span class="pill ok ret">' + ic('return') + 'Returning · ' + nth(sb + 1) + ' stay</span>' : '<span class="pill info">First stay</span>') + '<div class="muted small">' + esc(b.guest.email || 'No email') + '</div></div></div>' + (cl && cl.notes ? '<p class="cl-note">' + ic('note') + '<span>' + esc(cl.notes) + '</span></p>' : ''); })() +
       '<div class="chips"><a class="chip" href="tel:' + esc(b.guest.phone.replace(/\s/g, '')) + '">' + ic('phone') + esc(b.guest.phone) + '</a><a class="chip" target="_blank" rel="noopener" href="https://wa.me/' + wa + '">' + ic('wa') + 'WhatsApp</a><a class="chip" href="mailto:' + esc(b.guest.email) + '">' + ic('mail') + 'Email</a></div></section>' +
       '<section class="d-sec"><h4>Stay</h4><dl class="kv">' +
@@ -430,7 +471,8 @@
       '<dt>Depart</dt><dd>' + fd(b.co, { weekday: 'long', day: 'numeric', month: 'long' }) + '</dd>' +
       '<dt>Nights</dt><dd>' + diff(b.ci, b.co) + '</dd>' +
       '<dt>Guests</dt><dd>' + (b.adults ? b.adults + ' adult' + (b.adults > 1 ? 's' : '') : '') + (b.pens ? (b.adults ? ', ' : '') + b.pens + ' pensioner' + (b.pens > 1 ? 's' : '') : '') + (b.kids ? ', ' + b.kids + ' child' + (b.kids > 1 ? 'ren' : '') + ' under 12' : '') + '</dd>' +
-      '<dt>Setup</dt><dd>' + esc(b.setup || 'Not given') + ' · ' + b.vehicles + ' vehicle' + (b.vehicles > 1 ? 's' : '') + '</dd>' +
+      '<dt>Vehicles</dt><dd>' + (b.vehTbc ? '<span class="warn-t">Not sure yet</span>' : b.vehicles + ' vehicle' + (b.vehicles > 1 ? 's' : '')) + (b.setup ? ' · ' + esc(b.setup) : '') + '</dd>' +
+      (b.eta ? '<dt>Arrival time</dt><dd>Around ' + esc(b.eta) + '</dd>' : '') +
       '<dt>Booked</dt><dd>' + fd(b.created.slice(0, 10), { day: 'numeric', month: 'short', year: 'numeric' }) + ' via ' + esc(b.source) + '</dd></dl></section>' + carsHTML(b) +
       '<section class="d-sec"><h4>Money</h4><div class="lines">' + q.lines.concat((b.charges || []).map(function (c) { return { t: c.desc, e: c.e, c: c.c }; })).map(function (l) { return '<div class="ln"><span>' + esc(l.t) + '</span><span>' + (b.method === 'card' ? money(l.c) : money(l.e)) + '</span></div>'; }).join('') +
       '<div class="ln sub"><span>Card price</span><span>' + (b.method === 'card' ? money(b.card) : '<s>' + money(b.card) + '</s>') + '</span></div>' +
@@ -488,6 +530,7 @@
     invoice: { t: 'Invoice', s: 'Your Kyleu invoice {ref}', b: function (b) { return 'Hi {first},\n\nPlease find your invoice for {stand}, {ci} to {co}, attached.\n\nTotal {total}, paid so far {paid}, balance {balance}. Pay by EFT using reference {ref}.\n\nThe Kyleu team'; } },
     indemnity: { t: 'Indemnity form', s: 'Kyleu indemnity form for {ref}', b: function (b) { return 'Hi {first},\n\nPlease find the Kyleu indemnity form attached, one page per vehicle. Every adult signs it when you arrive. You are welcome to print it and fill it in before you come, which makes check-in quicker.\n\nSee you on {ci}!\nThe Kyleu team'; } },
     update: { t: 'Booking updated', s: 'Your Kyleu booking {ref} has been updated', b: function (b) { return 'Hi {first},\n\nWe have updated your booking {ref}: {stand}, {ci} to {co}.\nTotal {total}, paid {paid}, balance {balance}.\n\nIf anything looks wrong, just reply to this email.\n\nThe Kyleu team'; } },
+    details: { t: 'Ask for vehicle details', s: 'Your Kyleu stay: vehicle details please', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}. Before you arrive, please send us each vehicle\'s registration, the driver and everyone travelling in it. Everyone signs an indemnity form at the gate and we make one Dinokeng partner code per vehicle, so this makes your arrival much quicker.\n\nYou can add them yourself at www.kyleu.co.za/manage.html with your booking reference {ref}, or simply reply to this message.\n\nThe Kyleu team'; } },
     confirm: { t: 'Booking confirmation', s: 'Booking confirmed: {ref}', b: function (b) { return 'Hi {first},\n\nYour booking {ref} is confirmed: {stand}, {ci} to {co}.\nTotal {total}, paid {paid}, balance {balance} due by {baldue}.\n\nThe Kyleu team'; } }
   };
   function fill(t, b) {
@@ -520,7 +563,7 @@
     var lockAll = closed ? ' disabled' : '', lockCi = closed || inCamp ? ' disabled' : '', n = cl ? clientBookings(cl).length : 1, ex = b.extras || {};
     var srcs = ['Website', 'Phone', 'WhatsApp', 'Email', 'Walk-in']; if (srcs.indexOf(b.source) < 0) srcs.push(b.source);
     var tellTouched = false;
-    var read = function (f) { return { ci: fval(f, 'ci'), co: fval(f, 'co'), stand: fval(f, 'stand'), adults: +fval(f, 'adults') || 0, pens: +fval(f, 'pens') || 0, kids: +fval(f, 'kids') || 0, vehicles: +fval(f, 'veh') || 1, setup: fval(f, 'setup'), gd: +fval(f, 'gd') || 0 }; };
+    var read = function (f) { return { ci: fval(f, 'ci'), co: fval(f, 'co'), stand: fval(f, 'stand'), adults: +fval(f, 'adults') || 0, pens: +fval(f, 'pens') || 0, kids: +fval(f, 'kids') || 0, vehicles: +fval(f, 'veh') || 1, eta: fval(f, 'eta'), gd: +fval(f, 'gd') || 0 }; };
     var priceOf = function (s) { var q0 = quote(b.stand, b.ci, b.co, b, ex), q1 = quote(s.stand, s.ci, s.co, s, Object.assign({}, ex, { gd: s.gd })); return { de: q1.eft - q0.eft, dc: q1.card - q0.card, nights: q1.nights }; };
     modal('Edit booking ' + esc(b.ref),
       '<h5 class="m-h">Guest</h5>' +
@@ -531,7 +574,7 @@
       '<div class="grid2"><label class="fld"><span>Arrive</span><input type="date" name="ci" value="' + b.ci + '"' + lockCi + '></label><label class="fld"><span>Depart</span><input type="date" name="co" value="' + b.co + '"' + lockAll + '></label></div>' +
       '<label class="fld"><span>Stand</span><select name="stand"' + lockCi + '>' + standOptions(b.stand) + '</select></label>' +
       '<div class="grid3"><label class="fld"><span>Adults</span><input type="number" min="0" max="12" name="adults" value="' + b.adults + '"' + lockAll + '></label><label class="fld"><span>Pensioners</span><input type="number" min="0" max="12" name="pens" value="' + b.pens + '"' + lockAll + '></label><label class="fld"><span>Kids under 12</span><input type="number" min="0" max="12" name="kids" value="' + b.kids + '"' + lockAll + '></label></div>' +
-      '<div class="grid3"><label class="fld"><span>Vehicles</span><input type="number" min="1" max="6" name="veh" value="' + (b.vehicles || 1) + '"' + lockAll + '></label><label class="fld"><span>Setup</span><input name="setup" value="' + esc(b.setup || '') + '" placeholder="e.g. Rooftop tent"' + lockAll + '></label><label class="fld"><span>Game drive (people)</span><input type="number" min="0" max="10" name="gd" value="' + (ex.gd || 0) + '"' + lockAll + '></label></div>' +
+      '<div class="grid3"><label class="fld"><span>Vehicles</span><input type="number" min="1" max="6" name="veh" value="' + (b.vehicles || 1) + '"' + lockAll + '></label><label class="fld"><span>Arrival time</span><select name="eta"' + lockAll + '>' + [''].concat(['Before 12:00', '12:00-15:00', '15:00-18:00', 'After 18:00', 'Not sure yet']).map(function (t) { return '<option value="' + t + '"' + ((b.eta || '') === t ? ' selected' : '') + '>' + (t || 'Not given') + '</option>'; }).join('') + '</select></label><label class="fld"><span>Game drive (people)</span><input type="number" min="0" max="10" name="gd" value="' + (ex.gd || 0) + '"' + lockAll + '></label></div>' +
       '<label class="fld"><span>Booked via</span><select name="source">' + srcs.map(function (x) { return '<option' + (x === b.source ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select></label>' +
       '<div class="quote-box" data-q></div>' +
       '<label class="fld"><span>Reason for the change (optional, saved in the notes)</span><input name="why" placeholder="e.g. Guest phoned to add a night"></label>' +
@@ -560,10 +603,10 @@
           if (s.stand !== b.stand) changes.push('stand ' + st0.name + ' to ' + standById(s.stand).name);
           if (s.adults !== b.adults || s.pens !== b.pens || s.kids !== b.kids) changes.push('guests ' + ppl(b) + ' to ' + ppl(s));
           if (s.vehicles !== (b.vehicles || 1)) changes.push('vehicles ' + (b.vehicles || 1) + ' to ' + s.vehicles);
-          if (s.setup !== (b.setup || '')) changes.push('setup ' + (b.setup || 'blank') + ' to ' + (s.setup || 'blank'));
+          if (s.eta !== (b.eta || '')) changes.push('arrival time ' + (b.eta || 'blank') + ' to ' + (s.eta || 'blank'));
           if (s.gd !== (ex.gd || 0)) changes.push('game drive ' + (ex.gd || 0) + ' to ' + s.gd + ' people');
           var oldTotal = b.total;
-          b.ci = s.ci; b.co = s.co; b.stand = s.stand; b.adults = s.adults; b.pens = s.pens; b.kids = s.kids; b.vehicles = s.vehicles; b.setup = s.setup; b.extras = Object.assign({}, ex, { gd: s.gd }); fitCars(b);
+          b.ci = s.ci; b.co = s.co; b.stand = s.stand; b.adults = s.adults; b.pens = s.pens; b.kids = s.kids; if (s.vehicles !== (b.vehicles || 1)) b.vehTbc = false; b.vehicles = s.vehicles; b.eta = s.eta; b.extras = Object.assign({}, ex, { gd: s.gd }); fitCars(b);
           // shift the price by the difference, so discounts and shop charges already on the booking stay
           b.eft += p.de; b.card += p.dc; b.total += b.method === 'card' ? p.dc : p.de;
           if (b.total !== oldTotal) changes.push('total ' + money(oldTotal) + ' to ' + money(b.total));
@@ -701,7 +744,7 @@
   }
 
   /* ---------- vehicles: each car checks in and out on its own, signs the indemnity and runs a tab ---------- */
-  function newCar(o) { return Object.assign({ id: uid('v'), reg: '', driver: '', phone: '', people: 0, ind: null, st: 'due', inAt: '', outAt: '' }, o || {}); }
+  function newCar(o) { return Object.assign({ id: uid('v'), reg: '', driver: '', phone: '', guests: [], people: 0, ind: null, st: 'due', inAt: '', outAt: '' }, o || {}); }
   function ensureCars(b) {
     if (b.cars && b.cars.length) return b.cars;
     var n = Math.max(1, b.vehicles || 1), st = b.status === 'in' ? 'in' : b.status === 'out' ? 'out' : 'due', ppl = people(b), per = Math.floor(ppl / n);
@@ -722,28 +765,31 @@
   function carsHTML(b) {
     if (b.status === 'cancelled') return '';
     var cs = ensureCars(b), nIn = cs.filter(function (c) { return c.st === 'in'; }).length, canIn = (b.status === 'confirmed' || b.status === 'in') && b.ci <= TODAY && TODAY <= b.co;
+    var missing = b.vehTbc || cs.some(function (c) { return !c.reg || !c.driver; });
     return '<section class="d-sec"><h4 class="h4-row">Vehicles · ' + (b.status === 'out' ? 'all left' : nIn + ' of ' + cs.length + ' in camp') + (b.status !== 'out' ? '<button type="button" class="link-btn" data-act="car-add" data-ref="' + b.ref + '">' + ic('plus') + 'Add vehicle</button>' : '') + '</h4>' +
+      (b.vehTbc ? '<div class="callout warn cflex veh-tbc">' + ic('alert') + '<span>The client is <b>not sure yet how many vehicles</b> are coming. Ask them closer to the time, or they can add it under Change my booking on the website.</span><button type="button" class="btn ghost sm" data-act="veh-ok" data-ref="' + b.ref + '">Number confirmed</button></div>' : '') +
       cs.map(function (c, i) {
         var k = b.ref + '|' + c.id, t = carTab(b, c), acts = [];
         if (c.st === 'due' && canIn) acts.push('<button type="button" class="btn green sm" data-act="car-in" data-ref="' + k + '">' + ic('in') + 'Check in</button>');
         if (c.st === 'in') acts.push('<button type="button" class="btn ghost sm" data-act="car-tab" data-ref="' + k + '">' + ic('cart') + 'Add to tab</button><button type="button" class="btn green sm" data-act="car-out" data-ref="' + k + '">' + ic('out') + 'Check out</button>');
         acts.push('<button type="button" class="icon-btn sm" data-act="car-edit" data-ref="' + k + '" aria-label="Edit vehicle" title="Edit vehicle">' + ic('edit') + '</button>');
         if (c.st === 'due' && cs.length > 1 && !t.items.length) acts.push('<button type="button" class="icon-btn sm danger-t" data-act="car-del" data-ref="' + k + '" aria-label="Remove vehicle" title="Remove vehicle">' + ic('x') + '</button>');
-        var sub = [c.driver, c.people ? c.people + (c.people === 1 ? ' person' : ' people') : ''].filter(Boolean).join(' · ');
-        return '<div class="car"><span class="car-i">' + ic('car') + '</span><div class="car-b"><b>' + esc(carLabel(c, i)) + '</b><small>' + esc(sub || 'Details are added at check-in') + '</small><div class="car-p">' +
+        var sub = [c.driver ? 'Driver ' + c.driver : '', c.people ? c.people + (c.people === 1 ? ' person' : ' people') : ''].filter(Boolean).join(' · ');
+        return '<div class="car"><span class="car-i">' + ic('car') + '</span><div class="car-b"><b>' + esc(carLabel(c, i)) + '</b><small>' + esc(sub || 'Details are added at check-in') + '</small>' + ((c.guests || []).length ? '<small class="car-pass">Passengers: ' + esc(c.guests.join(', ')) + '</small>' : '') + '<div class="car-p">' +
           (c.st === 'in' ? '<span class="pill ok"><i></i>In since ' + whenShort(c.inAt) + '</span>' : c.st === 'out' ? '<span class="pill muted"><i></i>Left ' + whenShort(c.outAt) + '</span>' : '<span class="pill muted"><i></i>Expected</span>') +
           (c.ind ? '<span class="pill ok">' + ic('check') + 'Indemnity signed</span>' : c.st === 'due' ? '<span class="pill muted">Indemnity at check-in</span>' : '<span class="pill bad">' + ic('alert') + 'Indemnity not signed</span>') +
           (c.dgrSent ? '<span class="pill ok">' + ic('gift') + 'Dinokeng code sent</span>' : '') +
           (t.total ? '<span class="pill ' + (t.owing ? 'warn' : 'ok') + '">Tab ' + money(t.total) + (t.owing ? ', ' + money(t.owing) + ' owing' : ', paid') + '</span>' : '') +
           '</div></div><div class="car-a">' + acts.join('') + '</div></div>';
       }).join('') + (b.status === 'pending' ? '<p class="muted small">Vehicles can check in once the deposit is paid.</p>' : '') +
-      '<div class="row-btns car-docs"><button type="button" class="btn ghost sm" data-act="send-doc" data-ref="' + b.ref + '|indemnity">' + ic('send') + 'Send indemnity form</button><button type="button" class="btn ghost sm" data-act="ind-print" data-ref="' + b.ref + '|">' + ic('note') + 'Print it</button></div></section>';
+      '<div class="row-btns car-docs">' + (missing && b.status !== 'out' && b.status !== 'in' ? '<button type="button" class="btn ghost sm" data-act="send-doc" data-ref="' + b.ref + '|details">' + ic('send') + 'Ask for vehicle details</button>' : '') + '<button type="button" class="btn ghost sm" data-act="send-doc" data-ref="' + b.ref + '|indemnity">' + ic('send') + 'Send indemnity form</button><button type="button" class="btn ghost sm" data-act="ind-print" data-ref="' + b.ref + '|">' + ic('note') + 'Print it</button></div></section>';
   }
   function carForm(c) {
     return '<div class="grid2"><label class="fld"><span>Registration</span><input name="reg" value="' + esc(c.reg) + '" placeholder="e.g. CA 123-456" autocomplete="off" style="text-transform:uppercase"></label><label class="fld"><span>People in this vehicle</span><input type="number" min="1" max="12" name="people" value="' + (c.people || 1) + '"></label></div>' +
-      '<div class="grid2"><label class="fld"><span>Driver</span><input name="driver" value="' + esc(c.driver) + '"></label><label class="fld"><span>Driver\'s mobile</span><input name="phone" inputmode="tel" value="' + esc(c.phone) + '"></label></div>';
+      '<div class="grid2"><label class="fld"><span>Driver</span><input name="driver" value="' + esc(c.driver) + '"></label><label class="fld"><span>Driver\'s mobile</span><input name="phone" inputmode="tel" value="' + esc(c.phone) + '"></label></div>' +
+      '<label class="fld"><span>Passengers, one name per line (everyone else in the vehicle)</span><textarea name="guests" rows="3">' + esc((c.guests || []).join('\n')) + '</textarea></label>';
   }
-  function readCar(f, c) { c.reg = fval(f, 'reg').toUpperCase(); c.driver = fval(f, 'driver'); c.phone = fval(f, 'phone'); c.people = Math.max(1, +fval(f, 'people') || 1); }
+  function readCar(f, c) { c.reg = fval(f, 'reg').toUpperCase(); c.driver = fval(f, 'driver'); c.phone = fval(f, 'phone'); c.guests = fval(f, 'guests').split(/\n/).map(function (x) { return x.trim(); }).filter(Boolean); c.people = Math.max(1, +fval(f, 'people') || 1, (c.driver ? 1 : 0) + c.guests.length); }
   function indBox(k, on) { return '<div class="ind-box"><label class="check"><input type="checkbox" name="ind"' + (on ? ' checked' : '') + '><span><b>Indemnity forms signed</b> by every adult in this vehicle</span></label><button type="button" class="link-btn" data-act="ind-print" data-ref="' + k + '">' + ic('note') + 'Print the form</button></div>'; }
   function actCarIn(key) {
     var o = carOf(key), b = o.b, c = o.c, i = o.i; if (!c) return; var cs = b.cars, bal = balance(b);
@@ -797,7 +843,7 @@
       '<h1>Kyleu Bush Camp: indemnity</h1><p class="sub">Dinokeng Big 5 Game Reserve · every adult signs before entering the camp</p>' +
       '<div class="grid">' + line('Booking', b ? b.ref : '') + line('Stand', b ? standById(b.stand).name : '') + line('Arrive', b ? fd(b.ci, dt) : '') + line('Depart', b ? fd(b.co, dt) : '') + line('Vehicle registration', c ? c.reg : '') + line('Driver', c ? c.driver : '') + '</div>' +
       '<div class="txt">' + indText().split(/\n\s*\n/).map(function (p) { return '<p>' + esc(p.trim()).replace(/\n/g, '<br>') + '</p>'; }).join('') + '</div>' +
-      '<table><thead><tr><th style="width:30%">Full name</th><th style="width:22%">ID or passport number</th><th>Signature</th><th style="width:14%">Date</th></tr></thead><tbody>' + new Array(rows + 1).join('<tr><td></td><td></td><td></td><td></td></tr>') + '</tbody></table>' +
+      '<table><thead><tr><th style="width:30%">Full name</th><th style="width:22%">ID or passport number</th><th>Signature</th><th style="width:14%">Date</th></tr></thead><tbody>' + (c ? [c.driver].concat(c.guests || []).filter(Boolean) : []).map(function (nm) { return '<tr><td>' + esc(nm) + '</td><td></td><td></td><td></td></tr>'; }).join('') + new Array(Math.max(1, rows - (c ? [c.driver].concat(c.guests || []).filter(Boolean).length : 0)) + 1).join('<tr><td></td><td></td><td></td><td></td></tr>') + '</tbody></table>' +
       '<p class="note">A parent or guardian signs for children under 18.</p><script>window.onload=function(){window.print()}<\/script></body></html>');
     w.document.close();
   }
@@ -914,7 +960,7 @@
   }
   function migrate() {
     ensureClients(); DB.settings = DB.settings || {};
-    DB.vouchers = (DB.vouchers || []).filter(function (v) { return v.kind !== 'dgr'; });
+    DB.vouchers = [];   // Kyleu discount vouchers were removed; only Dinokeng partner codes are used
     DB.bookings.forEach(ensureCars);
     if ((DB.dgrV || 0) < 2) { DB.dgrV = 2; DB.bookings.forEach(function (b) { var was = b.dgr; delete b.dgr; if (!live(b) || !(was || b.ci < add(TODAY, 3))) return; b.cars.forEach(function (c) { if (c.dgr) return; c.dgr = 'DGR' + Math.random().toString(36).slice(2, 8).toUpperCase(); c.dgrSent = { at: add(b.ci, -6) + ' 09:10', by: 'Sherri', code: c.dgr }; }); }); }
     newsDB();
@@ -949,7 +995,7 @@
   function tile(label, value, sub, act, tone) { var tag = act ? 'button' : 'div'; return '<' + tag + ' class="kpi ' + (tone || '') + '"' + (act ? ' data-go="' + act + '"' : '') + '><span class="kpi-l">' + label + '</span><b class="kpi-v">' + value + '</b><span class="kpi-s">' + sub + '</span></' + tag + '>'; }
   function rowB(b, extra) {
     var st = standById(b.stand), s = stateOf(b);
-    return '<button class="brow" data-open="' + b.ref + '"><span class="brow-st">' + esc(st.name) + '</span><span class="brow-g"><b>' + esc(guestName(b)) + '</b><small>' + people(b) + (people(b) === 1 ? ' guest · ' : ' guests · ') + diff(b.ci, b.co) + (diff(b.ci, b.co) === 1 ? ' night ' : ' nights ') + '· ' + esc(b.setup || '') + '</small></span>' + (extra || pill(s)) + '</button>';
+    return '<button class="brow" data-open="' + b.ref + '"><span class="brow-st">' + esc(st.name) + '</span><span class="brow-g"><b>' + esc(guestName(b)) + '</b><small>' + people(b) + (people(b) === 1 ? ' guest · ' : ' guests · ') + diff(b.ci, b.co) + (diff(b.ci, b.co) === 1 ? ' night' : ' nights') + (b.setup ? ' · ' + esc(b.setup) : '') + '</small></span>' + (extra || pill(s)) + '</button>';
   }
   function vDashboard() {
     var arr = DB.bookings.filter(function (b) { return live(b) && b.ci === TODAY && b.status !== 'pending'; }), dep = DB.bookings.filter(function (b) { return b.co === TODAY && (b.status === 'in' || b.status === 'out'); });
@@ -962,6 +1008,10 @@
     DB.bookings.forEach(function (b) {
       var s = stateOf(b);
       if (b.isNew) attention.push({ i: 'bell', tone: 'info', t: 'New website booking: <b>' + esc(guestName(b)) + '</b>, ' + esc(standById(b.stand).name) + ', ' + fd(b.ci), ref: b.ref, o: 0 });
+      if (b.guestEdit && !b.guestEdit.seen) attention.push({ i: 'edit', tone: 'info', t: '<b>' + esc(guestName(b)) + '</b> changed their booking on the website: ' + esc(b.guestEdit.what.join('; ')), ref: b.ref, o: 0 });
+      if (b.changeReq && !b.changeReq.done && live(b)) attention.push({ i: 'cal', tone: 'warn', t: '<b>' + esc(guestName(b)) + '</b> asked to change the dates or guests (' + fd(b.ci) + ')', ref: b.ref, o: 1 });
+      if (live(b) && b.status !== 'in' && b.status !== 'out' && b.ci >= TODAY && diff(TODAY, b.ci) <= 7 && (b.vehTbc || ensureCars(b).some(function (c) { return !c.reg; }))) attention.push({ i: 'car', tone: 'warn', t: 'Vehicle details missing for <b>' + esc(guestName(b)) + '</b> (' + fdw(b.ci) + '): ask for them', ref: b.ref, o: 5 });
+      var ps = preShop(b); if (ps && live(b) && b.status !== 'out' && (b.ci === TODAY || b.ci === add(TODAY, 1))) attention.push({ i: 'cart', tone: 'info', t: 'Have ready for <b>' + esc(guestName(b)) + '</b> (' + (b.ci === TODAY ? 'today' : 'tomorrow') + '): ' + esc(ps.desc.replace(/^Shop order for arrival: /, '')), ref: b.ref, o: 3 });
       if (s.k === 'pop') attention.push({ i: 'note', tone: 'info', t: 'Proof of payment from <b>' + esc(guestName(b)) + '</b>: check the bank for ' + money(deposit(b)), ref: b.ref, o: 1 });
       if (s.k === 'overdue') attention.push({ i: 'alert', tone: 'bad', t: '<b>' + esc(guestName(b)) + '</b> has not paid the EFT deposit (due ' + fd(depositDue(b)) + '). Remind or release the stand.', ref: b.ref, o: 2 });
       if (s.k === 'baldue' && s.tone === 'bad') attention.push({ i: 'alert', tone: 'bad', t: 'Balance overdue: <b>' + esc(guestName(b)) + '</b> owes ' + money(balance(b)) + ', arriving ' + fdw(b.ci), ref: b.ref, o: 3 });
@@ -1442,7 +1492,8 @@
         k.head('Indemnity', 'Vehicle ' + (i + 1) + ' of ' + cs.length);
         k.pairs([['Booking', b.ref], ['Stand', standById(b.stand).name], ['Arrive', fd(b.ci, LONGD)], ['Depart', fd(b.co, LONGD)], ['Vehicle', c.reg || '________________'], ['Driver', c.driver || '________________']]);
         k.para(indText(), 9.2);
-        k.table(['Full name', 'ID or passport number', 'Signature', 'Date'], [56, 44, 52, 22], [], Math.max(4, Math.min(8, c.people || 4)));
+        var names = [c.driver].concat(c.guests || []).filter(Boolean);
+        k.table(['Full name', 'ID or passport number', 'Signature', 'Date'], [56, 44, 52, 22], names.map(function (nm) { return [nm, '', '', '']; }), Math.min(12, Math.max(4, names.length + 1, c.people || 0)));
         k.para('Every adult in the vehicle signs. A parent or guardian signs for children under 18.', 8.5);
       });
       k.foot();
@@ -2244,70 +2295,22 @@
 
 
 
-  /* =========================================================
-     Vouchers: Dinokeng partner codes and discount codes, with rules
-     ========================================================= */
-  var VKIND = { discount: 'Discount on a stay' };
-  var VWHO = { all: 'Every guest', dates: 'Guests staying between dates', refs: 'Only these bookings', guests: 'Only these guests' };
-  var VF = { q: '', kind: '' };
-  function vById(id) { return DB.vouchers.filter(function (v) { return v.id === id; })[0]; }
-  function vState(v) {
-    if (!v.active) return { t: 'Switched off', tone: 'muted' };
-    if (v.to && v.to < TODAY) return { t: 'Expired', tone: 'muted' };
-    if (v.max && v.uses.length >= v.max) return { t: 'Used up', tone: 'warn' };
-    if (v.from && v.from > TODAY) return { t: 'Starts ' + fd(v.from), tone: 'info' };
-    return { t: 'Active', tone: 'ok' };
-  }
-  function vAllows(v, b) {
-    if (vState(v).tone !== 'ok' || v.uses.some(function (u) { return u.ref === b.ref; })) return false;
-    if (v.who === 'refs') return v.refs.indexOf(b.ref) >= 0;
-    if (v.who === 'guests') return v.emails.indexOf((b.guest.email || '').toLowerCase()) >= 0;
-    if (v.who === 'dates') return (!v.stayFrom || b.ci >= v.stayFrom) && (!v.stayTo || b.ci <= v.stayTo);
-    return true;
-  }
-  function vWho(v) { return v.who === 'refs' ? v.refs.length + ' booking' + (v.refs.length === 1 ? '' : 's') : v.who === 'guests' ? v.emails.length + ' guest' + (v.emails.length === 1 ? '' : 's') : v.who === 'dates' ? 'Staying ' + (v.stayFrom ? fd(v.stayFrom) : 'any time') + ' to ' + (v.stayTo ? fd(v.stayTo) : 'any time') : 'Every guest'; }
-  function vValue(v) { return v.kind === 'dgr' ? 'Partner rate at Dinokeng' : v.unit === 'pct' ? v.value + '% off' : money(v.value) + ' off'; }
+  /* ---------- Dinokeng codes page: arrivals and which codes are still to send ---------- */
   function vVouchers() {
-    var q = VF.q.toLowerCase(), list = DB.vouchers.filter(function (v) { return (!VF.kind || v.kind === VF.kind) && (!q || (v.code + ' ' + v.name).toLowerCase().indexOf(q) >= 0); });
-    var week = DB.bookings.filter(function (b) { return live(b) && b.status !== 'pending' && b.ci >= TODAY && diff(TODAY, b.ci) <= 7; }).sort(function (a, b) { return a.ci < b.ci ? -1 : 1; });
-    var noCode = week.filter(function (b) { return codesTodo(b) > 0; }), month = TODAY.slice(0, 7);
-    var usedMonth = DB.vouchers.reduce(function (a, v) { return a + v.uses.filter(function (u) { return u.at.slice(0, 7) === month; }).length; }, 0);
-    return '<div class="page-h"><div><h1>Vouchers</h1><p class="muted">Discount codes guests can use when they book. Set who may use each one and how often. Dinokeng partner codes are made on the Dinokeng site and sent from each booking: the ones still to send are listed here.</p></div><div class="ph-act"><button class="btn" data-act="v-new">' + ic('plus') + 'Create voucher</button></div></div>' +
-      '<div class="kpis">' + tile('Active vouchers', DB.vouchers.filter(function (v) { return vState(v).tone === 'ok'; }).length, DB.vouchers.length + ' in total') + tile('Dinokeng codes still to send', noCode.length, noCode.length ? 'Bookings arriving this week, see below' : 'All sent for this week', null, noCode.length ? 'warn' : 'ok') + tile('Used or sent this month', usedMonth, 'all vouchers') + '</div>' +
-      (noCode.length ? '<section class="card"><header class="card-h"><h3>Arriving this week: Dinokeng codes not sent yet</h3><a class="btn ghost sm" href="' + esc(dgrLink()) + '" target="_blank" rel="noopener">' + ic('ext') + 'Open Dinokeng site</a></header>' + noCode.map(function (b) { var n = ensureCars(b).length, t = codesTodo(b); return '<div class="brow"><span class="brow-st">' + fd(b.ci) + '</span><span class="brow-g" data-open="' + b.ref + '"><b>' + esc(guestName(b)) + '</b><small>' + esc(b.guest.email || 'No email') + ' · ' + (t === n ? n + ' vehicle' + (n === 1 ? '' : 's') : t + ' of ' + n + ' vehicles still to send') + '</small></span><button class="btn sm ghost" data-act="dgr" data-ref="' + b.ref + '">' + ic('gift') + 'Add codes</button></div>'; }).join('') + '<p class="demo-note">' + ic('info') + 'Make one code per vehicle on the Dinokeng site, paste the codes on the booking, then send them to the client yourself by WhatsApp or email.</p></section>' : '') +
-      '<div class="filters">' + fsearch('VF:q', VF.q, 'Search code or name') + '' + '</div>' +
-      '<div class="card flush"><table class="tbl vouchers"><thead><tr><th>Code</th><th>Type</th><th>Who can use it</th><th class="r">Used</th><th>Valid</th><th>Status</th></tr></thead><tbody>' +
-      (list.length ? list.map(function (v) { var st = vState(v); return '<tr data-voucher="' + v.id + '" tabindex="0"><td data-l="Code"><b class="code">' + esc(v.code) + '</b><small>' + esc(v.name) + '</small></td><td data-l="Type">' + VKIND[v.kind] + '<small>' + vValue(v) + '</small></td><td data-l="Who">' + vWho(v) + '</td><td data-l="Used" class="r" data-s="' + v.uses.length + '">' + v.uses.length + (v.max ? ' of ' + v.max : '') + '</td><td data-l="Valid" data-s="' + (v.to || '9999') + '">' + (v.from ? fd(v.from) : 'Now') + ' to ' + (v.to ? fd(v.to, { day: 'numeric', month: 'short', year: 'numeric' }) : 'no end') + '</td><td data-l="Status">' + pill(st) + '</td></tr>'; }).join('') : '<tr><td colspan="6" class="empty">No vouchers yet.</td></tr>') + '</tbody></table></div>';
-  }
-  function newCode(prefix) { var c = ''; for (var i = 0; i < 5; i++) c += 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)]; return (prefix || 'KYL') + '-' + c; }
-  function actVoucher(id) {
-    var v = id ? vById(id) : null, d = v || { code: newCode(), name: '', kind: 'discount', value: 10, unit: 'pct', who: 'all', refs: [], emails: [], stayFrom: '', stayTo: '', max: 0, from: TODAY, to: '', active: true, auto: true, uses: [] };
-    var sel = function (n, cur, opts, attr) { return '<select name="' + n + '"' + (attr || '') + '>' + Object.keys(opts).map(function (k) { return '<option value="' + k + '"' + (k === cur ? ' selected' : '') + '>' + opts[k] + '</option>'; }).join('') + '</select>'; };
-    modal(v ? 'Voucher ' + esc(v.code) : 'Create voucher',
-      '<div class="grid2"><label class="fld"><span>Code</span><input name="code" value="' + esc(d.code) + '" autocomplete="off" style="text-transform:uppercase;font-weight:800"></label><label class="fld"><span>Name (for staff)</span><input name="name" value="' + esc(d.name) + '" placeholder="e.g. Winter weekday special"></label></div>' +
-      '<label class="fld"><span>Type</span>' + sel('kind', d.kind, VKIND, ' data-vkind') + '</label>' +
-      '<div class="grid2" data-vk="discount"' + (d.kind === 'discount' ? '' : ' hidden') + '><label class="fld"><span>Discount</span><input name="value" inputmode="decimal" value="' + (d.value || '') + '"></label><label class="fld"><span>As</span>' + sel('unit', d.unit || 'pct', { pct: '% off the stay', rand: 'Rand off the stay' }) + '</label></div>' +
-      '<label class="fld"><span>Who can use it?</span>' + sel('who', d.who, VWHO, ' data-vwho') + '</label>' +
-      '<div class="grid2" data-vw="dates"' + (d.who === 'dates' ? '' : ' hidden') + '><label class="fld"><span>Arriving from</span><input type="date" name="stayFrom" value="' + d.stayFrom + '"></label><label class="fld"><span>Arriving until</span><input type="date" name="stayTo" value="' + d.stayTo + '"></label></div>' +
-      '<label class="fld" data-vw="refs"' + (d.who === 'refs' ? '' : ' hidden') + '><span>Booking references, separated by commas</span><textarea name="refs" rows="2" placeholder="KY26-4F2K, KY26-9QWE">' + esc(d.refs.join(', ')) + '</textarea></label>' +
-      '<label class="fld" data-vw="guests"' + (d.who === 'guests' ? '' : ' hidden') + '><span>Guest email addresses, separated by commas</span><textarea name="emails" rows="2" placeholder="guest@example.com">' + esc(d.emails.join(', ')) + '</textarea></label>' +
-      '<h5>Limits</h5><div class="grid3"><label class="fld"><span>Most uses (blank = no limit)</span><input name="max" inputmode="numeric" value="' + (d.max || '') + '"></label><label class="fld"><span>Valid from</span><input type="date" name="from" value="' + d.from + '"></label><label class="fld"><span>Valid until</span><input type="date" name="to" value="' + d.to + '"></label></div>' +
-      '<label class="check"><input type="checkbox" name="active"' + (d.active ? ' checked' : '') + '><span>Voucher is switched on</span></label>' +
-      '<label class="check" data-vk="dgr"' + (d.kind === 'dgr' ? '' : ' hidden') + '><input type="checkbox" name="auto"' + (d.auto ? ' checked' : '') + '><span>Email it automatically to each guest it applies to, 7 days before they arrive</span></label>' +
-      (v ? '<h5>Used by (' + v.uses.length + ')</h5>' + (v.uses.length ? '<div class="list">' + v.uses.slice().reverse().slice(0, 30).map(function (u) { var b = byRef(u.ref); return '<button type="button" class="brow" data-open="' + u.ref + '"><span class="brow-st">' + esc(u.ref) + '</span><span class="brow-g"><b>' + esc(b ? guestName(b) : u.ref) + '</b><small>' + (v.kind === 'dgr' ? 'Sent ' : 'Used ') + esc(u.at) + ' · ' + esc(u.by) + '</small></span></button>'; }).join('') + '</div>' : '<p class="muted small">Not used yet.</p>') +
-        '<div class="m-extra"><button type="button" class="btn ghost sm danger-t" data-act="v-del" data-ref="' + v.id + '">Delete voucher</button></div>' : ''),
-      v ? 'Save' : 'Create voucher', function (f) {
-        var code = fval(f, 'code').toUpperCase().replace(/\s+/g, '');
-        if (!code) { toast('Give the voucher a code'); return false; }
-        if (DB.vouchers.some(function (x) { return x !== v && x.code === code; })) { toast('There is already a voucher with that code'); return false; }
-        var split = function (t) { return t.split(/[,\s]+/).map(function (x) { return x.trim(); }).filter(Boolean); };
-        var row = { code: code, name: fval(f, 'name') || code, kind: fval(f, 'kind'), value: parseFloat(fval(f, 'value')) || 0, unit: fval(f, 'unit'), who: fval(f, 'who'), refs: split(fval(f, 'refs')).map(function (x) { return x.toUpperCase(); }), emails: split(fval(f, 'emails')).map(function (x) { return x.toLowerCase(); }), stayFrom: fval(f, 'stayFrom'), stayTo: fval(f, 'stayTo'), max: parseInt(fval(f, 'max'), 10) || 0, from: fval(f, 'from'), to: fval(f, 'to'), active: fval(f, 'active'), auto: fval(f, 'auto') };
-        if (row.kind === 'discount' && !row.value) { toast('Enter the discount'); return false; }
-        if (row.who === 'refs' && !row.refs.length) { toast('Add at least one booking reference'); return false; }
-        if (row.who === 'guests' && !row.emails.length) { toast('Add at least one guest email'); return false; }
-        if (v) Object.keys(row).forEach(function (k) { v[k] = row[k]; }); else { row.id = uid('v'); row.uses = []; DB.vouchers.unshift(row); }
-        log((v ? 'Updated voucher ' : 'Created voucher ') + code); save(); render(); toast('Voucher ' + esc(code) + (v ? ' saved' : ' created'));
-      }, { wide: true, noFocus: !!v });
+    var up = DB.bookings.filter(function (b) { return live(b) && b.status !== 'out' && b.ci >= TODAY && diff(TODAY, b.ci) <= 30; }).sort(function (a, b) { return a.ci < b.ci ? -1 : 1; });
+    var week = up.filter(function (b) { return diff(TODAY, b.ci) <= 7; }), later = up.filter(function (b) { return diff(TODAY, b.ci) > 7; });
+    var todo = week.filter(function (b) { return codesTodo(b) > 0; }), month = TODAY.slice(0, 7);
+    var sentMonth = DB.bookings.reduce(function (a, b) { return a + (b.cars || []).filter(function (c) { return c.dgrSent && String(c.dgrSent.at).slice(0, 7) === month; }).length; }, 0);
+    var row = function (b) {
+      var n = ensureCars(b).length, t = codesTodo(b);
+      return '<div class="brow"><span class="brow-st">' + fd(b.ci) + '</span><span class="brow-g" data-open="' + b.ref + '"><b>' + esc(guestName(b)) + '</b><small>' + esc(b.guest.email || 'No email') + ' · ' +
+        (b.vehTbc ? 'not sure yet how many vehicles' : !t ? 'all ' + n + ' sent' : t === n ? n + ' vehicle' + (n === 1 ? '' : 's') + ', none sent' : t + ' of ' + n + ' vehicles still to send') + (b.status === 'pending' ? ' · deposit not paid yet' : '') + '</small></span>' +
+        (t ? '<button class="btn sm ghost" data-act="dgr" data-ref="' + b.ref + '">' + ic('gift') + 'Add codes</button>' : '<span class="pill ok">' + ic('check') + 'Sent</span>') + '</div>';
+    };
+    return '<div class="page-h"><div><h1>Dinokeng codes</h1><p class="muted">Kyleu is a Dinokeng Certified Partner, so overnight guests pay R85 instead of R100 per adult per night. Make one code per vehicle on the Dinokeng site, paste it on the booking and send it to the client yourself by WhatsApp or email. Dinokeng does not send them.</p></div><div class="ph-act"><a class="btn ghost" href="' + esc(dgrLink()) + '" target="_blank" rel="noopener">' + ic('ext') + 'Open Dinokeng site</a></div></div>' +
+      '<div class="kpis">' + tile('Still to send this week', todo.length, todo.length ? 'Bookings arriving in the next 7 days' : 'All sent for this week', null, todo.length ? 'warn' : 'ok') + tile('Codes sent this month', sentMonth, 'one per vehicle') + tile('Arriving in the next 30 days', up.length, up.reduce(function (a, b) { return a + ensureCars(b).length; }, 0) + ' vehicles') + '</div>' +
+      '<section class="card"><header class="card-h"><h3>Arriving in the next 7 days</h3><span class="count">' + week.length + '</span></header>' + (week.length ? week.map(row).join('') : '<p class="empty">Nobody arriving in the next 7 days.</p>') + '</section>' +
+      '<section class="card"><header class="card-h"><h3>Later this month</h3><span class="count">' + later.length + '</span></header>' + (later.length ? later.map(row).join('') : '<p class="empty">No other arrivals in the next 30 days.</p>') + '</section>';
   }
   /* =========================================================
      Every table: click a heading to sort (a picker on phones),
@@ -2436,7 +2439,6 @@
     var at_ = t.closest('[data-att]'); if (at_) { viewAtt(at_.dataset.att); return; }
     var cd = t.closest('[data-cmp-del]'); if (cd) { CMP_ATT.splice(+cd.dataset.cmpDel, 1); cmpRefresh(); return; }
     var sa = t.closest('[data-sale]'); if (sa) { openSale(sa.dataset.sale); return; }
-    var vr = t.closest('[data-voucher]'); if (vr) { actVoucher(vr.dataset.voucher); return; }
     var pr = t.closest('[data-prod]'); if (pr) { actProduct(pr.dataset.prod); return; }
     var pt = t.closest('[data-paytab]'); if (pt) { PAYF.tab = pt.dataset.paytab; render(); return; }
     var py = t.closest('[data-payt]'); if (py) { PAYF.type = py.dataset.payt; PAYF.lim = 1e9; render(); return; }
@@ -2462,6 +2464,8 @@
     if (act === 'client-add') return actClient(null);
     if (act === 'news-new') return actPost(null);
     if (act === 'dgr') return openBooking(ref);
+    if (act === 'veh-ok') { var vb = byRef(ref); vb.vehTbc = false; log('Number of vehicles confirmed on ' + vb.ref, vb.ref); save(); refresh(); toast('Marked as confirmed'); return; }
+    if (act === 'req-done') { var rb = byRef(ref); rb.changeReq.done = { at: nowStamp(), by: ME.name }; rb.notes.push({ at: nowStamp(), by: ME.name, text: 'Change request from the website dealt with.' }); log('Change request on ' + rb.ref + ' dealt with', rb.ref); save(); refresh(); toast('Change request marked as dealt with'); return; }
     if (act === 'send-doc') { var sd = ref.split('|'); return sendTemplate(byRef(sd[0]), sd[1]); }
     if (act === 'dgr-send') { var so = carOf(ref); if (so.c) sendCodes(so.b, [so.c]); return; }
     if (act === 'dgr-send-all') { var sa = byRef(ref); sendCodes(sa, ensureCars(sa)); return; }
@@ -2492,8 +2496,6 @@
     if (act === 'cart-clear') { CART = {}; render(); return; }
     if (act === 'to-sale') { var ps = $('.pos-sale'); if (ps) window.scrollTo({ top: ps.getBoundingClientRect().top + window.scrollY - 70, behavior: 'smooth' }); return; }
     if (act === 'mail-new') return actNewMail();
-    if (act === 'v-new') return actVoucher(null);
-    if (act === 'v-del') { var vd = vById(ref); closeModal(); modal('Delete voucher ' + esc(vd.code) + '?', '<p>Guests can no longer use it. Its history is removed too.</p>', 'Delete voucher', function () { DB.vouchers.splice(DB.vouchers.indexOf(vd), 1); log('Deleted voucher ' + vd.code); save(); render(); toast('Voucher deleted'); }, { danger: true }); return; }
     if (act === 'th-close' || act === 'th-open') { var tc = thrById(ref); tc.status = act === 'th-close' ? 'closed' : 'open'; tc.unread = false; save(); render(); toast(act === 'th-close' ? 'Marked as done' : 'Reopened'); return; }
     if (act === 'att-pop') { var ka = ref.split(':'), ta = thrById(ka[1]), aa = attFrom(ref), ba = byRef(ta.ref); ba.pops = ba.pops || []; ba.pops.push({ name: aa.name, size: aa.size, type: aa.type, data: aa.data || '', at: ta.msgs[+ka[2]].at, via: 'Email' }); if (ba.status === 'pending') ba.pop = true; aa.linked = true; log('Proof of payment from email added to ' + ba.ref, ba.ref); save(); render(); toast('Added to ' + ba.ref + '. Check the bank, then confirm it under EFT payments.'); return; }
     if (act === 'pay-more') { PAYF.lim += 200; render(); return; }

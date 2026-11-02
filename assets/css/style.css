@@ -667,3 +667,10 @@ html:has(body.lock) { overflow: hidden; }
 .mobile-menu { overflow-y: auto; overscroll-behavior: contain; }
 .lightbox { overscroll-behavior: contain; }
 
+/* "My booking" link in the header, for people who already booked */
+.nav-links > a.nav-manage { gap: 6px; }
+.nav-manage svg { width: 16px; height: 16px; }
+.nav-links > a, .nav-drop > a { white-space: nowrap; }
+@media (max-width: 1300px) { .nav-links > a, .nav-drop > a { padding: 10px 10px; } .nav-links { gap: 2px; } }
+@media (max-width: 1180px) { .nav-links { display: none; } .burger { display: grid; } }
+

@@ -1125,3 +1125,13 @@ html:has(body.lock) { overflow: hidden; }
 .dgr-acts { align-items: center; }
 .dgr-acts .muted { margin-right: auto; }
 
+
+/* guest changes from the website, vehicles not known yet, passengers */
+.callout.info { background: var(--info-bg, #e8f1fb); }
+.callout.cflex { display: flex; gap: 10px; align-items: flex-start; }
+.callout.cflex > .ic { flex: none; width: 18px; height: 18px; margin-top: 1px; }
+.callout.req > div { flex: 1; line-height: 1.5; }
+.callout.req .row-btns { margin-top: 10px; }
+.veh-tbc { align-items: center; flex-wrap: wrap; }
+.veh-tbc > span { flex: 1; min-width: 200px; }
+.car-b small.car-pass { color: var(--ink, inherit); font-size: .8rem; }
