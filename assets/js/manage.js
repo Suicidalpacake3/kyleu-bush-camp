@@ -38,6 +38,8 @@
   function balDays() { return P ? P.num('Booking rules', 'Balance due days before arrival', 7) : 7; }
   // from the "everything paid" date (a week before arrival) guests and dates can only be changed by phoning or WhatsApping Kyleu
   function locked(v) { return nights(today(), v.ci) <= balDays(); }
+  // in camp, or arriving today: nothing can be changed online any more
+  function started(v) { return v.status === 'in' || v.ci <= today(); }
   function lockDate(v) { var d = D(v.ci); d.setDate(d.getDate() - balDays()); return iso(d); }
   function paidFull(v) { return v.paid > 0 && v.paid >= v.total; }
   function draftG() { return draft.guests || { adults: base.adults, pens: base.pens, kids: base.kids }; }
@@ -215,8 +217,8 @@
       '<p>' + svg('i-users') + '<span>' + esc(peopleText(v)) + '</span></p>' +
       '<p class="mg-money">Total <b>' + K.money(v.total) + '</b> · Paid <b>' + K.money(v.paid) + '</b> · Still to pay <b>' + K.money(bal) + '</b></p>' +
       (v.claim ? '<p class="mg-claim">' + svg('i-clock') + '<span>You told us you paid <b>' + K.money(v.claim.amt) + '</b> on ' + esc(nice(v.claim.date)) + '. We are checking the bank.</span></p>' : '') +
-      '<div class="mg-bk-acts"><button type="button" class="btn btn-light btn-sm" data-inv-open>' + svg('i-doc') + 'View my invoice</button>' + (bal > 0 && !v.claim ? '<button type="button" class="btn btn-green btn-sm" data-inv-open="paid">' + svg('i-check') + 'I have paid</button>' : '') + '</div></div>' +
-      (locked(v) ? '<div class="mg-callout">' + svg('i-info') + '<p><b>Your stay starts within ' + balDays() + ' days.</b> To add or remove people now, please WhatsApp or email us.' + (finalMode(v) ? ' You can still finalise everything else here.' : '') + '</p></div>' : '');
+      '<div class="mg-bk-acts"><button type="button" class="btn btn-light btn-sm" data-inv-open>' + svg('i-doc') + 'View my invoice</button>' + (bal > 0 && !v.claim && !started(v) ? '<button type="button" class="btn btn-green btn-sm" data-inv-open="paid">' + svg('i-check') + 'I have paid</button>' : '') + '</div></div>' +
+      (started(v) ? '' : locked(v) ? '<div class="mg-callout">' + svg('i-info') + '<p><b>Your stay starts within ' + balDays() + ' days.</b> To add or remove people now, please WhatsApp or email us.' + (finalMode(v) ? ' You can still finalise everything else here.' : '') + '</p></div>' : '');
   }
   function editor(id) {
     var d = draft;
@@ -252,6 +254,13 @@
   }
   function drawSecs() {
     var pane = $('[data-pane="2"]'), fin = finalMode(base); SECS = secsFor(base);
+    var stepsBar = $('.mg-steps'), barLine = $('[data-mg-bar]').parentNode; stepsBar.hidden = barLine.hidden = started(base);
+    if (started(base)) {
+      var inCamp = base.status === 'in';
+      pane.innerHTML = '<p class="bw-of">Your booking</p><h2>' + (inCamp ? 'Enjoy your stay!' : 'Your stay starts today') + '</h2>' + bookingCard(base) +
+        '<div class="mg-callout">' + svg('i-info') + '<p><b>' + (inCamp ? 'You are in camp now, so your booking cannot be changed here any more.' : 'Your stay starts today, so your booking cannot be changed here any more.') + '</b> Need to add someone, change your stay or anything else? Please WhatsApp or call us' + (inCamp ? ', or pop in at reception' : '') + '.</p></div>' + callUs(base, 'something on my booking');
+      return;
+    }
     pane.innerHTML = '<p class="bw-of">Step 2 of 4</p><h2>' + (fin ? 'Finalise your booking' : 'Amend your booking') + '</h2>' +
       (fin ? '<p class="bw-lead">Your booking is <b>paid in full</b>. Thank you! Now tell us your <b>vehicles and who is in each one</b>, roughly <b>when you arrive</b>, and anything you want waiting from the <b>camp shop</b>. Press <b>Change</b> next to each part; nothing is saved until the last step.' + (base.finalised ? ' <b>You finalised it on ' + esc(nice(base.finalised.at.slice(0, 10))) + '</b>; you can still change anything.' : '') + '</p>'
         : '<p class="bw-lead">Your booking is <b>not paid in full yet</b>. Here you can tell us you have paid (<b>I have paid</b>), change the <b>number of guests</b> or your <b>contact details</b>. Once it is paid in full, this same page lets you <b>finalise</b> it: vehicles, passengers, arrival time and camp shop.</p>') +

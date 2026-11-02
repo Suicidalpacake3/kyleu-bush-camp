@@ -507,8 +507,8 @@
   function wizSummary() {
     var ds = $('[data-dates-sum]'), n;
     if (ds) {
-      if (state.ci && state.co) { n = nightsOf(state.ci, state.co).length; ds.innerHTML = '<svg><use href="#i-check"/></svg><span>You arrive on <b>' + nice(state.ci, LONG) + '</b> and leave on <b>' + nice(state.co, LONG) + '</b>. That is <b>' + n + ' night' + (n > 1 ? 's' : '') + '</b>.</span>'; ds.className = 'bw-sum ok'; }
-      else { ds.innerHTML = '<svg><use href="#i-cal"/></svg><span>' + (state.ci ? 'Now choose the day you <b>leave</b>.' : 'No dates chosen yet.') + '</span>'; ds.className = 'bw-sum'; }
+      if (state.ci && state.co) { n = nightsOf(state.ci, state.co).length; ds.innerHTML = '<svg><use href="#i-check"/></svg><span>Arrival <b>' + nice(state.ci, LONG) + '</b>, departure <b>' + nice(state.co, LONG) + '</b>. That is <b>' + n + ' night' + (n > 1 ? 's' : '') + '</b>.</span>'; ds.className = 'bw-sum ok'; }
+      else { ds.innerHTML = '<svg><use href="#i-cal"/></svg><span>' + (state.ci ? 'Now choose your <b>departure</b> date.' : 'No dates chosen yet.') + '</span>'; ds.className = 'bw-sum'; }
     }
     var ps = $('[data-people-sum]'); if (ps) ps.innerHTML = '<svg><use href="#i-users"/></svg><span><b>' + peopleText() + '</b>' + (state.kids ? '. Children under 12 stay free.' : '.') + '</span>';
     var cd = $('[data-chip="dates"]'); if (cd) cd.textContent = state.ci && state.co ? nice(state.ci) + ' to ' + nice(state.co) : 'Choose dates';
