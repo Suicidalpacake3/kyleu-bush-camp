@@ -612,3 +612,50 @@ html { overflow-anchor: none; }
 .foot-logos .foot-dgr img { height: 52px; margin: 0; }
 /* rare animal tag on the wildlife cards */
 .animal .big5.rare { background: var(--ember); color: #fff; }
+
+/* ---------- camp news: this week, recent, older ---------- */
+.news-block + .news-block { margin-top: 64px; }
+.news-h { margin-bottom: 22px; }
+.news-h h2 { font-size: clamp(1.6rem, 3vw, 2.2rem); margin: 0; }
+.news-quiet { display: grid; grid-template-columns: minmax(200px, 300px) 1fr; gap: 34px; align-items: center; padding: 30px 36px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper); }
+.news-quiet h3 { font-size: clamp(1.3rem, 2.4vw, 1.7rem); margin: 0 0 8px; }
+.news-quiet p { color: var(--muted, #6b5a4a); margin: 0 0 18px; max-width: 46ch; }
+.buck { width: 100%; height: auto; color: var(--bark); overflow: visible; }
+.buck path, .buck circle { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.buck .ground { stroke-width: 1.6; opacity: .35; stroke-dasharray: 2 6; }
+.buck .grass path { stroke: var(--bush, #4f6b3a); stroke-width: 2; }
+.buck .body, .buck .skull { fill: #d9a066; }
+.buck .ear { fill: #c98d52; }
+.buck .neck { stroke-width: 10; stroke: #d9a066; }
+.buck .spots { stroke: #fff6e6; stroke-width: 2.6; }
+.buck .eye { fill: currentColor; stroke: none; }
+.buck .head { transform-box: view-box; transform-origin: 101px 74px; transform: rotate(-88deg); animation: buck-graze 11s ease-in-out infinite; }
+.buck .tail { transform-box: view-box; transform-origin: 172px 65px; animation: buck-tail 4.4s ease-in-out infinite; }
+.buck .grass { transform-box: fill-box; transform-origin: 50% 100%; animation: grass-sway 3.6s ease-in-out infinite; }
+.buck .g2 { animation-delay: -1.2s; } .buck .g3 { animation-delay: -2.1s; }
+.buck .e1 { transform-box: fill-box; transform-origin: 20% 90%; animation: buck-ear 11s ease-in-out infinite; }
+@keyframes buck-graze {
+  0%, 6% { transform: rotate(-88deg); } 9% { transform: rotate(-83deg); } 12% { transform: rotate(-88deg); } 16% { transform: rotate(-83deg); } 19%, 40% { transform: rotate(-88deg); }
+  44% { transform: rotate(-84deg); } 47%, 52% { transform: rotate(-88deg); }
+  60%, 78% { transform: rotate(0deg); } 86%, 100% { transform: rotate(-88deg); }
+}
+@keyframes buck-ear { 0%, 64% { transform: rotate(0); } 66% { transform: rotate(-18deg); } 68% { transform: rotate(0); } 72% { transform: rotate(-14deg); } 74%, 100% { transform: rotate(0); } }
+@keyframes buck-tail { 0%, 70%, 100% { transform: rotate(0); } 76% { transform: rotate(-24deg); } 82% { transform: rotate(8deg); } 88% { transform: rotate(-16deg); } }
+@keyframes grass-sway { 0%, 100% { transform: skewX(0); } 50% { transform: skewX(-6deg); } }
+@media (prefers-reduced-motion: reduce) { .buck .head, .buck .tail, .buck .grass, .buck .e1 { animation: none; } }
+.news-older { margin-top: 64px; border-top: 1px solid var(--line); }
+.news-older summary { list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 22px 4px; cursor: pointer; }
+.news-older summary::-webkit-details-marker { display: none; }
+.news-older summary span { display: flex; align-items: baseline; gap: 12px; }
+.news-older summary b { font-family: var(--font-display, Fraunces, serif); font-size: clamp(1.3rem, 2.4vw, 1.7rem); font-weight: 600; }
+.news-older summary small { color: var(--muted, #6b5a4a); font-weight: 700; }
+.news-older summary svg { width: 22px; height: 22px; transform: rotate(90deg); transition: transform .3s; color: var(--ember); }
+.news-older[open] summary svg { transform: rotate(-90deg); }
+.news-older summary:hover b { color: var(--ember); }
+.news-older .posts { padding: 6px 0 10px; }
+@media (max-width: 720px) {
+  .news-quiet { grid-template-columns: 1fr; padding: 24px 20px; gap: 14px; text-align: center; }
+  .news-quiet .buck { max-width: 240px; margin: 0 auto; }
+  .news-quiet p { margin-left: auto; margin-right: auto; }
+}
+

@@ -163,14 +163,30 @@
         }
         var tags = []; posts.forEach(function (p) { p.tags.forEach(function (t) { if (tags.indexOf(t) < 0) tags.push(t); }); });
         filt.innerHTML = '<button class="pill on" data-tag="">All posts</button>' + tags.map(function (t) { return '<button class="pill" data-tag="' + K.esc(t) + '">' + K.esc(t) + '</button>'; }).join('');
+        var secs = $('[data-news-sections]');
+        var ageDays = function (p) { var d = new Date(p.date + 'T12:00:00'); return isNaN(d) ? 999 : Math.floor((Date.now() - d.getTime()) / 864e5); };
         var render = function (tag) {
-          var list = posts.filter(function (p) { return !tag || p.tags.indexOf(tag) >= 0; });
-          newsList.innerHTML = list.map(function (p, i) { return postCard(p, i === 0 && !tag); }).join('') || '<div class="empty">No posts yet.</div>';
-          K.reveal(newsList);
+          if (tag) {   // one tag picked: a simple list of its posts
+            var list = posts.filter(function (p) { return p.tags.indexOf(tag) >= 0; });
+            secs.hidden = true; newsList.hidden = false;
+            newsList.innerHTML = list.map(function (p) { return postCard(p); }).join('') || '<div class="empty">No posts with this tag yet.</div>';
+            K.reveal(newsList); return;
+          }
+          secs.hidden = false; newsList.hidden = true;
+          // this week, the past few weeks (up to six), then everything older folded away
+          var fresh = posts.filter(function (p) { return ageDays(p) <= 7; }), recent = posts.filter(function (p) { var a = ageDays(p); return a > 7 && a <= 42; }), older = posts.filter(function (p) { return ageDays(p) > 42; });
+          if (!fresh.length && !recent.length && older.length) { recent = older.slice(0, 3); older = older.slice(3); }   // a long quiet spell: still show the last few
+          $('[data-news-new]').innerHTML = fresh.map(function (p, i) { return postCard(p, i === 0); }).join('');
+          $('[data-news-new]').hidden = !fresh.length; $('[data-news-quiet]').hidden = !!fresh.length;
+          $('[data-news-recent-wrap]').hidden = !recent.length; $('[data-news-recent]').innerHTML = recent.map(function (p) { return postCard(p); }).join('');
+          var ow = $('[data-news-older-wrap]'); ow.hidden = !older.length; $('[data-news-older]').innerHTML = older.map(function (p) { return postCard(p); }).join('');
+          $('[data-news-older-count]').textContent = older.length + ' post' + (older.length === 1 ? '' : 's');
+          K.reveal(secs);
         };
+        var ow0 = $('[data-news-older-wrap]'); if (ow0) ow0.addEventListener('toggle', function () { if (ow0.open) K.reveal(ow0); });
         $$('.pill', filt).forEach(function (b) { b.addEventListener('click', function () { $$('.pill', filt).forEach(function (x) { x.classList.toggle('on', x === b); }); render(b.dataset.tag); }); });
         render('');
-      }).catch(function () { newsList.innerHTML = '<div class="empty">Posts couldn\'t load. Open the site through a web server (see README).</div>'; });
+      }).catch(function () { var s0 = $('[data-news-sections]'); if (s0) s0.hidden = true; newsList.hidden = false; newsList.innerHTML = '<div class="empty">Posts couldn\'t load. Open the site through a web server (see README).</div>'; });
     }
 
     /* ---------- Contact: map tabs + form ---------- */

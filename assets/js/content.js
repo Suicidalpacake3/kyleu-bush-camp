@@ -162,6 +162,18 @@
     return posts;
   }
 
+  // Demo: posts written in the admin portal are kept in this browser and shown with the blog.md posts.
+  // Live: the admin saves posts on the server (or in WordPress) instead.
+  function mergeLocal(posts) {
+    var x = null; try { x = JSON.parse(localStorage.getItem('kyleu-web-news') || 'null'); } catch (e) {}
+    if (!x) return posts;
+    var hide = x.hidden || {}, own = (x.posts || []).filter(function (p) { return !p.draft && p.title && !hide[p.slug]; }), mine = {};
+    own.forEach(function (p) { mine[p.slug] = 1; });
+    var out = posts.filter(function (p) { return !hide[p.slug] && !mine[p.slug]; }).concat(own.map(function (p) { return { title: p.title, slug: p.slug, date: p.date, image: p.image || '', summary: p.summary || '', tags: p.tags || [], body: p.body || '' }; }));
+    out.sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+    return out;
+  }
+
   // ---------- tiny markdown → HTML ----------
   function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
   function inline(s) {
@@ -200,6 +212,8 @@
   K.dual = function (n, P, tag) { return K.dualPair(K.toCard(n, P), n, tag); };
   K.settings = function () { return load('settings').then(parseSettings); };
   K.prices = function () { return load('prices').then(parsePrices); };
+  K.blogFile = function () { return load('blog').then(parseBlog); };   // blog.md only (the admin uses this)
+  K.slug = slug;
   K.stands = function () { return load('stands').then(parseStands); };
   // Blog: reads content/blog.md by default. Once the site lives on WordPress,
   // set "Blog source: wordpress" in content/settings.md and posts written in
@@ -207,7 +221,7 @@
   K.blog = function () {
     return K.settings().catch(function () { return null; }).then(function (S) {
       var src = S ? S.get('Blog source', 'markdown') : 'markdown';
-      if (!/wordpress/i.test(src)) return load('blog').then(parseBlog);
+      if (!/wordpress/i.test(src)) return load('blog').then(parseBlog).then(mergeLocal);
       var site = (S.get('WordPress site', location.origin) || '').replace(/\/$/, '');
       return fetch(site + '/wp-json/wp/v2/posts?_embed&per_page=30').then(function (r) { return r.json(); }).then(function (list) {
         return list.map(function (p) {

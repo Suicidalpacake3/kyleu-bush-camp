@@ -27,8 +27,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700;6..12,800;6..12,900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/style.css?v=202611011632">
-<link rel="stylesheet" href="assets/css/pages.css?v=202611011632">
+<link rel="stylesheet" href="assets/css/style.css?v=202611020603">
+<link rel="stylesheet" href="assets/css/pages.css?v=202611020603">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -67,9 +67,9 @@
 <script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.kyleu.co.za/"}, {"@type": "ListItem", "position": 2, "name": "Camp News & Tips", "item": "https://www.kyleu.co.za/news.html"}]}</script>
 
 <meta name="kyleu-base" content="">
-<script src="assets/js/content.js?v=202611011632" defer></script>
-<script src="assets/js/site.js?v=202611011632" defer></script>
-<script src="assets/js/pages.js?v=202611011632" defer></script>
+<script src="assets/js/content.js?v=202611020603" defer></script>
+<script src="assets/js/site.js?v=202611020603" defer></script>
+<script src="assets/js/pages.js?v=202611020603" defer></script>
 </head>
 <body class="page-news">
 <a class="skip" href="#main">Skip to content</a>
@@ -200,7 +200,41 @@
 <section class="section" data-news-wrap>
   <div class="wrap">
     <div class="tag-filter" role="group" aria-label="Filter posts"></div>
-    <div class="posts" data-news><div class="empty">Loading posts…</div></div>
+    <div data-news-sections>
+      <div class="news-block" data-reveal>
+        <div class="news-h"><span class="eyebrow">This week at Kyleu</span><h2>Fresh from camp</h2></div>
+        <div class="posts" data-news-new></div>
+        <div class="news-quiet" data-news-quiet hidden>
+          <svg class="buck" viewBox="0 0 240 140" role="img" aria-label="A bushbuck grazing quietly">
+            <path class="ground" d="M14 121 H226"/>
+            <g class="grass g1"><path d="M52 121 q-2 -10 -8 -16 M56 121 q0 -13 2 -19 M60 121 q3 -9 9 -14"/></g>
+            <g class="grass g2"><path d="M190 121 q-1 -8 -6 -12 M194 121 q1 -10 4 -14"/></g>
+            <g class="grass g3"><path d="M24 121 q1 -7 -3 -11 M28 121 q2 -8 6 -11"/></g>
+            <g class="legs"><path d="M104 88 L102 104 L103 121"/><path d="M111 89 L112 105 L110 121"/><path d="M160 86 Q165 99 158 106 L159 121"/><path d="M167 84 Q173 98 166 106 L168 121"/></g>
+            <path class="body" d="M94 74 C97 61 113 56 133 58 C152 59 166 57 173 66 C178 74 174 86 163 88 C141 92 119 92 102 88 C93 86 91 80 94 74 Z"/>
+            <path class="spots" d="M122 70 h1 M134 68 h1 M146 70 h1 M128 79 h1 M141 79 h1 M154 76 h1"/>
+            <path class="tail" d="M172 65 q8 2 7 13"/>
+            <g class="head">
+              <path class="neck" d="M101 74 C95 60 86 47 76 39"/>
+              <path class="skull" d="M80 30 C72 27 62 31 56 38 C54 41 56 44 60 43 C68 42 76 41 82 40 Z"/>
+              <path class="ear e1" d="M79 31 L86 21 L85 34 Z"/>
+              <path class="horn" d="M79 30 C80 22 76 17 79 9 M83 31 C85 23 82 18 86 11"/>
+              <circle class="eye" cx="71" cy="34" r="1.6"/>
+            </g>
+          </svg>
+          <div><h3>Nothing new at camp this week</h3><p>All quiet in the bush. The bushbuck don't mind, and neither do we. Catch up on the latest news below, or come and see for yourself.</p><a class="btn btn-sm" href="stay.html">Check availability</a></div>
+        </div>
+      </div>
+      <div class="news-block" data-news-recent-wrap hidden>
+        <div class="news-h"><span class="eyebrow">The past few weeks</span><h2>Recent news</h2></div>
+        <div class="posts" data-news-recent></div>
+      </div>
+      <details class="news-older" data-news-older-wrap hidden>
+        <summary><span><b>Older news</b><small data-news-older-count></small></span><svg aria-hidden="true"><use href="#i-arrow"/></svg></summary>
+        <div class="posts" data-news-older></div>
+      </details>
+    </div>
+    <div class="posts" data-news hidden><div class="empty">Loading posts…</div></div>
   </div>
 </section>
 
