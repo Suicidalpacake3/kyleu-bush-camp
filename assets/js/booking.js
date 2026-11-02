@@ -451,7 +451,12 @@
     var ppl = g.adults + g.pens + g.kids;
     var lines = q.lines.map(function (l) {
       var amt = isCard ? l.c : l.v, m = l.t.match(/^(\d+) (weekend|weekday) night/);
-      if (m) return { t: booking.stand.name + ' (Guests: ' + ppl + ') · ' + m[2] + ' night' + (+m[1] > 1 ? 's' : '') + (/pensioner/.test(l.t) ? ' (pensioner rate Mon-Thu)' : ''), q: +m[1], u: Math.round(amt / +m[1]), amt: amt, tag: 'stay' };
+      if (m) {   // say which nights and the rate, so weekend and weekday lines are not mistaken for the same thing twice
+        var wk = m[2] === 'weekend', ds = nightsOf(booking.ci, booking.co).filter(function (d) { return isWeekendNight(d) === wk; }), R0 = rates(booking.stand), paying = g.adults + g.pens;
+        var dl = ds.map(function (d, i) { return d.toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric' }) + (i === ds.length - 1 || d.getMonth() !== ds[i + 1].getMonth() ? ' ' + d.toLocaleDateString('en-ZA', { month: 'short' }) : ''); });
+        var dtxt = dl.length > 1 ? dl.slice(0, -1).join(', ') + ' & ' + dl[dl.length - 1] : dl[0];
+        return { t: booking.stand.name + ' · ' + m[2] + ' night' + (+m[1] > 1 ? 's' : '') + ': ' + dtxt + ' · ' + paying + ' adult' + (paying === 1 ? '' : 's') + (/pensioner/.test(l.t) ? ' (pensioner rate Mon-Thu)' : ' at ' + K.money(isCard ? K.toCard(wk ? R0.weekend : R0.weekday, P) : (wk ? R0.weekend : R0.weekday)) + ' per person'), q: +m[1], u: Math.round(amt / +m[1]), amt: amt, tag: 'stay' };
+      }
       return { t: l.free ? 'Child' + (g.kids === 1 ? '' : 'ren') + ' under 12 (free)' : l.t, q: l.free ? g.kids : undefined, amt: amt, free: !!l.free, tag: 'stay' };
     }).concat(q.exLines.map(function (l) {
       var amt = isCard ? l.c : l.v, m = l.t.match(/^(\d+) × (.+)$/), pp = l.t.match(/^Porta potty · (\d+) night/);

@@ -43,7 +43,7 @@
 .inv-lines tfoot .inv-due td,
 .inv-lines tfoot .inv-due td:first-child { font-size: 1.15rem; font-weight: 900; color: var(--i-ember); }
 .inv-paid .inv-lines tfoot .inv-due td,
-.inv-lines tfoot .inv-due td:first-child { color: var(--i-ok); }
+.inv-paid .inv-lines tfoot .inv-due td:first-child { color: var(--i-ok); }
 .inv-pay { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 24px 0; }
 .inv-pay > div { background: var(--i-sand); border-radius: 12px; padding: 14px 16px; }
 .inv-pay ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
