@@ -127,14 +127,14 @@ input, select, textarea { font: inherit; color: inherit; }
 .brand-text { display: flex; flex-direction: column; line-height: 1.05; }
 .brand-text b { font-family: var(--font-display); font-size: 1.2rem; letter-spacing: .02em; }
 .brand-text small { font-size: .7rem; letter-spacing: .18em; text-transform: uppercase; opacity: .75; font-weight: 700; }
-.site-header:not(.solid):not(.always-solid) .brand-text, .site-header:not(.solid):not(.always-solid) .nav-links > a, .site-header:not(.solid):not(.always-solid) .nav-drop > button { color: #fff; text-shadow: 0 1px 12px rgba(0,0,0,.4); }
+.site-header:not(.solid):not(.always-solid) .brand-text, .site-header:not(.solid):not(.always-solid) .nav-links > a, .site-header:not(.solid):not(.always-solid) .nav-drop > a { color: #fff; text-shadow: 0 1px 12px rgba(0,0,0,.4); }
 .nav-links { display: flex; align-items: center; gap: 4px; }
-.nav-links > a, .nav-drop > button { color: var(--bark); text-decoration: none; font-weight: 700; font-size: .95rem; padding: 10px 14px; border-radius: 999px; background: none; border: 0; display: inline-flex; align-items: center; gap: 6px; transition: background .2s, color .2s; }
-.nav-links > a:hover, .nav-drop > button:hover, .nav-links > a.active { background: rgba(232, 115, 28, .12); color: var(--ember); text-shadow: none; }
+.nav-links > a, .nav-drop > a { color: var(--bark); text-decoration: none; font-weight: 700; font-size: .95rem; padding: 10px 14px; border-radius: 999px; background: none; border: 0; display: inline-flex; align-items: center; gap: 6px; transition: background .2s, color .2s; }
+.nav-links > a:hover, .nav-drop > a:hover, .nav-links > a.active, .nav-drop > a.active { background: rgba(232, 115, 28, .12); color: var(--ember); text-shadow: none; }
 .nav-links .btn { margin-left: 8px; }
 .nav-drop { position: relative; }
-.nav-drop > button svg { width: 14px; height: 14px; transition: transform .25s; }
-.nav-drop.open > button svg { transform: rotate(180deg); }
+.nav-drop > a svg { width: 14px; height: 14px; transition: transform .25s; }
+.nav-drop.open > a svg { transform: rotate(180deg); }
 .drop-panel {
   position: absolute; top: calc(100% + 10px); left: 50%; width: 620px; transform: translate(-50%, 8px); opacity: 0; visibility: hidden;
   background: var(--paper); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
@@ -159,9 +159,9 @@ input, select, textarea { font: inherit; color: inherit; }
 .mm-close { width: 46px; height: 46px; border-radius: 12px; border: 0; background: var(--sand-2); display: grid; place-items: center; }
 .mm-close svg { width: 22px; height: 22px; }
 .mm-links { padding: 12px 20px 24px; display: grid; gap: 2px; }
-.mm-links > a, .mm-acc > button { display: flex; justify-content: space-between; align-items: center; padding: 16px 6px; font-family: var(--font-display); font-size: 1.45rem; font-weight: 600; color: var(--bark); text-decoration: none; border: 0; background: none; border-bottom: 1px solid var(--line); width: 100%; text-align: left; }
-.mm-acc > button svg { width: 20px; height: 20px; transition: transform .25s; }
-.mm-acc.open > button svg { transform: rotate(180deg); }
+.mm-links > a, .mm-acc-row > a { display: flex; justify-content: space-between; align-items: center; padding: 16px 6px; font-family: var(--font-display); font-size: 1.45rem; font-weight: 600; color: var(--bark); text-decoration: none; border: 0; background: none; border-bottom: 1px solid var(--line); width: 100%; text-align: left; }
+.mm-acc-row > button svg { width: 20px; height: 20px; transition: transform .25s; }
+.mm-acc.open .mm-acc-row > button svg { transform: rotate(180deg); }
 .mm-sub { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .35s var(--ease); }
 .mm-acc.open .mm-sub { grid-template-rows: 1fr; }
 .mm-sub > div { overflow: hidden; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -658,4 +658,12 @@ html { overflow-anchor: none; }
   .news-quiet .buck { max-width: 240px; margin: 0 auto; }
   .news-quiet p { margin-left: auto; margin-right: auto; }
 }
+/* phone menu: "Discover Kyleu" opens its page, the arrow opens the list */
+.mm-acc-row { display: flex; align-items: stretch; border-bottom: 1px solid var(--line); }
+.mm-acc-row > a { border-bottom: 0 !important; flex: 1; }
+.mm-acc-row > button { flex: none; width: 56px; border: 0; background: none; color: var(--bark); display: grid; place-items: center; border-left: 1px solid var(--line); }
+/* any open pop-up stops the page behind it from scrolling */
+html:has(body.lock) { overflow: hidden; }
+.mobile-menu { overflow-y: auto; overscroll-behavior: contain; }
+.lightbox { overscroll-behavior: contain; }
 

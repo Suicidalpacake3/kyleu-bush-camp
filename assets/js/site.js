@@ -56,11 +56,17 @@
     onScroll();
 
     /* desktop dropdown */
+    // "Discover Kyleu" opens its page when clicked; hovering (or keyboard focus) shows the list of sections.
+    // On touch screens without hover, the first tap shows the list and a second tap opens the page.
+    var noHover = window.matchMedia('(hover: none)');
     $$('.nav-drop').forEach(function (d) {
-      var btn = $('button', d); var t;
-      btn.addEventListener('click', function (e) { e.stopPropagation(); d.classList.toggle('open'); btn.setAttribute('aria-expanded', d.classList.contains('open')); });
-      d.addEventListener('mouseenter', function () { clearTimeout(t); d.classList.add('open'); });
-      d.addEventListener('mouseleave', function () { t = setTimeout(function () { d.classList.remove('open'); }, 180); });
+      var link = d.firstElementChild, t;
+      var set = function (o) { d.classList.toggle('open', o); link.setAttribute('aria-expanded', o); };
+      link.addEventListener('click', function (e) { if (noHover.matches && !d.classList.contains('open')) { e.preventDefault(); e.stopPropagation(); set(true); } });
+      d.addEventListener('mouseenter', function () { clearTimeout(t); set(true); });
+      d.addEventListener('mouseleave', function () { t = setTimeout(function () { set(false); }, 180); });
+      d.addEventListener('focusin', function () { clearTimeout(t); set(true); });
+      d.addEventListener('focusout', function (e) { if (!d.contains(e.relatedTarget)) set(false); });
     });
     document.addEventListener('click', function () { $$('.nav-drop.open').forEach(function (d) { d.classList.remove('open'); }); });
 
@@ -70,7 +76,7 @@
     $$('.burger').forEach(function (b) { b.addEventListener('click', function () { openMM(true); }); });
     $$('.mm-close').forEach(function (b) { b.addEventListener('click', function () { openMM(false); }); });
     if (mm) $$('a', mm).forEach(function (a) { a.addEventListener('click', function () { openMM(false); }); });
-    $$('.mm-acc > button').forEach(function (b) { b.addEventListener('click', function () { var p = b.parentElement; p.classList.toggle('open'); b.setAttribute('aria-expanded', p.classList.contains('open')); }); });
+    $$('.mm-acc-row > button').forEach(function (b) { b.addEventListener('click', function () { var p = b.closest('.mm-acc'); p.classList.toggle('open'); b.setAttribute('aria-expanded', p.classList.contains('open')); }); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { openMM(false); } });
 
     /* ---------- split headline words ---------- */

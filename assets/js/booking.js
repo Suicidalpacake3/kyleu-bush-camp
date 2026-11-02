@@ -143,14 +143,13 @@
   function filtered() { return STANDS.filter(function (s) { return !state.area || s.area === state.area; }); }
   function render() {
     var list = filtered();
-    $$('.area-pick').forEach(function (b) { b.classList.toggle('on', b.dataset.area === state.area); });
-    $$('.sb-pills .pill').forEach(function (b) { b.classList.toggle('on', b.dataset.area === state.area); });
+    wizSummary();
     if (!state.ci || !state.co) {
       // no dates yet: ask for them first, then show only the stands that are free
       resultsTitle.textContent = 'Choose your dates';
       resultsSub.textContent = 'Pick your arrival and departure dates above. We\'ll then show the stands that are free.';
       grid.innerHTML = '<div class="empty date-first"><svg><use href="#i-cal"/></svg><h3>When would you like to camp?</h3><p class="muted">Choose your arrival and departure dates in the bar above to see which stands are free and what your stay costs.</p><button class="btn" type="button" data-pick-dates>Choose dates <svg><use href="#i-arrow"/></svg></button></div>';
-      var pd = $('[data-pick-dates]', grid); if (pd) pd.onclick = function () { var i = $('#sb-in'); i.focus(); try { i.showPicker(); } catch (e) {} };
+      var pd = $('[data-pick-dates]', grid); if (pd) pd.onclick = function () { wGo(1, true); };
       ruleNote.classList.add('hidden');
       renderMap();
       return;
@@ -321,9 +320,9 @@
     var xw = $('[data-extras-wrap]', modal); if (xw) xw.hidden = !EXTRAS.some(function (x) { return !x.only || x.only === booking.stand.area; });
     payChanged();
   }
-  function closeCheckout() { modal.classList.remove('open'); if (!sheet.classList.contains('open')) document.body.classList.remove('lock'); }
+  function closeCheckout() { bwMark(wstep); modal.classList.remove('open'); if (!sheet.classList.contains('open')) document.body.classList.remove('lock'); }
   function goStep(n) {
-    step = n;
+    step = n; bwMark(Math.min(8, n + 4));
     $$('.mc-step', modal).forEach(function (s) { s.classList.toggle('on', +s.dataset.step === n); });
     $$('.steps li', modal).forEach(function (li, i) { li.classList.toggle('on', i + 1 === n); li.classList.toggle('done', i + 1 < n); });
     $('.mc-main', modal).scrollTop = 0;
@@ -460,7 +459,53 @@
     $('#sb-in').value = state.ci ? iso(state.ci) : ''; $('#sb-out').value = state.co ? iso(state.co) : '';
     $('#sb-in').min = iso(today()); $('#sb-out').min = iso(addDays(state.ci || today(), 1));
     $('[data-g=adults]').textContent = state.adults; $('[data-g=pens]').textContent = state.pens; $('[data-g=kids]').textContent = state.kids;
-    $('#sb-guest-sum').textContent = (state.adults + state.pens) + ' adult' + (state.adults + state.pens > 1 ? 's' : '') + (state.kids ? ', ' + state.kids + ' kid' + (state.kids > 1 ? 's' : '') : '');
+    wizSummary();
+  }
+  /* ---------- guided booking: one easy step at a time ---------- */
+  var wstep = 1, reached = 1, LONG = { weekday: 'long', day: 'numeric', month: 'long' };
+  var STEP_NAMES = ['', 'Dates', 'Who\'s coming', 'Camp area', 'Your stand', 'Your details', 'Check & agree', 'Pay'];
+  function nextFriday(plus) { var t = today(), d = addDays(t, (5 - t.getDay() + 7) % 7); if (t.getDay() === 6) d = addDays(t, 6); return addDays(d, plus || 0); }
+  function peopleText() { var a = state.adults + state.pens, k = state.kids; return a + ' adult' + (a === 1 ? '' : 's') + (state.pens ? ' (' + state.pens + ' pensioner' + (state.pens === 1 ? '' : 's') + ')' : '') + (k ? ' and ' + k + ' child' + (k === 1 ? '' : 'ren') : ''); }
+  function openLeave() {
+    var o = $('#sb-out'), f = o.closest('.bw-date'); if (!f) return;
+    f.classList.remove('attn'); void f.offsetWidth; f.classList.add('attn');
+    try { o.focus({ preventScroll: true }); } catch (e) { o.focus(); }
+    try { o.showPicker(); } catch (e) {}
+  }
+  function datesOk() {
+    if (!state.ci || !state.co) { var f = $(state.ci ? '[data-bw-field="out"]' : '[data-bw-field="in"]'); f.classList.remove('attn'); void f.offsetWidth; f.classList.add('attn'); return false; }
+    if (P && !checkWeekendRule()) { ruleNote.classList.remove('shake'); void ruleNote.offsetWidth; ruleNote.classList.add('shake'); return false; }
+    return true;
+  }
+  function wizSummary() {
+    var ds = $('[data-dates-sum]'), n;
+    if (ds) {
+      if (state.ci && state.co) { n = nightsOf(state.ci, state.co).length; ds.innerHTML = '<svg><use href="#i-check"/></svg><span>You arrive on <b>' + nice(state.ci, LONG) + '</b> and leave on <b>' + nice(state.co, LONG) + '</b>. That is <b>' + n + ' night' + (n > 1 ? 's' : '') + '</b>.</span>'; ds.className = 'bw-sum ok'; }
+      else { ds.innerHTML = '<svg><use href="#i-cal"/></svg><span>' + (state.ci ? 'Now choose the day you <b>leave</b>.' : 'No dates chosen yet.') + '</span>'; ds.className = 'bw-sum'; }
+    }
+    var ps = $('[data-people-sum]'); if (ps) ps.innerHTML = '<svg><use href="#i-users"/></svg><span><b>' + peopleText() + '</b>' + (state.kids ? '. Children under 12 stay free.' : '.') + '</span>';
+    var cd = $('[data-chip="dates"]'); if (cd) cd.textContent = state.ci && state.co ? nice(state.ci) + ' to ' + nice(state.co) : 'Choose dates';
+    var cp = $('[data-chip="people"]'); if (cp) cp.textContent = peopleText();
+    var ca = $('[data-chip="area"]'); if (ca) ca.textContent = state.area && K.AREA[state.area] ? K.AREA[state.area].name : 'Any camp area';
+    if (STANDS.length) $$('.bw-areas .area-pick').forEach(function (b) {
+      var a = b.dataset.area, list = STANDS.filter(function (s) { return !a || s.area === a; }), free = state.ci && state.co ? list.filter(function (s) { return isFree(s, state.ci, state.co); }).length : null, el = $('[data-free]', b);
+      b.classList.toggle('full', free === 0); b.classList.toggle('on', state.area === a && wstep > 3);
+      if (el) el.textContent = free === null ? '' : free ? free + ' stand' + (free > 1 ? 's' : '') + ' free for your dates' : 'Fully booked for your dates';
+    });
+  }
+  function bwMark(n) {
+    $$('.bw-steps li').forEach(function (li) { var s = +li.dataset.s; li.classList.toggle('on', s === n); li.classList.toggle('done', s < n); li.classList.toggle('can', s <= reached && s <= 4 && s !== n); });
+    var bar = $('[data-bw-bar]'); if (bar) bar.style.width = ((n - 1) / 6 * 100) + '%';
+  }
+  function wGo(n, scroll) {
+    if (n > 1 && !(state.ci && state.co)) n = 1;
+    wstep = n; reached = Math.max(reached, n);
+    $$('.bw-pane').forEach(function (p) { p.hidden = +p.dataset.pane !== n; });
+    $('#results').hidden = n !== 4;
+    bwMark(n); wizSummary();
+    if (n === 4) render();
+    if (scroll) { var bw = $('.bw'); if (bw) bw.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    var h = $('[data-pane="' + n + '"] h2'); if (h && scroll) { h.setAttribute('tabindex', '-1'); setTimeout(function () { try { h.focus({ preventScroll: true }); } catch (e) {} }, 350); }
   }
   function setView(v) {
     state.view = v;
@@ -483,7 +528,10 @@
 
     Promise.all([K.stands(), K.prices(), K.settings().catch(function () { return null; })]).then(function (r) {
       STANDS = r[0]; P = r[1]; S = r[2]; buildExtras();
-      syncSearch(); setView(location.hash === '#map' ? 'map' : 'grid'); render();
+      syncSearch(); setView(location.hash === '#map' ? 'map' : 'grid');
+      var deep = /^#(map|stand=)/.test(location.hash);
+      if (state.ci && state.co && (qs.get('in') || deep)) { reached = 4; wGo(4); } else wGo(1);
+      render();
       if (location.hash === '#map') setTimeout(function () { $('#results').scrollIntoView({ behavior: 'smooth' }); }, 300);
       var m = location.hash.match(/stand=([\w-]+)/); if (m) openSheet(m[1]);
       var q2b = S && S.get('Live availability (Q2B)'); if (q2b) $$('[data-q2b]').forEach(function (a) { a.href = q2b; });
@@ -493,23 +541,25 @@
     });
 
     // search controls
-    $('#sb-in').addEventListener('change', function () { var d = parse(this.value); if (!d) return; state.ci = d; if (!state.co || state.co <= d) state.co = addDays(d, d.getDay() === 5 ? 2 : 1); syncSearch(); render(); });
+    $('#sb-in').addEventListener('change', function () { var d = parse(this.value); if (!d) return; state.ci = d; if (!state.co || state.co <= d) state.co = addDays(d, d.getDay() === 5 ? 2 : 1); syncSearch(); render(); openLeave(); });
     $('#sb-out').addEventListener('change', function () { var d = parse(this.value); if (!d || (state.ci && d <= state.ci)) { syncSearch(); return; } state.co = d; if (!state.ci) state.ci = addDays(d, -1); syncSearch(); render(); });
-    var gp = $('.guest-pop'), gb = $('#sb-guests');
-    gb.addEventListener('click', function (e) { e.stopPropagation(); gp.hidden = !gp.hidden; gb.setAttribute('aria-expanded', !gp.hidden); });
-    gp.addEventListener('click', function (e) { e.stopPropagation(); });
-    document.addEventListener('click', function () { if (!gp.hidden) { gp.hidden = true; gb.setAttribute('aria-expanded', 'false'); } });
-    $$('[data-gstep]', gp).forEach(function (b) {
+    $$('[data-pane="2"] [data-gstep]').forEach(function (b) {
       b.addEventListener('click', function () {
         var k = b.dataset.gstep, d = +b.dataset.d; state[k] = Math.max(0, Math.min(20, state[k] + d));
         if (state.adults + state.pens < 1) state[k] = 1;
         syncSearch(); render();
       });
     });
-    $$('.sb-pills .pill, .area-pick').forEach(function (b) { b.addEventListener('click', function () { state.area = (state.area === b.dataset.area && b.classList.contains('area-pick')) ? '' : b.dataset.area; render(); if (b.classList.contains('area-pick')) $('#results').scrollIntoView({ behavior: 'smooth' }); }); });
+    $$('.bw-areas .area-pick').forEach(function (b) { b.addEventListener('click', function () { state.area = b.dataset.area; render(); wGo(4, true); }); });
+    $$('[data-quick]').forEach(function (b) {
+      var f = nextFriday(+b.dataset.quick); b.textContent = nice(f, { weekday: 'short', day: 'numeric', month: 'short' }) + ' to ' + nice(addDays(f, 2), { weekday: 'short', day: 'numeric', month: 'short' });
+      b.addEventListener('click', function () { state.ci = f; state.co = addDays(f, 2); syncSearch(); render(); });
+    });
+    $$('[data-bw-go]').forEach(function (b) { b.addEventListener('click', function () { var n = +b.dataset.bwGo; if (n <= reached) wGo(n, true); }); });
+    $$('[data-bw-next]').forEach(function (b) { b.addEventListener('click', function () { var n = +b.dataset.bwNext; if (n === 2 && !datesOk()) return; wGo(n, true); }); });
     $$('.sb-view button').forEach(function (b) { b.addEventListener('click', function () { setView(b.dataset.view); }); });
     $('[data-fix-weekend]').addEventListener('click', fixWeekend);
-    window.addEventListener('hashchange', function () { if (location.hash === '#map') { setView('map'); $('#results').scrollIntoView({ behavior: 'smooth' }); } });
+    window.addEventListener('hashchange', function () { if (location.hash === '#map') { if (state.ci && state.co) wGo(4); setView('map'); $('#results').hidden = false; $('#results').scrollIntoView({ behavior: 'smooth' }); } });
 
     // sheet
     $('.sheet-close').addEventListener('click', closeSheet); backdrop.addEventListener('click', closeSheet);

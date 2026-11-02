@@ -1081,3 +1081,10 @@ select.on, input.on { border-color: var(--sun) !important; background: #fff7ee !
 .me-intro { margin: 0 0 12px; max-width: 70ch; }
 .me-wrap { border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; background: #f6efe3; margin-bottom: 12px; }
 .me-frame { display: block; width: 100%; height: calc(100vh - 230px); min-height: 640px; border: 0; }
+/* pop-ups scroll on their own, never the page behind */
+html:has(body.lock) { overflow: hidden; }
+.m-card { min-height: 0; max-height: calc(100dvh - 32px); }
+.m-body { min-height: 0; flex: 1 1 auto; overscroll-behavior: contain; }
+.d-panel { overscroll-behavior: contain; }
+#modal { overflow-y: auto; overscroll-behavior: contain; }
+
