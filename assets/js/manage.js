@@ -17,7 +17,7 @@
   var WEB = 'kyleu-web-bookings', ADMIN = 'kyleu-admin-demo-v1', AMEND = 'kyleu-web-amend';
   var STANDS = [], P = null, SHOP = [];
   var base = null, draft = null, openSec = '', carsEd = null, shopQty = null, step = 1;
-  var ETAS = ['Before 12:00', '12:00-15:00', '15:00-18:00', 'After 18:00', 'Not sure yet'];
+  var ETAS = ['Before 13:00', '13:00-15:00', '15:00-18:00', 'After 18:00', 'Not sure yet'];
 
   function read(k, d) { try { var v = JSON.parse(localStorage.getItem(k) || 'null'); return v == null ? d : v; } catch (e) { return d; } }
   function key(s) { return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
@@ -109,17 +109,19 @@
     // no invoice kept yet: build one from the booking
     var sl = shopList(v.shop), shopAmt = price(v, shopSum(v.shop));
     return { kind: 'Invoice', no: K.invoiceNo(v.ref, 'Invoice', 1), date: v.created || today(), ref: v.ref, guest: { name: (v.first + ' ' + v.last).trim(), email: v.email, phone: v.phone }, stay: stayInfo,
-      lines: [{ t: nights(v.ci, v.co) + ' night' + (nights(v.ci, v.co) === 1 ? '' : 's') + ' at ' + stand(v.stand).name + ' · ' + peopleText(v), amt: v.total - shopAmt, tag: 'stay' }].concat(sl.map(function (x) { return { t: x.qty + ' × ' + x.label, amt: price(v, x.qty * x.each), tag: 'shop' }; })),
+      lines: [stayLine(v, v, v.total - shopAmt)].concat(sl.map(function (x) { return shopLine(v, x); })),
       total: v.total, paid: v.paid, deposit: Math.round(v.total * depPct / 100), depPct: depPct, depositDue: addD(v.created || today(), depDays()), balanceDue: addD(v.ci, -balDays()), payFull: nights(v.created || today(), v.ci) <= balDays() };
   }
+  function stayLine(v, g, amt) { var n = nights(v.ci, v.co); return { t: stand(v.stand).name + ' (Guests: ' + people(g) + ') · ' + peopleText(g), q: n, u: Math.round(amt / n), amt: amt, tag: 'stay' }; }
+  function shopLine(v, x) { return { t: x.label, q: x.qty, u: price(v, x.each), amt: price(v, x.qty * x.each), tag: 'shop' }; }
   // a new invoice after a change that alters the price
   function nextInvoice(v, a) {
     var cur = invoiceFor(v), n = (parseInt(String(cur.no).split('-').pop(), 10) || 1) + 1, lines = cur.lines.filter(function (l) { return l.tag !== 'adj'; });
     if (a.guests && a.guests.mode === 'direct') {
       var stayAmt = lines.filter(function (l) { return l.tag === 'stay'; }).reduce(function (x, l) { return x + (l.amt || 0); }, 0) + (a.guests.diff || 0);
-      lines = [{ t: nights(v.ci, v.co) + ' night' + (nights(v.ci, v.co) === 1 ? '' : 's') + ' · ' + peopleText(a.guests), amt: stayAmt, tag: 'stay' }].concat(lines.filter(function (l) { return l.tag !== 'stay'; }));
+      lines = [stayLine(v, a.guests, stayAmt)].concat(lines.filter(function (l) { return l.tag !== 'stay'; }));
     }
-    if (a.shopItems) lines = lines.filter(function (l) { return l.tag !== 'shop'; }).concat(a.shopItems.map(function (x) { return { t: x.qty + ' × ' + x.label, amt: price(v, x.qty * x.each), tag: 'shop' }; }));
+    if (a.shopItems) lines = lines.filter(function (l) { return l.tag !== 'shop'; }).concat(a.shopItems.map(function (x) { return shopLine(v, x); }));
     var total = lines.reduce(function (x, l) { return x + (l.amt || 0); }, 0);
     return Object.assign(cur, { no: K.invoiceNo(v.ref, 'Invoice', n), date: today(), lines: lines, total: total, deposit: cur.paid ? cur.deposit : Math.round(total * (cur.depPct || 50) / 100), note: 'Updated invoice: replaces ' + cur.no + '.' });
   }
@@ -211,7 +213,7 @@
       return '<p class="mg-help-t">For each vehicle, give the <b>registration</b>, the <b>driver</b> and <b>everyone else in it</b>. Every person in a vehicle signs an indemnity form at the gate, and we send one Dinokeng Conservation Fee Discount Voucher per vehicle, so this makes your arrival much quicker. Fill in what you know; you can come back and add the rest later.</p>' +
         '<div class="field"><label for="e-veh">How many vehicles are coming?</label><select id="e-veh" name="veh">' + opts + '<option value="0"' + (!d.vehicles ? ' selected' : '') + '>Not sure yet, I\'ll tell you later</option></select></div><div class="cars-list" data-cars></div>';
     }
-    if (id === 'eta') return '<p class="mg-help-t">Check-in is from 12:00. Knowing roughly when you arrive helps us have your stand, firewood and ice ready.</p>' +
+    if (id === 'eta') return '<p class="mg-help-t">Check-in is from 13:00 and check-out is by 11:00. Knowing roughly when you arrive helps us have your stand, firewood and ice ready.</p>' +
       '<div class="field"><label for="e-eta">Roughly when will you arrive?</label><select id="e-eta" name="eta">' + (d.eta ? '' : '<option value="">Choose a time</option>') + ETAS.map(function (t) { return '<option' + (t === d.eta ? ' selected' : '') + '>' + t + '</option>'; }).join('') + '</select></div>';
     if (id === 'shop') return '<p class="mg-help-t">Tap <b>+</b> to add and <b>&minus;</b> to remove. What you order is waiting for you when you arrive and goes on your invoice. Anything else you can buy at the camp shop.</p><div data-shop></div><div class="mg-shop-tot" data-shop-tot></div>';
     if (id === 'guests') {

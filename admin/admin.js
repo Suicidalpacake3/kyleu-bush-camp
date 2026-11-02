@@ -560,7 +560,7 @@
   var TEMPLATES = {
     eft: { t: 'EFT deposit reminder', s: 'Your Kyleu booking: deposit reminder', b: function (b) { return 'Hi {first},\n\nThank you for booking {stand} from {ci} to {co}. To secure your stand please pay the deposit of {deposit} by {depdue} using reference {ref}.\n\nBank: FNB · Account: Kyleu Bush Camp · Acc no: 62000000000 · Branch: 250655\n\nUpload your proof of payment at www.kyleu.co.za/pop.html, or reply to this email with it attached.\n\nSee you in the bush!\nThe Kyleu team'; } },
     balance: { t: 'Balance reminder', s: 'Your Kyleu stay is coming up', b: function (b) { return 'Hi {first},\n\nYour stay at {stand} starts on {ci}. The balance of {balance} is due by {baldue}. Pay by EFT with reference {ref}, or reply and we will send a card payment link.\n\nThe Kyleu team'; } },
-    arrival: { t: 'Pre-arrival information', s: 'Getting to Kyleu Bush Camp', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}.\n\nDirections: enter Dinokeng at Tau Gate, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km.\n\nKyleu is a proud DGR CP member, so we send you a Conservation Fee Discount Voucher code for each vehicle. Enter it when you buy your conservation fees at https://dinokeng.plnktn.io to pay R85 instead of R100 per adult per night. To use the self-drive route, each vehicle also needs a Self Drive Permit (R250 once off).\n\nEvery adult signs an indemnity form when you arrive. Check-in from 12:00. Gate questions: 060 458 4478.\n\nThe Kyleu team'; } },
+    arrival: { t: 'Pre-arrival information', s: 'Getting to Kyleu Bush Camp', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}.\n\nDirections: enter Dinokeng at Tau Gate, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km.\n\nKyleu is a proud DGR CP member, so we send you a Conservation Fee Discount Voucher code for each vehicle. Enter it when you buy your conservation fees at https://dinokeng.plnktn.io to pay R85 instead of R100 per adult per night. To use the self-drive route, each vehicle also needs a Self Drive Permit (R250 once off).\n\nEvery adult signs an indemnity form when you arrive. Check-in from 13:00, check-out by 11:00. Gate questions: 060 458 4478.\n\nThe Kyleu team'; } },
     thanks: { t: 'Thank you & review', s: 'Thanks for staying at Kyleu', b: function (b) { return 'Hi {first},\n\nThank you for camping with us at {stand}. We hope you loved the bush! If you have a minute, a Google review helps our small family camp a lot.\n\nThe Kyleu team'; } },
     invoice: { t: 'Invoice', s: 'Your Kyleu invoice {ref}', b: function (b) { return 'Hi {first},\n\nPlease find your invoice for {stand}, {ci} to {co}, attached.\n\nTotal {total}, paid so far {paid}, balance {balance}. Pay by EFT using reference {ref}.\n\nThe Kyleu team'; } },
     indemnity: { t: 'Indemnity form', s: 'Kyleu indemnity form for {ref}', b: function (b) { return 'Hi {first},\n\nPlease find the Kyleu indemnity form attached, one page per vehicle. Every adult signs it when you arrive. You are welcome to print it and fill it in before you come, which makes check-in quicker.\n\nSee you on {ci}!\nThe Kyleu team'; } },
@@ -610,7 +610,7 @@
       '<div class="grid2"><label class="fld"><span>Arrive</span><input type="date" name="ci" value="' + b.ci + '"' + lockCi + '></label><label class="fld"><span>Depart</span><input type="date" name="co" value="' + b.co + '"' + lockAll + '></label></div>' +
       '<label class="fld"><span>Stand</span><select name="stand"' + lockCi + '>' + standOptions(b.stand) + '</select></label>' +
       '<div class="grid3"><label class="fld"><span>Adults</span><input type="number" min="0" max="12" name="adults" value="' + b.adults + '"' + lockAll + '></label><label class="fld"><span>Pensioners</span><input type="number" min="0" max="12" name="pens" value="' + b.pens + '"' + lockAll + '></label><label class="fld"><span>Kids under 12</span><input type="number" min="0" max="12" name="kids" value="' + b.kids + '"' + lockAll + '></label></div>' +
-      '<div class="grid3"><label class="fld"><span>Vehicles</span><input type="number" min="1" max="6" name="veh" value="' + (b.vehicles || 1) + '"' + lockAll + '></label><label class="fld"><span>Arrival time</span><select name="eta"' + lockAll + '>' + [''].concat(['Before 12:00', '12:00-15:00', '15:00-18:00', 'After 18:00', 'Not sure yet']).map(function (t) { return '<option value="' + t + '"' + ((b.eta || '') === t ? ' selected' : '') + '>' + (t || 'Not given') + '</option>'; }).join('') + '</select></label><label class="fld"><span>Game drive (people)</span><input type="number" min="0" max="10" name="gd" value="' + (ex.gd || 0) + '"' + lockAll + '></label></div>' +
+      '<div class="grid3"><label class="fld"><span>Vehicles</span><input type="number" min="1" max="6" name="veh" value="' + (b.vehicles || 1) + '"' + lockAll + '></label><label class="fld"><span>Arrival time</span><select name="eta"' + lockAll + '>' + [''].concat(['Before 13:00', '13:00-15:00', '15:00-18:00', 'After 18:00', 'Not sure yet']).map(function (t) { return '<option value="' + t + '"' + ((b.eta || '') === t ? ' selected' : '') + '>' + (t || 'Not given') + '</option>'; }).join('') + '</select></label><label class="fld"><span>Game drive (people)</span><input type="number" min="0" max="10" name="gd" value="' + (ex.gd || 0) + '"' + lockAll + '></label></div>' +
       '<label class="fld"><span>Booked via</span><select name="source">' + srcs.map(function (x) { return '<option' + (x === b.source ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select></label>' +
       '<div class="quote-box" data-q></div>' +
       '<label class="fld"><span>Reason for the change (optional, saved in the notes)</span><input name="why" placeholder="e.g. Guest phoned to add a night"></label>' +
@@ -1425,7 +1425,7 @@
   var QUICK = [
     ['We will check and come back to you', function () { return 'Thank you for your message. Let me check and come back to you today.'; }],
     ['Banking details for EFT', function () { return 'You can pay by EFT to:\nFNB · Kyleu Bush Camp · Account 62000000000 · Branch 250655\n\nPlease use your booking reference so we can match the payment, then upload your proof of payment at www.kyleu.co.za/pop.html (or simply reply to this email with it attached).'; }],
-    ['Directions', function () { return 'Enter Dinokeng at Tau Gate, follow the main road for 4.8 km, turn right onto Kaallaagte Road and continue 2 km to camp. Check-in is from 12:00.'; }],
+    ['Directions', function () { return 'Enter Dinokeng at Tau Gate, follow the main road for 4.8 km, turn right onto Kaallaagte Road and continue 2 km to camp. Check-in is from 13:00 and check-out is by 11:00.'; }],
     ['Game drives', function () { return 'Our guided game drives leave at 06:00 and 15:30 and take about 2 hours. It is ' + money(num('Game drives', 'Game drive 3 or more people per person', 400)) + ' per person for 3 or more people, ' + money(num('Game drives', 'Game drive 2 people per person', 450)) + ' per person for 2, or ' + money(num('Game drives', 'Game drive 1 person', 900)) + ' for a private drive.'; }],
     ['Pensioner rate', function () { return 'The pensioner rate of ' + money(num('Ablution stands', 'Pensioner weekday per person per night', 115)) + ' per person per night applies to Monday to Thursday nights. Sunday nights and weekends are charged at the normal rate.'; }],
     ['Proof of payment received', function () { return 'Thank you, we have received your proof of payment. We will confirm your booking as soon as the money reflects in our account (usually within 1 working day).'; }]
@@ -1507,8 +1507,20 @@
   }
   /* ---------- invoices and quotes: same look as on the website (assets/js/invoice.js) ---------- */
   function invLines(b) {
-    var q = quote(b.stand, b.ci, b.co, b, b.extras), card = b.method === 'card', L = q.lines.map(function (l) { return { t: l.t, amt: card ? l.c : l.e, tag: 'stay' }; });
-    (b.charges || []).forEach(function (c) { L.push({ t: c.desc.replace(/^Shop order for arrival: /, 'Shop order for arrival: '), amt: card ? c.c : c.e, tag: c.pre ? 'shop' : c.adj ? 'adj' : 'extra' }); });
+    var q = quote(b.stand, b.ci, b.co, b, b.extras), card = b.method === 'card', st = standById(b.stand);
+    var L = q.lines.map(function (l, i) {
+      var amt = card ? l.c : l.e, n = q.nights;
+      if (i === 0) return { t: st.name + ' (Guests: ' + people(b) + ') · ' + l.t.replace(/^\d+ nights? · /, ''), q: n, u: amt % n === 0 ? amt / n : undefined, amt: amt, tag: 'stay' };
+      return { t: l.t, amt: amt, tag: 'extra' };
+    });
+    (b.charges || []).forEach(function (c) {
+      var amt = card ? c.c : c.e;
+      if (c.pre && c.items) {   // the shop order, one line per item when the prices add up
+        var parts = Object.keys(c.items).map(function (lab) { var p = shopItems().filter(function (x) { return x.label === lab; })[0]; return { t: lab, q: c.items[lab], u: p ? (card ? toCard(p.amount) : p.amount) : null }; });
+        if (parts.every(function (x) { return x.u != null; }) && parts.reduce(function (a, x) { return a + x.q * x.u; }, 0) === amt) { parts.forEach(function (x) { L.push({ t: x.t, q: x.q, u: x.u, amt: x.q * x.u, tag: 'shop' }); }); return; }
+      }
+      L.push({ t: c.desc, amt: amt, tag: c.pre ? 'shop' : c.adj ? 'adj' : 'extra' });
+    });
     var sum = L.reduce(function (a, l) { return a + l.amt; }, 0);
     if (Math.round(sum) !== Math.round(b.total)) L.push({ t: 'Discount or adjustment', amt: b.total - sum, tag: 'adj' });
     return L;

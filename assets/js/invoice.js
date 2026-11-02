@@ -4,8 +4,10 @@
    - K.invoicePDF(inv): the same invoice as a PDF (jsPDF), for email and download
    - K.paidForm(box, inv, done): "I have paid" for guests
    inv = { kind: 'Invoice'|'Quote', no, date, ref, guest: {name, email, phone},
-           stay: {stand, ci, co, nights, guests, vehicles}, lines: [{t, amt, tag}],
+           stay: {stand, ci, co, nights, guests, vehicles}, lines: [{t, amt, q, u, tag, free}],
            total, paid, deposit, depPct, depositDue, balanceDue, payFull, cancelled, validTo, note }
+   Holds everything Kyleu's old Q2B quote showed (registration number, postal address,
+   bank details with SWIFT, check-in and check-out times, the camp rules), in the site's style.
    ========================================================= */
 (function () {
   'use strict';
@@ -17,14 +19,27 @@
   function D(s) { var p = String(s).slice(0, 10).split('-'); return new Date(+p[0], p[1] - 1, +p[2]); }
   function nice(s, o) { return s ? D(s).toLocaleDateString('en-ZA', o || LONG) : ''; }
 
-  // business and bank details: content/settings.md can override every one of these
-  var BIZ = { name: 'Kyleu Bush Camp', tag: 'Dinokeng Big 5 Game Reserve', addr: 'Plot 77 Klipdrift 90 JR, Kaallaagte Road, Dinokeng Game Reserve, Gauteng', phone: '060 458 4478', email: 'info@kyleu.co.za', web: 'www.kyleu.co.za',
-    bank: 'FNB', accName: 'Kyleu Bush Camp', accNo: '62000000000', branch: '250655', accType: 'Cheque' };
+  // business and bank details (from Kyleu's own quote); content/settings.md can change every one
+  var BIZ = { name: 'Kyleu Bush Camp', tag: 'Dinokeng Big 5 Game Reserve', reg: '2017/102130/07',
+    addr: 'Plot 77 Klipdrift 90-JR, Kaallaagte Road, Dinokeng Game Reserve', postal: 'PO Box 1186, Faerie Glen, Pretoria, 0043',
+    phone: '060 458 4478', email: 'info@kyleu.co.za', web: 'www.kyleu.co.za',
+    bank: 'FNB (First National Bank)', accName: 'Kyleu Bush Camp', accNo: '62699453868', branch: '250655', accType: 'Current', swift: 'FIRNZAJJ',
+    checkIn: '13:00', checkOut: '11:00', signer: 'Sherri Symons' };
   K.BIZ = BIZ;
   if (K.settings) K.settings().then(function (S) {
     if (!S) return;
-    [['bank', 'Bank'], ['accName', 'Account name'], ['accNo', 'Account number'], ['branch', 'Branch code'], ['accType', 'Account type'], ['phone', 'Phone'], ['email', 'Email']].forEach(function (x) { var v = S.get(x[1], ''); if (v) BIZ[x[0]] = v; });
+    [['bank', 'Bank'], ['accName', 'Account name'], ['accNo', 'Account number'], ['branch', 'Branch code'], ['accType', 'Account type'], ['swift', 'SWIFT code'],
+     ['reg', 'Company registration'], ['postal', 'Postal address'], ['checkIn', 'Check-in time'], ['checkOut', 'Check-out time'], ['signer', 'Invoices signed by'], ['phone', 'Phone'], ['email', 'Email']]
+      .forEach(function (x) { var v = S.get(x[1], ''); if (v) BIZ[x[0]] = v; });
   }).catch(function () {});
+  function notes() {
+    return ['Check-in from ' + BIZ.checkIn + ' · check-out by ' + BIZ.checkOut + '.',
+      'Please note our Terms & Conditions, on our website (kyleu.co.za/policies.html).',
+      'Camping at Kyleu Bush Camp is ENTIRELY AT YOUR OWN RISK: wild animals roam freely.',
+      'There is no electricity anywhere in the bush camp (fenced and unfenced).',
+      'Cancellations are not refunded; what you paid is kept as a credit for another stay.',
+      'Dinokeng Game Reserve fees are paid to the reserve, not to Kyleu.'];
+  }
 
   // where the invoice stands: what is due, by when
   function state(inv) {
@@ -43,112 +58,140 @@
     else rows.push([inv.paid ? 'Balance' : 'Full amount', money(st.bal), 'by ' + nice(inv.paid ? inv.balanceDue : inv.depositDue)]);
     return rows;
   }
+  function stayRows(inv) {
+    var s = inv.stay || {}, o = { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' };
+    return [['Booking', inv.ref], ['Stand', s.stand], ['Arrive', s.ci ? nice(s.ci, o) + ', from ' + BIZ.checkIn : ''], ['Depart', s.co ? nice(s.co, o) + ', by ' + BIZ.checkOut : ''], ['Nights', s.nights], ['Guests', s.guests], ['Vehicles', s.vehicles]]
+      .filter(function (r) { return r[1] !== undefined && r[1] !== ''; });
+  }
+  function totals(inv, st) {
+    var r = [['Total', money(inv.total), 'total']];
+    if (st.k === 'quote' || (!inv.paid && !inv.payFull && st.k === 'due')) r.push(['Deposit ' + (inv.depPct || 50) + '%', money(inv.deposit), '']);
+    if (st.k !== 'quote') r.push(['Total payment received', (inv.paid ? '-' : '') + money(inv.paid || 0), '']);
+    if (st.k !== 'quote' && st.k !== 'cancel') r.push([st.bal ? 'Balance due' : 'Balance', money(st.bal), 'due']);
+    return r;
+  }
+  function bankRows() { return [['Account name', BIZ.accName], ['Bank', BIZ.bank], ['Account number', BIZ.accNo], ['Branch code', BIZ.branch], ['Account type', BIZ.accType], ['SWIFT', BIZ.swift]].filter(function (r) { return r[1]; }); }
+  var THANKS = 'Kyleu management thanks you in advance for respecting the rules and abiding by them. We hope you have an enjoyable stay!';
   K.invoiceState = state;
   K.invoiceName = function (inv) { return 'Kyleu ' + inv.kind.toLowerCase() + ' ' + inv.no + '.pdf'; };
   K.invoiceNo = function (ref, kind, n) { return (kind === 'Quote' ? 'Q-' : 'INV-') + String(ref).replace(/^KY/i, '') + '-' + (n || 1); };
 
   /* ---------- on screen ---------- */
   K.invoiceHTML = function (inv) {
-    var st = state(inv), s = inv.stay || {}, g = inv.guest || {}, rows = schedule(inv);
+    var st = state(inv), g = inv.guest || {}, rows = schedule(inv), hasQ = inv.lines.some(function (l) { return l.q; });
     return '<article class="inv inv-' + st.k + '">' +
-      '<header class="inv-top"><div class="inv-brand"><img src="' + BASE + 'assets/img/logo-small.png" alt="Kyleu Bush Camp logo"><div><b>' + esc(BIZ.name) + '</b><small>' + esc(BIZ.tag) + '</small></div></div>' +
+      '<header class="inv-hero" style="background-image:url(\'' + BASE + 'assets/img/photos/camp-panorama.jpg\')"><div class="inv-brand"><img src="' + BASE + 'assets/img/logo-small.png" alt="Kyleu Bush Camp logo"><div><b>' + esc(BIZ.name) + '</b><small>' + esc(BIZ.tag) + '</small></div></div>' +
       '<div class="inv-title"><span class="inv-kind">' + esc(inv.kind) + '</span><b>' + esc(inv.no) + '</b><small>' + esc(nice(inv.date)) + '</small></div></header>' +
+      '<div class="inv-biz"><span>' + esc(BIZ.addr) + '<br>' + esc(BIZ.postal) + '</span><span>Reg. ' + esc(BIZ.reg) + '<br>' + esc(BIZ.phone) + ' · ' + esc(BIZ.email) + ' · ' + esc(BIZ.web) + '</span></div>' +
       '<div class="inv-status">' + esc(st.t) + '</div>' +
       '<div class="inv-parties"><div><h4>' + (inv.kind === 'Quote' ? 'Prepared for' : 'Billed to') + '</h4><b>' + esc(g.name) + '</b>' + (g.email ? '<span>' + esc(g.email) + '</span>' : '') + (g.phone ? '<span>' + esc(g.phone) + '</span>' : '') + '</div>' +
-      '<div><h4>Your stay</h4><dl>' + [['Booking', inv.ref], ['Stand', s.stand], ['Arrive', nice(s.ci, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })], ['Depart', nice(s.co, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })], ['Nights', s.nights], ['Guests', s.guests], ['Vehicles', s.vehicles]].filter(function (r) { return r[1] !== undefined && r[1] !== ''; }).map(function (r) { return '<dt>' + r[0] + '</dt><dd>' + esc(r[1]) + '</dd>'; }).join('') + '</dl></div></div>' +
-      '<table class="inv-lines"><thead><tr><th>Description</th><th>Amount</th></tr></thead><tbody>' +
-      inv.lines.map(function (l) { return '<tr><td>' + esc(l.t) + '</td><td>' + (l.free ? 'Free' : (l.amt < 0 ? '&minus;' : '') + money(Math.abs(l.amt))) + '</td></tr>'; }).join('') + '</tbody>' +
-      '<tfoot><tr class="inv-total"><td>Total</td><td>' + money(inv.total) + '</td></tr>' + (inv.paid ? '<tr><td>Paid so far</td><td>&minus;' + money(inv.paid) + '</td></tr>' : '') +
-      (st.k !== 'quote' && st.k !== 'cancel' ? '<tr class="inv-due"><td>' + (st.bal ? 'Balance due' : 'Balance') + '</td><td>' + money(st.bal) + '</td></tr>' : '') + '</tfoot></table>' +
-      (st.k === 'due' || st.k === 'quote' ? '<div class="inv-pay"><div><h4>When to pay</h4>' + (rows.length ? '<ul>' + rows.map(function (r) { return '<li><span>' + esc(r[0]) + '<small>' + esc(r[2]) + '</small></span><b>' + esc(r[1]) + '</b></li>'; }).join('') + '</ul>' : '') + '</div>' +
-        '<div class="inv-bank"><h4>Pay by EFT</h4><dl><dt>Bank</dt><dd>' + esc(BIZ.bank) + '</dd><dt>Account name</dt><dd>' + esc(BIZ.accName) + '</dd><dt>Account number</dt><dd>' + esc(BIZ.accNo) + '</dd><dt>Branch code</dt><dd>' + esc(BIZ.branch) + '</dd><dt>Account type</dt><dd>' + esc(BIZ.accType) + '</dd></dl><p class="inv-refbox">Use reference <b>' + esc(inv.ref) + '</b></p></div></div>' : '') +
-      (inv.note ? '<p class="inv-note">' + esc(inv.note) + '</p>' : '') +
-      (st.k === 'due' ? '<p class="inv-note">Paid? Tell us with <b>I have paid</b> on the website (under Change my booking) or upload your proof of payment at kyleu.co.za/pop.html. We check the bank and confirm.</p>' : '') +
-      '<p class="inv-note">Cancellations are not refunded; what you paid is kept as a credit for another stay. Dinokeng Game Reserve fees are paid to the reserve, not to Kyleu.</p>' +
+      '<div><h4>Your stay</h4><dl>' + stayRows(inv).map(function (r) { return '<dt>' + r[0] + '</dt><dd>' + esc(r[1]) + '</dd>'; }).join('') + '</dl></div></div>' +
+      '<table class="inv-lines' + (hasQ ? ' with-q' : '') + '"><thead><tr>' + (hasQ ? '<th class="q">Qty</th>' : '') + '<th>Description</th>' + (hasQ ? '<th class="u">Unit price</th>' : '') + '<th>Total</th></tr></thead><tbody>' +
+      inv.lines.map(function (l) { return '<tr>' + (hasQ ? '<td class="q">' + (l.q || '') + '</td>' : '') + '<td>' + esc(l.t) + '</td>' + (hasQ ? '<td class="u">' + (l.u != null && !l.free ? money(l.u) : '') + '</td>' : '') + '<td>' + (l.free ? 'Free' : (l.amt < 0 ? '&minus;' : '') + money(Math.abs(l.amt))) + '</td></tr>'; }).join('') + '</tbody>' +
+      '<tfoot>' + totals(inv, st).map(function (r) { return '<tr class="inv-' + r[2] + '"><td colspan="' + (hasQ ? 3 : 1) + '">' + r[0] + '</td><td>' + r[1].replace(/^-/, '&minus;') + '</td></tr>'; }).join('') + '</tfoot></table>' +
+      (st.k === 'due' || st.k === 'quote' ? '<div class="inv-pay"><div><h4>When to pay</h4>' + (rows.length ? '<ul>' + rows.map(function (r) { return '<li><span>' + esc(r[0]) + '<small>' + esc(r[2]) + '</small></span><b>' + esc(r[1]) + '</b></li>'; }).join('') + '</ul>' : '') +
+        (st.k === 'due' ? '<p class="inv-paidtip">Paid? Press <b>I have paid</b> on the website (under Change my booking) or upload your proof of payment at kyleu.co.za/pop.html.</p>' : '') + '</div>' +
+        '<div class="inv-bank"><h4>Our bank details</h4><dl>' + bankRows().map(function (r) { return '<dt>' + r[0] + '</dt><dd>' + esc(r[1]) + '</dd>'; }).join('') + '</dl><p class="inv-refbox">Use reference <b>' + esc(inv.ref) + '</b></p></div></div>' : '') +
+      (inv.note ? '<p class="inv-note inv-own">' + esc(inv.note) + '</p>' : '') +
+      '<div class="inv-notes"><h4>Please note</h4><ul>' + notes().map(function (n) { return '<li>' + esc(n).replace('ENTIRELY AT YOUR OWN RISK', '<b>ENTIRELY AT YOUR OWN RISK</b>') + '</li>'; }).join('') + '</ul></div>' +
+      '<p class="inv-thanks">' + esc(THANKS) + '</p>' +
+      '<p class="inv-sign">Kind regards,<br><b>' + esc(BIZ.signer) + '</b> · ' + esc(BIZ.phone) + ' · ' + esc(BIZ.email) + '</p>' +
       '<div class="inv-dgr"><img src="' + BASE + 'assets/img/dgr-certified-partner.png" alt="DGR Certified Partner logo"><p><b>Kyleu is a proud DGR CP member.</b> Guests staying at this DGR CP campsite qualify for Conservation Fee Discount Vouchers: R85 instead of R100 per adult per night. We send you one voucher code per vehicle before your stay.</p></div>' +
-      '<footer class="inv-foot">' + esc(BIZ.name) + ' · ' + esc(BIZ.addr) + ' · ' + esc(BIZ.phone) + ' · ' + esc(BIZ.email) + ' · ' + esc(BIZ.web) + '</footer></article>';
+      '<footer class="inv-foot">' + esc(BIZ.name) + ' · Reg. ' + esc(BIZ.reg) + ' · ' + esc(BIZ.addr) + ' · ' + esc(BIZ.phone) + ' · ' + esc(BIZ.email) + ' · ' + esc(BIZ.web) + '</footer></article>';
   };
 
   /* ---------- PDF ---------- */
   var IMG = {};
-  // logos go into the PDF as small JPEGs on white, so an emailed invoice stays light
-  function toData(src, w) {
+  // pictures go into the PDF as small JPEGs, so an emailed invoice stays light; crop = width / height wanted
+  function toData(src, w, crop) {
     return new Promise(function (ok, no) {
       var im = new Image(); im.onload = function () {
-        var c = document.createElement('canvas'), sc = Math.min(1, w / im.width); c.width = Math.round(im.width * sc); c.height = Math.round(im.height * sc);
-        var x = c.getContext('2d'); x.fillStyle = '#fffdf8'; x.fillRect(0, 0, c.width, c.height); x.drawImage(im, 0, 0, c.width, c.height); ok(c.toDataURL('image/jpeg', .9));
+        var sw = im.width, sh = im.height, sx = 0, sy = 0;
+        if (crop) { if (sw / sh > crop) { sx = (sw - sh * crop) / 2; sw = sh * crop; } else { sy = (sh - sw / crop) * .55; sh = sw / crop; } }
+        var c = document.createElement('canvas'), sc = Math.min(1, w / sw); c.width = Math.round(sw * sc); c.height = Math.round(sh * sc);
+        var x = c.getContext('2d'); x.fillStyle = '#fffdf8'; x.fillRect(0, 0, c.width, c.height); x.drawImage(im, sx, sy, sw, sh, 0, 0, c.width, c.height); ok(c.toDataURL('image/jpeg', crop ? .72 : .9));
       }; im.onerror = no; im.src = src;
     });
   }
   K.invoiceAssets = function () {
     if (IMG.p) return IMG.p;
-    IMG.p = Promise.all([toData(BASE + 'assets/img/logo-small.png', 220).then(function (d) { IMG.kyleu = d; }), toData(BASE + 'assets/img/dgr-certified-partner.png', 400).then(function (d) { IMG.dgr = d; })]).catch(function () {});
+    IMG.p = Promise.all([
+      toData(BASE + 'assets/img/logo-small.png', 220).then(function (d) { IMG.kyleu = d; }),
+      toData(BASE + 'assets/img/dgr-certified-partner.png', 400).then(function (d) { IMG.dgr = d; }),
+      toData(BASE + 'assets/img/photos/camp-panorama.jpg', 900, 210 / 30).then(function (d) { IMG.photo = d; })
+    ]).catch(function () {});
     return IMG.p;
   };
   K.invoiceAssets();
   function clean(s) { return String(s == null ? '' : s).replace(/[   ]/g, ' ').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/−/g, '-').replace(/[^\x09\x0a\x0d\x20-\xff]/g, ''); }
-  var C = { bark: [42, 27, 18], sun: [232, 115, 28], ember: [184, 70, 26], soft: [110, 95, 80], line: [230, 217, 195], sand: [248, 241, 229], ok: [63, 125, 58], okbg: [232, 243, 228], due: [253, 240, 217], bad: [178, 58, 42] };
+  var C = { bark: [42, 27, 18], sun: [232, 115, 28], ember: [184, 70, 26], soft: [110, 95, 80], line: [230, 217, 195], sand: [248, 241, 229], ok: [63, 125, 58], okbg: [232, 243, 228], due: [253, 240, 217], bad: [178, 58, 42], white: [255, 255, 255] };
   K.invoiceDraw = function (doc, inv) {
-    var L = 16, R = 194, W = R - L, y = 0, st = state(inv), s = inv.stay || {}, g = inv.guest || {};
+    var L = 14, R = 196, W = R - L, y = 0, st = state(inv), g = inv.guest || {}, hasQ = inv.lines.some(function (l) { return l.q; });
     var font = function (size, bold, c) { doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(size); c = c || C.bark; doc.setTextColor(c[0], c[1], c[2]); };
     var text = function (t, x, yy, o) { doc.text(Array.isArray(t) ? t.map(clean) : clean(t), x, yy, o); };
     var fill = function (c) { doc.setFillColor(c[0], c[1], c[2]); };
-    var need = function (h) { if (y + h > 270) { doc.addPage(); y = 20; } };
-    // header
-    fill(C.sun); doc.rect(0, 0, 210, 3.5, 'F');
-    if (IMG.kyleu) try { doc.addImage(IMG.kyleu, 'JPEG', L, 10, 23, 18.5); } catch (e) {}
-    font(16, true); text(BIZ.name, L + 28, 18); font(9, false, C.soft); text(BIZ.tag, L + 28, 23.5);
-    font(24, true, C.sun); text(inv.kind.toUpperCase(), R, 19, { align: 'right' });
-    font(10, true); text(inv.no, R, 25.5, { align: 'right' }); font(8.5, false, C.soft); text(nice(inv.date), R, 30.5, { align: 'right' });
-    y = 37;
+    var need = function (h) { if (y + h > 280) { doc.addPage(); y = 16; } };
+    // photo band with the logo, like the old quote
+    var H = 30;
+    if (IMG.photo) { try { doc.addImage(IMG.photo, 'JPEG', 0, 0, 210, H); } catch (e) {} } else { fill(C.bark); doc.rect(0, 0, 210, H, 'F'); }
+    try { doc.setGState(new doc.GState({ opacity: .5 })); fill([20, 12, 6]); doc.rect(0, 0, 210, H, 'F'); doc.setGState(new doc.GState({ opacity: 1 })); } catch (e) {}
+    fill(C.sun); doc.rect(0, H, 210, 1.6, 'F');
+    if (IMG.kyleu) { fill(C.white); doc.circle(L + 12, 15, 11, 'F'); try { doc.addImage(IMG.kyleu, 'JPEG', L + 2.5, 7.3, 19, 15.3); } catch (e) {} }
+    font(17, true, C.white); text(BIZ.name, L + 28, 13.5); font(9, false, C.white); text(BIZ.tag, L + 28, 19); font(8, false, C.white); text('Reg. ' + BIZ.reg, L + 28, 24);
+    font(23, true, C.white); text(inv.kind.toUpperCase(), R, 13.5, { align: 'right' });
+    font(10, true, C.white); text(inv.no, R, 20, { align: 'right' }); font(8.5, false, C.white); text(nice(inv.date), R, 25, { align: 'right' });
+    y = H + 6.5;
+    font(7.8, false, C.soft); text(BIZ.addr, L, y); text(BIZ.phone + ' · ' + BIZ.email + ' · ' + BIZ.web, R, y, { align: 'right' }); y += 3.8; text(BIZ.postal, L, y); y += 3.5;
     // status band
-    fill(st.k === 'paid' ? C.okbg : st.k === 'due' ? C.due : C.sand); doc.roundedRect(L, y, W, 10, 2, 2, 'F');
-    font(10.5, true, st.k === 'paid' ? C.ok : st.k === 'cancel' ? C.bad : C.ember); text(st.t, L + 4, y + 6.6); y += 18;
-    // parties
+    fill(st.k === 'paid' ? C.okbg : st.k === 'due' ? C.due : C.sand); doc.roundedRect(L, y, W, 9.5, 2, 2, 'F');
+    font(10.5, true, st.k === 'paid' ? C.ok : st.k === 'cancel' ? C.bad : C.ember); text(st.t, L + 4, y + 6.3); y += 14.5;
+    // who and what
     var top = y;
-    font(7.5, true, C.soft); text(inv.kind === 'Quote' ? 'PREPARED FOR' : 'BILLED TO', L, y); y += 6;
-    font(11.5, true); text(g.name || '', L, y); y += 5.5;
-    font(9.5, false, C.soft); if (g.email) { text(g.email, L, y); y += 5; } if (g.phone) { text(g.phone, L, y); y += 5; }
-    var yy = top; font(7.5, true, C.soft); text('YOUR STAY', 110, yy); yy += 6;
-    [['Booking', inv.ref], ['Stand', s.stand], ['Arrive', nice(s.ci, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })], ['Depart', nice(s.co, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })], ['Nights', s.nights], ['Guests', s.guests], ['Vehicles', s.vehicles]].forEach(function (r) {
-      if (r[1] === undefined || r[1] === '') return; font(8.5, false, C.soft); text(r[0], 110, yy); font(9.5, true); text(String(r[1]), 132, yy); yy += 5.2;
-    });
-    y = Math.max(y, yy) + 6;
-    // lines
-    fill(C.bark); doc.roundedRect(L, y, W, 8, 1.5, 1.5, 'F'); font(8, true, [255, 255, 255]); text('DESCRIPTION', L + 4, y + 5.3); text('AMOUNT', R - 4, y + 5.3, { align: 'right' }); y += 8;
+    font(7.5, true, C.soft); text(inv.kind === 'Quote' ? 'PREPARED FOR' : 'BILLED TO', L, y); y += 5.5;
+    font(11.5, true); text(g.name || '', L, y); y += 5.3;
+    font(9.5, false, C.soft); if (g.email) { text(g.email, L, y); y += 4.8; } if (g.phone) { text(g.phone, L, y); y += 4.8; }
+    var yy = top; font(7.5, true, C.soft); text('YOUR STAY', 108, yy); yy += 5.5;
+    stayRows(inv).forEach(function (r) { font(8.5, false, C.soft); text(r[0], 108, yy); font(9.3, true); text(String(r[1]), 128, yy); yy += 4.5; });
+    y = Math.max(y, yy) + 3.5;
+    // lines: Qty | Description | Unit price | Total
+    var xD = hasQ ? L + 16 : L + 4, xU = R - 34, dW = (hasQ ? xU - 6 : R - 30) - xD;
+    fill(C.bark); doc.roundedRect(L, y, W, 7.5, 1.5, 1.5, 'F'); font(7.8, true, C.white);
+    if (hasQ) text('QTY', L + 4, y + 5); text('DESCRIPTION', xD, y + 5); if (hasQ) text('UNIT PRICE', xU, y + 5, { align: 'right' }); text('TOTAL', R - 4, y + 5, { align: 'right' }); y += 7.5;
     inv.lines.forEach(function (l, i) {
-      font(9.5); var ls = doc.splitTextToSize(clean(l.t), W - 45), h = ls.length * 4.6 + 4; need(h);
+      font(9.3); var ls = doc.splitTextToSize(clean(l.t), dW), h = ls.length * 4.4 + 3.6; need(h);
       if (i % 2) { fill(C.sand); doc.rect(L, y, W, h, 'F'); }
-      text(ls, L + 4, y + 5.2); text(l.free ? 'Free' : (l.amt < 0 ? '-' : '') + money(Math.abs(l.amt)), R - 4, y + 5.2, { align: 'right' }); y += h;
+      if (hasQ && l.q) text(String(l.q), L + 4, y + 5); text(ls, xD, y + 5);
+      if (hasQ && l.u != null && !l.free) text(money(l.u), xU, y + 5, { align: 'right' });
+      text(l.free ? 'Free' : (l.amt < 0 ? '-' : '') + money(Math.abs(l.amt)), R - 4, y + 5, { align: 'right' }); y += h;
     });
-    doc.setDrawColor(C.line[0], C.line[1], C.line[2]); doc.setLineWidth(.3); doc.line(L, y, R, y); y += 7;
-    var tot = function (a, b, strong, col) { need(7); font(strong ? 11 : 9.5, !!strong, col); text(a, 140, y, { align: 'right' }); text(b, R - 4, y, { align: 'right' }); y += strong ? 7 : 5.8; };
-    tot('Total', money(inv.total), true);
-    if (inv.paid) tot('Paid so far', '-' + money(inv.paid));
-    if (st.k !== 'quote' && st.k !== 'cancel') tot(st.bal ? 'Balance due' : 'Balance', money(st.bal), true, st.bal ? C.ember : C.ok);
-    y += 4;
-    // how to pay
+    doc.setDrawColor(C.line[0], C.line[1], C.line[2]); doc.setLineWidth(.3); doc.line(L, y, R, y); y += 6;
+    totals(inv, st).forEach(function (r) { var strong = r[2] === 'total' || r[2] === 'due'; need(7); font(strong ? 10.8 : 9.3, strong, r[2] === 'due' ? (st.bal ? C.ember : C.ok) : C.bark); text(r[0], 150, y, { align: 'right' }); text(r[1], R - 4, y, { align: 'right' }); y += strong ? 6.5 : 5.4; });
+    y += 3;
+    // when to pay + bank details
     if (st.k === 'due' || st.k === 'quote') {
-      need(46); var bx = y;
-      fill(C.sand); doc.roundedRect(L, bx, 86, 40, 2, 2, 'F'); doc.roundedRect(108, bx, 86, 40, 2, 2, 'F');
-      font(7.5, true, C.soft); text('WHEN TO PAY', L + 4, bx + 7); text('PAY BY EFT', 112, bx + 7);
-      var ry = bx + 14; schedule(inv).forEach(function (r) { font(9.5, true); text(r[0], L + 4, ry); text(r[1], L + 82, ry, { align: 'right' }); font(8, false, C.soft); text(r[2], L + 4, ry + 4.2); ry += 11; });
-      ry = bx + 13; [['Bank', BIZ.bank], ['Account name', BIZ.accName], ['Account number', BIZ.accNo], ['Branch code', BIZ.branch], ['Account type', BIZ.accType]].forEach(function (r) { font(8.5, false, C.soft); text(r[0], 112, ry); font(9, true); text(r[1], 140, ry); ry += 4.6; });
-      fill(C.sun); doc.roundedRect(112, bx + 33, 78, 5.5, 1, 1, 'F'); font(8.5, true, [255, 255, 255]); text('Use reference ' + inv.ref, 151, bx + 36.9, { align: 'center' });
-      y = bx + 48;
+      var bh = 43; need(bh + 4); var bx = y;
+      fill(C.sand); doc.roundedRect(L, bx, 88, bh, 2, 2, 'F'); doc.roundedRect(106, bx, 90, bh, 2, 2, 'F');
+      font(7.5, true, C.soft); text('WHEN TO PAY', L + 4, bx + 6.5); text('OUR BANK DETAILS', 110, bx + 6.5);
+      var ry = bx + 13; schedule(inv).forEach(function (r) { font(9.5, true); text(r[0], L + 4, ry); text(r[1], L + 84, ry, { align: 'right' }); font(8, false, C.soft); text(r[2], L + 4, ry + 4.2); ry += 10; });
+      if (st.k === 'due') { font(7.6, false, C.soft); text(doc.splitTextToSize(clean('Paid? Press "I have paid" under Change my booking on kyleu.co.za, or upload your proof of payment at kyleu.co.za/pop.html.'), 80), L + 4, bx + 32.5); }
+      ry = bx + 11.5; bankRows().forEach(function (r) { font(8.3, false, C.soft); text(r[0], 110, ry); font(8.8, true); text(r[1], 138, ry); ry += 4; });
+      fill(C.sun); doc.roundedRect(110, bx + bh - 8.5, 82, 5.5, 1, 1, 'F'); font(8.5, true, C.white); text('Use reference ' + inv.ref, 151, bx + bh - 4.6, { align: 'center' });
+      y = bx + bh + 5;
     }
-    var para = function (t, size, col) { font(size || 8.8, false, col || C.soft); var ls = doc.splitTextToSize(clean(t), W); need(ls.length * 4.2 + 2); text(ls, L, y); y += ls.length * 4.2 + 2.5; };
-    if (inv.note) para(inv.note, 9.5, C.bark);
-    if (st.k === 'due') para('Paid? Tell us with "I have paid" on the website (under Change my booking) or upload your proof of payment at kyleu.co.za/pop.html. We check the bank and confirm.');
-    para('Cancellations are not refunded; what you paid is kept as a credit for another stay. Dinokeng Game Reserve fees are paid to the reserve, not to Kyleu.');
+    if (inv.note) { font(9.5, true); var nl = doc.splitTextToSize(clean(inv.note), W); need(nl.length * 4.4 + 3); text(nl, L, y); y += nl.length * 4.4 + 3; }
+    // please note (the camp rules from the old quote)
+    need(32); font(7.5, true, C.soft); text('PLEASE NOTE', L, y); y += 4.8;
+    notes().forEach(function (n) { font(8.4, /OWN RISK/.test(n), /OWN RISK/.test(n) ? C.bark : C.soft); var ls = doc.splitTextToSize(clean(n), W - 5); need(ls.length * 3.7); fill(C.sun); doc.circle(L + 1.6, y - 1.1, .65, 'F'); text(ls, L + 5, y); y += ls.length * 3.7 + .2; });
+    y += 2; font(8.6, true); var tl = doc.splitTextToSize(THANKS, W); need(tl.length * 4.2 + 12); text(tl, L, y); y += tl.length * 4.2 + 1;
+    font(8.6, false, C.soft); text('Kind regards, ' + BIZ.signer + ' · ' + BIZ.phone + ' · ' + BIZ.email, L, y); y += 4.5;
     // DGR CP: approved logo on a light background with clear space around it
-    need(24); y += 3;
-    if (IMG.dgr) try { doc.addImage(IMG.dgr, 'JPEG', L, y, 34, 12.8); } catch (e) {}
-    font(8.8, true); text('Kyleu is a proud DGR CP member.', L + 46, y + 4);
-    font(8.3, false, C.soft); text(doc.splitTextToSize('Guests staying at this DGR CP campsite qualify for Conservation Fee Discount Vouchers: R85 instead of R100 per adult per night. We send you one voucher code per vehicle before your stay.', W - 46).map(clean), L + 46, y + 8.5);
+    need(14);
+    if (IMG.dgr) try { doc.addImage(IMG.dgr, 'JPEG', L, y, 29, 10.9); } catch (e) {}
+    font(8.6, true); text('Kyleu is a proud DGR CP member.', L + 40, y + 3.4);
+    font(8, false, C.soft); text(doc.splitTextToSize('Guests staying at this DGR CP campsite qualify for Conservation Fee Discount Vouchers: R85 instead of R100 per adult per night. We send you one voucher code per vehicle before your stay.', W - 40).map(clean), L + 40, y + 7.4);
     // footer on every page
     var n = doc.getNumberOfPages();
-    for (var i = 1; i <= n; i++) { doc.setPage(i); doc.setDrawColor(C.line[0], C.line[1], C.line[2]); doc.line(L, 283, R, 283); font(7.3, false, C.soft); text(BIZ.name + ' · ' + BIZ.addr + ' · ' + BIZ.phone + ' · ' + BIZ.email + ' · ' + BIZ.web + (n > 1 ? ' · page ' + i + ' of ' + n : ''), 105, 288, { align: 'center' }); }
+    for (var i = 1; i <= n; i++) { doc.setPage(i); doc.setDrawColor(C.line[0], C.line[1], C.line[2]); doc.line(L, 285, R, 285); font(7, false, C.soft); text(BIZ.name + ' · Reg. ' + BIZ.reg + ' · ' + BIZ.phone + ' · ' + BIZ.email + ' · ' + BIZ.web + (n > 1 ? ' · page ' + i + ' of ' + n : ''), 105, 290, { align: 'center' }); }
   };
   K.invoicePDF = function (inv) {
     var J = window.jspdf && window.jspdf.jsPDF; if (!J) return null;
@@ -168,10 +211,6 @@
       var a = document.createElement('a'); a.href = f.url; a.download = f.name; document.body.appendChild(a); a.click(); setTimeout(function () { a.remove(); }, 1500);
       return f;
     });
-  };
-  K.openInvoicePdf = function (inv) {
-    var w = window.open('', '_blank');
-    return Promise.all([K.needPdf(), K.invoiceAssets()]).then(function () { var f = K.invoicePDF(inv); if (w) w.location = f.url; else location.href = f.url; });
   };
 
   /* ---------- "I have paid" (website) ----------

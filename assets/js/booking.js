@@ -446,8 +446,17 @@
   // the booking's invoice: same look on the website, in the email and in the admin
   function makeInvoice(ref, q, isCard, paid, cv) {
     var g = booking.g, a = g.adults + g.pens, t = today(), due = addDays(t, depDays()), fv = function (n) { var el = $('[name=' + n + ']', modal); return el ? el.value.trim() : ''; };
-    var lines = q.lines.map(function (l) { return { t: l.t.replace(/ × (\d+) × (R[\d\s,.]+)$/, ' × $1 people at $2 each'), amt: isCard ? l.c : l.v, free: !!l.free, tag: 'stay' }; })
-      .concat(q.exLines.map(function (l) { return { t: l.t, amt: isCard ? l.c : l.v, tag: l.shop ? 'shop' : 'extra' }; }));
+    var ppl = g.adults + g.pens + g.kids;
+    var lines = q.lines.map(function (l) {
+      var amt = isCard ? l.c : l.v, m = l.t.match(/^(\d+) (weekend|weekday) night/);
+      if (m) return { t: booking.stand.name + ' (Guests: ' + ppl + ') · ' + m[2] + ' night' + (+m[1] > 1 ? 's' : '') + (/pensioner/.test(l.t) ? ' (pensioner rate Mon-Thu)' : ''), q: +m[1], u: Math.round(amt / +m[1]), amt: amt, tag: 'stay' };
+      return { t: l.free ? 'Child' + (g.kids === 1 ? '' : 'ren') + ' under 12 (free)' : l.t, q: l.free ? g.kids : undefined, amt: amt, free: !!l.free, tag: 'stay' };
+    }).concat(q.exLines.map(function (l) {
+      var amt = isCard ? l.c : l.v, m = l.t.match(/^(\d+) × (.+)$/), pp = l.t.match(/^Porta potty · (\d+) night/);
+      if (m) return { t: m[2], q: +m[1], u: Math.round(amt / +m[1]), amt: amt, tag: 'shop' };
+      if (pp) return { t: 'Porta potty hire, cleaning included (per night)', q: +pp[1], u: Math.round(amt / +pp[1]), amt: amt, tag: 'extra' };
+      return { t: l.t, amt: amt, tag: l.shop ? 'shop' : 'extra' };
+    }));
     return { kind: 'Invoice', no: K.invoiceNo(ref, 'Invoice', 1), date: iso(t), ref: ref,
       guest: { name: (fv('first') + ' ' + fv('last')).trim(), email: fv('email'), phone: fv('phone') },
       stay: { stand: booking.stand.name, ci: iso(booking.ci), co: iso(booking.co), nights: q.nights, guests: a + ' adult' + (a === 1 ? '' : 's') + (g.pens ? ' (' + g.pens + ' pensioner' + (g.pens === 1 ? '' : 's') + ')' : '') + (g.kids ? ', ' + g.kids + ' child' + (g.kids === 1 ? '' : 'ren') : ''), vehicles: cv.count || 'Not sure yet' },

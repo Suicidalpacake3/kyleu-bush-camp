@@ -28,12 +28,21 @@
 - Reserve size: 21 000 ha
 
 ## Banking details
-> Printed on every invoice and quote. CHECK THESE WITH THE BANK BEFORE GOING LIVE (these are placeholders).
-- Bank: FNB
+> Printed on every invoice and quote (taken from Kyleu's Q2B quote).
+- Bank: FNB (First National Bank)
 - Account name: Kyleu Bush Camp
-- Account number: 62000000000
+- Account number: 62699453868
 - Branch code: 250655
-- Account type: Cheque
+- Account type: Current
+- SWIFT code: FIRNZAJJ
+
+## Company and stay times
+> Shown on invoices, quotes and booking emails.
+- Company registration: 2017/102130/07
+- Postal address: PO Box 1186, Faerie Glen, Pretoria, 0043
+- Check-in time: 13:00
+- Check-out time: 11:00
+- Invoices signed by: Sherri Symons
 
 ## Booking
 > "demo" = the on-site booking form shows a demo confirmation (no data sent).
