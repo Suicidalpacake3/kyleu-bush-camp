@@ -1159,3 +1159,11 @@ html:has(body.lock) { overflow: hidden; }
 .soc-acts { display: flex; gap: 4px; align-items: center; flex: none; }
 .soc-acts .ic.up { transform: rotate(90deg); } .soc-acts .ic.down { transform: rotate(90deg); }
 @media (max-width: 640px) { .soc-row { flex-wrap: wrap; } .soc-acts { width: 100%; justify-content: flex-end; } }
+
+/* email signature */
+.sig-prev { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin-bottom: 12px; overflow-x: auto; color: #2a1b12; }
+.sig-prev.sm { padding: 10px 12px; margin: 6px 0 0; transform-origin: left top; }
+.sx-sig { margin-top: 4px; }
+.sig-how { border-top: 1px solid var(--line); padding: 8px 0; }
+.sig-how summary { cursor: pointer; font-weight: 800; }
+.sig-how ol { margin: 8px 0 0; padding-left: 20px; font-size: .88rem; display: grid; gap: 4px; }

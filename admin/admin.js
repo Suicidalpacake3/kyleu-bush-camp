@@ -1624,7 +1624,8 @@
     var t = DB.threads.filter(function (x) { return x.ref === b.ref && x.auto; })[0];   // all automatic invoice emails in one conversation
     var att = [{ name: K.invoiceName(inv), type: 'application/pdf', size: 0, inv: inv.no, invRef: b.ref, at: at, via: 'Sent automatically' }];
     if (!t) { t = { id: uid('t'), subject: subject, name: guestName(b), email: b.guest.email, phone: b.guest.phone, status: 'closed', unread: false, ref: b.ref, auto: true, msgs: [] }; DB.threads.push(t); }
-    t.msgs.push({ from: 'staff', by: 'Website (automatic)', at: at, body: (t.subject !== subject ? 'Subject: ' + subject + '\n\n' : '') + body, att: att });
+    var sh = sigShared();
+    t.msgs.push({ from: 'staff', by: 'Website (automatic)', at: at, body: (t.subject !== subject ? 'Subject: ' + subject + '\n\n' : '') + body + '\n\n--\nKyleu Bush Camp\n' + sh.phone + ' (call or WhatsApp) · info@kyleu.co.za · ' + sh.web + '\nProud DGR CP Member', att: att });
   }
   function invMailBody(b, inv, updated) {
     var st = K.invoiceState(inv);
@@ -1746,7 +1747,8 @@
       '<div class="grid2"><label class="fld"><span>Email to</span><input name="to" type="email" value="' + esc(b.guest.email) + '"></label><label class="fld"><span>WhatsApp to</span><input name="wa" inputmode="tel" value="' + esc(b.guest.phone) + '"></label></div>' +
       (o.choices && o.choices.length > 1 ? '<label class="fld"><span>What are you sending?</span><select name="tpl">' + o.choices.map(function (c) { return '<option value="' + c[0] + '"' + (c[0] === o.value ? ' selected' : '') + '>' + esc(c[1]) + '</option>'; }).join('') + '</select></label>' : '') +
       '<div class="sx-tabs" data-sx-tabs></div>' +
-      '<div data-sx-msg><label class="fld"><span>Email subject</span><input name="s"></label><label class="fld"><span>Message (the same words go by email or WhatsApp; change anything you like)</span><textarea name="b" rows="11"></textarea></label></div>' +
+      '<div data-sx-msg><label class="fld"><span>Email subject</span><input name="s"></label><label class="fld"><span>Message (the same words go by email or WhatsApp; change anything you like)</span><textarea name="b" rows="11"></textarea></label>' +
+      (mySig() ? '<div class="sx-sig"><span class="muted small">Your email signature goes under the message (not on WhatsApp). Change it under Settings, Email signature.</span><div class="sig-prev sm">' + sigHTML(mySig()) + '</div></div>' : '') + '</div>' +
       '<div class="sx-doc" data-sx-doc hidden><iframe class="sx-frame" title="Document preview"></iframe><div class="row-btns"><button type="button" class="btn ghost sm" data-sx-dl>' + ic('download') + 'Download this document</button></div></div>' +
       '<div class="sx-log" data-sx-log hidden></div>' +
       '<div class="sx-acts"><button type="button" class="btn ghost" data-sx-done>Done</button><span class="sx-sp"></span><button type="button" class="btn wa" data-sx-wa>' + ic('wa') + 'Send on WhatsApp</button><button type="button" class="btn" data-sx-mail>' + ic('mail') + 'Send email</button></div></div>',
@@ -1779,7 +1781,7 @@
           if (t.closest('[data-sx-mail]')) {
             var to = fval(f, 'to'); if (!/.+@.+\..+/.test(to)) { toast('Add the email address to send to'); return; }
             var att = docs().map(function (d, i) { var fl = file(i); return { name: d.name, size: fl.blob.size, type: 'application/pdf', data: fl.data, at: nowStamp(), via: 'Sent by email' }; });
-            logEmail(b, fval(f, 's') || o.title, f.elements.b.value, att, to);
+            logEmail(b, fval(f, 's') || o.title, f.elements.b.value + (mySig() ? '\n\n--\n' + sigText(mySig()) : ''), att, to);
             sent('mail', 'Emailed to ' + to + (att.length ? ' with ' + att.map(function (a) { return a.name; }).join(', ') : ''));
             toast('Email sent to ' + esc(to) + ' (demo: nothing really leaves this browser)'); return;
           }
@@ -2504,8 +2506,64 @@
   }
 
   var SET = 'staff', LOGF = { q: '', by: '' };
+  /* =========================================================
+     Email signatures: one per staff member, in the website's style.
+     Copy it into Gmail or Outlook now; emails sent from this admin
+     carry the same signature (text version in the demo).
+     ========================================================= */
+  var SIG_NAMES = { sherri: 'Sherri Symons', devon: 'Devon Symons' };
+  var SIG_WHO = null;
+  function sigShared() { DB.settings.sigShared = DB.settings.sigShared || { phone: '060 458 4478', web: 'www.kyleu.co.za', place: 'Dinokeng Big 5 Game Reserve, 50 km from Pretoria' }; return DB.settings.sigShared; }
+  function sigData(id) {
+    DB.settings.sigs = DB.settings.sigs || {};
+    var st = STAFF.filter(function (x) { return x.id === id; })[0] || STAFF[0];
+    if (!DB.settings.sigs[st.id]) DB.settings.sigs[st.id] = { name: SIG_NAMES[st.id] || st.name, title: st.role, mobile: '', email: 'info@kyleu.co.za', photo: true, dgr: true, social: true };
+    return DB.settings.sigs[st.id];
+  }
+  function siteBase() { return new URL('../', location.href).href; }
+  function telLink(n) { var d = String(n || '').replace(/[^\d+]/g, ''); return d[0] === '0' ? '+27' + d.slice(1) : d; }
+  // the signature as email-safe HTML: tables and inline styles, pictures from the website
+  function sigHTML(d) {
+    var sh = sigShared(), base = siteBase(), so = (DB.social || {}), soc = d.social ? [['Facebook', so.facebook], ['Instagram', so.instagram], ['TikTok', so.tiktok]].filter(function (x) { return x[1]; }) : [];
+    var f = 'font-family:Arial,Helvetica,sans-serif;', a = 'color:#2a1b12;text-decoration:none;', lab = 'color:#8a7a68;padding:0 10px 0 0;font-size:12px;';
+    var row = function (l, v, href) { return '<tr><td style="' + f + lab + '">' + l + '</td><td style="' + f + 'font-size:13px;color:#2a1b12;padding:1px 0;">' + (href ? '<a href="' + esc(href) + '" style="' + a + '">' + esc(v) + '</a>' : esc(v)) + '</td></tr>'; };
+    return '<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;' + f + 'color:#2a1b12;max-width:520px;"><tr>' +
+      (d.photo ? '<td valign="top" style="padding:0 16px 0 0;"><a href="https://' + esc(sh.web.replace(/^https?:\/\//, '')) + '" style="text-decoration:none;"><img src="' + base + 'assets/img/email/sign-photo.jpg" width="104" height="130" alt="Kyleu Bush Camp" style="display:block;border:0;border-radius:10px;"></a></td>' : '') +
+      '<td valign="top" style="border-left:3px solid #e8731c;padding:0 0 0 16px;">' +
+      '<div style="font-family:Georgia,\'Times New Roman\',serif;font-size:21px;font-weight:bold;color:#2a1b12;line-height:1.2;">' + esc(d.name) + '</div>' +
+      '<div style="' + f + 'font-size:11px;font-weight:bold;letter-spacing:1.4px;text-transform:uppercase;color:#b8461a;padding:3px 0 9px;">' + esc(d.title ? d.title + ' · ' : '') + 'Kyleu Bush Camp</div>' +
+      '<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">' +
+      row('Phone', sh.phone + ' (call or WhatsApp)', 'tel:' + telLink(sh.phone)) + (d.mobile ? row('Mobile', d.mobile, 'tel:' + telLink(d.mobile)) : '') +
+      row('Email', d.email, 'mailto:' + d.email) + row('Web', sh.web, 'https://' + sh.web.replace(/^https?:\/\//, '')) + '</table>' +
+      '<div style="' + f + 'font-size:12px;color:#8a7a68;padding:7px 0 0;">' + esc(sh.place) + '</div>' +
+      (soc.length ? '<div style="' + f + 'font-size:12px;padding:6px 0 0;">' + soc.map(function (x) { return '<a href="' + esc(x[1]) + '" style="color:#b8461a;font-weight:bold;text-decoration:none;">' + x[0] + '</a>'; }).join(' &nbsp;·&nbsp; ') + '</div>' : '') +
+      '</td></tr>' +
+      (d.dgr ? '<tr><td colspan="' + (d.photo ? 2 : 1) + '" style="padding:12px 0 0;"><table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;"><tr><td style="padding:4px 12px;background:#ffffff;"><img src="' + base + 'assets/img/email/dgr-cp.png" width="80" height="30" alt="DGR CP" style="display:block;border:0;"></td><td style="' + f + 'font-size:12px;color:#5c4d3e;padding:0 0 0 14px;"><b style="color:#2a1b12;">Proud DGR CP Member</b><br>Guests qualify for Dinokeng Conservation Fee Discount Vouchers</td></tr></table></td></tr>' : '') +
+      '</table>';
+  }
+  // the same signature as plain text (WhatsApp, plain emails, and the demo's email log)
+  function sigText(d) { var sh = sigShared(); return d.name + '\n' + (d.title ? d.title + ', ' : '') + 'Kyleu Bush Camp\n' + sh.phone + ' (call or WhatsApp)' + (d.mobile ? ' · ' + d.mobile : '') + ' · ' + d.email + ' · ' + sh.web + (d.dgr ? '\nProud DGR CP Member' : ''); }
+  function mySig() { return ME ? sigData(ME.id) : null; }
+  function sigPage() {
+    var who = SIG_WHO || (ME ? ME.id : STAFF[0].id), d = sigData(who), sh = sigShared(), local = /localhost|127\.0\.0\.1/.test(location.hostname);
+    var fld = function (k, l, v, ph, shared) { return '<label class="fld"><span>' + l + '</span><input data-sig="' + (shared ? 'shared:' : '') + k + '" value="' + esc(v || '') + '" placeholder="' + esc(ph || '') + '"></label>'; };
+    var chk = function (k, l) { return '<label class="check"><input type="checkbox" data-sig-chk="' + k + '"' + (d[k] ? ' checked' : '') + '><span>' + l + '</span></label>'; };
+    return '<div class="cols"><section class="card"><header class="card-h"><h3>Email signature</h3></header>' +
+      '<label class="fld"><span>Whose signature?</span><select data-sig-who>' + STAFF.map(function (x) { return '<option value="' + x.id + '"' + (x.id === who ? ' selected' : '') + '>' + esc(sigData(x.id).name) + ' (' + esc(x.role) + ')</option>'; }).join('') + '</select></label>' +
+      '<div class="grid2">' + fld('name', 'Full name', d.name) + fld('title', 'Job title', d.title, 'e.g. Owner') + '</div>' +
+      '<div class="grid2">' + fld('email', 'Email', d.email) + fld('mobile', 'Own mobile (optional)', d.mobile, 'e.g. 082 123 4567') + '</div>' +
+      chk('photo', 'Show the photo of the entrance sign') + chk('dgr', 'Show "Proud DGR CP Member" (Dinokeng asks partners to use it in email signatures)') + chk('social', 'Show the Facebook and Instagram links (set under Social media)') +
+      '<h5>For everyone</h5><div class="grid2">' + fld('phone', 'Camp phone', sh.phone, '', true) + fld('web', 'Website', sh.web, '', true) + '</div>' + fld('place', 'Line under the details', sh.place, '', true) +
+      '</section><section class="card"><header class="card-h"><h3>Preview</h3></header><div class="sig-prev" data-sig-prev>' + sigHTML(d) + '</div>' +
+      '<div class="row-btns"><button type="button" class="btn" data-act="sig-copy">' + ic('note') + 'Copy signature</button><button type="button" class="btn ghost" data-act="sig-code">' + ic('download') + 'Download for Outlook</button><button type="button" class="btn ghost" data-act="sig-html">Copy HTML code</button></div>' +
+      (local ? '<p class="callout warn cflex">' + ic('alert') + '<span>This admin is opened from your own computer, so the pictures point there and would not show for other people. Copy the signature from the online admin instead.</span></p>' : '<p class="hint">' + ic('info') + ' The pictures come from ' + esc(siteBase()) + '. When the new website moves to kyleu.co.za, copy the signature again.</p>') +
+      '<h5>How to add it</h5><details class="sig-how"><summary>Gmail (computer)</summary><ol><li>Press <b>Copy signature</b> above.</li><li>In Gmail: the gear, <b>See all settings</b>, <b>General</b>, scroll to <b>Signature</b>, <b>Create new</b>.</li><li>Click in the box and paste (Ctrl+V). Scroll down and press <b>Save changes</b>.</li></ol></details>' +
+      '<details class="sig-how"><summary>Outlook (computer or outlook.com)</summary><ol><li>Press <b>Copy signature</b> above.</li><li>New Outlook or outlook.com: the gear, <b>Accounts</b> (or <b>Mail</b>), <b>Signatures</b>. Classic Outlook: <b>File</b>, <b>Options</b>, <b>Mail</b>, <b>Signatures</b>.</li><li>Make a new signature, paste (Ctrl+V), choose it for new emails and replies, and save.</li><li>If Outlook changes the layout, use <b>Download for Outlook</b> and open that file; then copy from there.</li></ol></details>' +
+      '<details class="sig-how"><summary>iPhone, Android and Apple Mail</summary><ol><li>Phone mail apps only keep plain text signatures well. Use: ' + esc(d.name) + ', Kyleu Bush Camp, ' + esc(sh.phone) + '.</li><li>Apple Mail on a Mac: <b>Mail</b>, <b>Settings</b>, <b>Signatures</b>, add one, paste, and untick "Always match my default message font".</li></ol></details>' +
+      '</section></div>';
+  }
   function vSettings() {
-    var tabs = [['staff', 'Staff & access'], ['payments', 'Payments'], ['camp', 'Check-in & Dinokeng'], ['maps', 'Maps'], ['emails', 'Email templates'], ['data', 'Data & privacy']];
+    var tabs = [['staff', 'Staff & access'], ['payments', 'Payments'], ['camp', 'Check-in & Dinokeng'], ['maps', 'Maps'], ['emails', 'Email templates'], ['sig', 'Email signature'], ['data', 'Data & privacy']];
     var body = '';
     if (SET === 'staff') body = '<section class="card flush"><table class="tbl"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Last seen</th></tr></thead><tbody>' + STAFF.map(function (s, i) { return '<tr><td data-l="Name"><b>' + s.name + '</b>' + (ME.id === s.id ? ' <span class="tag ok">You</span>' : '') + '</td><td data-l="Email">' + s.email + '</td><td data-l="Role"><select aria-label="Role for ' + s.name + '"' + (ME.role !== 'Owner' ? ' disabled' : '') + '>' + Object.keys(ROLES).map(function (r) { return '<option' + (r === s.role ? ' selected' : '') + '>' + r + '</option>'; }).join('') + '</select></td><td data-l="Last seen">' + (ME.id === s.id ? 'Now' : ['Today 07:12', 'Yesterday', '3 days ago', 'Today 09:40'][i]) + '</td></tr>'; }).join('') + '</tbody></table></section>' +
       '<section class="card"><header class="card-h"><h3>What each role can see</h3></header><table class="tbl perm"><thead><tr><th>Section</th>' + Object.keys(ROLES).map(function (r) { return '<th>' + r + '</th>'; }).join('') + '</tr></thead><tbody>' + NAV.map(function (n) { return '<tr><td>' + n.t + '</td>' + Object.keys(ROLES).map(function (r) { return '<td>' + (ROLES[r].indexOf(n.id) >= 0 ? ic('check', 'ok-t') : '<span class="muted">No</span>') + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table><button class="btn ghost" data-act="invite">' + ic('plus') + 'Invite a staff member</button></section>';
@@ -2514,6 +2572,7 @@
       '<section class="card"><header class="card-h"><h3>EFT bank details</h3><span class="muted small">Printed on invoices</span></header><div class="grid2"><label class="fld"><span>Bank</span><input value="FNB"></label><label class="fld"><span>Account name</span><input value="Kyleu Bush Camp"></label></div><div class="grid2"><label class="fld"><span>Account number</span><input value="62000000000"></label><label class="fld"><span>Branch code</span><input value="250655"></label></div><p class="muted small">Demo details. Guests use their booking reference (e.g. KY26-4F2K) so payments are easy to match.</p></section></div>';
     if (SET === 'emails') body = '<div class="tpl-grid">' + Object.keys(TEMPLATES).map(function (k) { var t = TEMPLATES[k]; return '<section class="card"><header class="card-h"><h3>' + t.t + '</h3><span class="muted small">' + ({ confirm: 'Sent when a booking is made', eft: 'Sent 3 days after an unpaid EFT invoice', balance: 'Sent 10 days before arrival', arrival: 'Sent 3 days before arrival', thanks: 'Sent the day after departure' })[k] + '</span></header><p class="small"><b>' + esc(t.s) + '</b></p><pre class="tpl">' + esc(t.b({})) + '</pre></section>'; }).join('') + '</div><p class="demo-note">' + ic('info') + 'Words in {curly brackets} are filled in for each guest. In the live version these send automatically.</p>';
     if (SET === 'maps') body = '<p class="muted small me-intro">Move campsites, text and buildings, draw roads and footpaths, add new campsites, and change the game drive route and story of the "A day at Kyleu" scroll map. Press Save in the editor when you are done.</p><div class="me-wrap"><iframe class="me-frame" src="map-editor.html" title="Map editor"></iframe></div><div class="row-btns"><a class="btn ghost sm" href="map-editor.html" target="_blank" rel="noopener">' + ic('ext') + 'Open the editor full screen</a></div><p class="demo-note">' + ic('info') + 'Demo: Save updates the website maps in this browser. For the live site, press "Download map file" in the editor and replace assets/js/campmap-layout.js with it (or the live version saves it on the server).</p>';
+    if (SET === 'sig') body = sigPage();
     if (SET === 'camp') body = '<div class="cols"><section class="card"><header class="card-h"><h3>Indemnity form</h3><button class="btn ghost sm" data-act="ind-print" data-ref="">' + ic('note') + 'Print a blank form</button></header><p class="muted small">Every adult signs it when their vehicle checks in, and staff tick it off per vehicle. The printed form has the booking and vehicle filled in.</p><label class="fld"><span>Wording</span><textarea data-indemnity rows="11">' + esc(indText()) + '</textarea></label><p class="hint">' + ic('alert') + ' This is example wording. Replace it with Kyleu\'s own indemnity, checked by a lawyer.</p></section>' +
       '<section class="card"><header class="card-h"><h3>Dinokeng discount vouchers (DGR CP)</h3></header><p class="small">Kyleu is a proud DGR CP member, allowed to issue Conservation Fee Discount Vouchers. For each booking, staff make one code per vehicle on the Dinokeng partner site, paste the codes on the booking and send them to the client from here, by WhatsApp or email. Dinokeng does not send the codes.</p><p class="small">The guest enters the code when they buy conservation fees on Dinokeng\'s permit site (dinokeng.plnktn.io) and pays the partner rate: R85 instead of R100 per adult per night. Children, pensioners and international guests pay the same either way. Each vehicle that uses the self-drive route also needs a Self Drive Permit, R250 once off.</p><label class="fld"><span>Link to Dinokeng\'s partner site</span><input data-dgrlink value="' + esc(dgrLink()) + '" placeholder="https://"></label><p class="hint">Paste the link you use to request codes. The booking panel opens it for you.</p></section></div>';
     if (SET === 'data') body = '<div class="cols"><section class="card"><header class="card-h"><h3>Privacy (POPIA)</h3></header><p class="small">Guest details are only used to manage bookings. Guests can ask for their details to be removed; deleting a guest keeps the booking for tax records but removes their contact details.</p><p class="small">Only staff with an account can open this admin, and every change is logged.</p></section>' +
@@ -2695,6 +2754,30 @@
     if (act === 'dgr') return openBooking(ref);
     if (act === 'inv-new') return actInvNew(ref);
     if (act === 'soc-add') return actSocPost(null);
+    if (act === 'sig-copy' || act === 'sig-html' || act === 'sig-code') {
+      var sgd = sigData(SIG_WHO || ME.id), html = sigHTML(sgd);
+      if (act === 'sig-code') { downloadFile(new Blob(['<!doctype html><html><head><meta charset="utf-8"><title>Email signature ' + esc(sgd.name) + '</title></head><body>' + html + '</body></html>'], { type: 'text/html' }), 'Kyleu signature ' + sgd.name + '.htm'); toast('Downloaded. Open it, select everything (Ctrl+A), copy, and paste into Outlook.'); return; }
+      var plain = sigText(sgd);
+      var done_ = function (ok) { toast(ok ? (act === 'sig-copy' ? 'Signature copied. Paste it into Gmail or Outlook.' : 'HTML code copied') : 'Could not copy. Select the preview and copy it by hand.'); };
+      // older way, works in more browsers: select the preview (or the code) and copy it
+      var bySelect = function () {
+        try {
+          var sel = getSelection(), r = document.createRange(), tmp = null;
+          if (act === 'sig-copy') r.selectNode($('[data-sig-prev]'));
+          else { tmp = document.createElement('textarea'); tmp.value = html; tmp.style.cssText = 'position:fixed;left:-9999px'; document.body.appendChild(tmp); tmp.select(); }
+          if (!tmp) { sel.removeAllRanges(); sel.addRange(r); }
+          var ok = document.execCommand('copy'); sel.removeAllRanges(); if (tmp) tmp.remove(); done_(ok);
+        } catch (e) { done_(false); }
+      };
+      try {
+        var settled = false, ok_ = function () { settled = true; done_(true); }, no_ = function () { if (!settled) { settled = true; bySelect(); } };
+        setTimeout(no_, 1500);   // some browsers never answer: fall back to the older way
+        if (act === 'sig-copy' && window.ClipboardItem && navigator.clipboard) navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([plain], { type: 'text/plain' }) })]).then(ok_, no_);
+        else if (act === 'sig-html' && navigator.clipboard) navigator.clipboard.writeText(html).then(ok_, no_);
+        else no_();
+      } catch (e) { bySelect(); }
+      return;
+    }
     if (act === 'soc-edit') return actSocPost(ref);
     if (/^soc-(show|up|down|del)$/.test(act)) {
       var so = socDB(), sx = so.posts.filter(function (x) { return x.id === ref; })[0], si = so.posts.indexOf(sx); if (!sx) return;
@@ -2784,6 +2867,7 @@
     if (t.matches('[data-inq],[data-payq],[data-shopq],[data-prodq]')) { var key = t.matches('[data-inq]') ? 'inq' : t.matches('[data-payq]') ? 'payq' : t.matches('[data-shopq]') ? 'shopq' : 'prodq'; if (key === 'inq') IN.q = t.value; if (key === 'payq') PAYF.q = t.value; if (key === 'shopq') SHOP.q = t.value; if (key === 'prodq') PROD.q = t.value; var ps = t.selectionStart; render(); var ni = $('[data-' + key + ']'); if (ni) { ni.focus(); ni.setSelectionRange(ps, ps); } return; }
     if (t.matches('[data-prod-price]')) { var pv = parseFloat(t.value.replace(/[^\d.]/g, '')), pcard = $('[data-prod-card]'); if (pcard) pcard.value = isNaN(pv) ? '' : money(toCard(pv)); return; }
     if (t.matches('[data-dgr-code]')) { var cc = carOf(t.dataset.dgrCode); if (cc.c && t.value.trim().toUpperCase() !== (cc.c.dgr || '')) { var tk = $('[data-dgr-tick="' + t.dataset.dgrCode + '"]'); if (tk && t.value.trim()) tk.checked = true; } return; }
+    if (t.matches('[data-sig]')) { var sk = t.dataset.sig, sd = sk.indexOf('shared:') === 0 ? sigShared() : sigData(SIG_WHO || ME.id); sd[sk.replace('shared:', '')] = t.value.trim(); save(); var pv = $('[data-sig-prev]'); if (pv) pv.innerHTML = sigHTML(sigData(SIG_WHO || ME.id)); return; }
     if (t.matches('[data-soc]')) { socDB()[t.dataset.soc] = t.value.trim(); socSave(); return; }
     if (t.matches('[data-indemnity]')) { DB.settings.indemnity = t.value; save(); return; }
     if (t.matches('[data-dgrlink]')) { DB.settings.dgrLink = t.value.trim(); save(); return; }
@@ -2805,6 +2889,8 @@
   }
   function onChange(e) {
     var t = e.target;
+    if (t.matches('[data-sig-who]')) { SIG_WHO = t.value; render(); return; }
+    if (t.matches('[data-sig-chk]')) { sigData(SIG_WHO || ME.id)[t.dataset.sigChk] = t.checked; save(); render(); return; }
     if (t.matches('[data-soc-chk]')) { socDB()[t.dataset.socChk] = t.checked; socSave(); render(); return; }
     if (t.matches('[data-soc-sel]')) { socDB()[t.dataset.socSel] = +t.value; socSave(); return; }
     if (t.matches('[data-soc="igFeed"],[data-soc="facebook"]')) { render(); return; }
