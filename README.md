@@ -40,11 +40,14 @@ All the everyday content lives in the **`content`** folder as simple text files.
 | **Any price or fee** (camping rates, Dinokeng fees, game drives, wood, ice…) | `content/prices.md` |
 | **Stands**: add a new stand, change details, hide one, update photos | `content/stands.md` (photos go in `assets/img/stands/<stand folder>/`) |
 | **Blog posts / camp news** | `content/blog.md` (newest at the top; a template is at the bottom) |
+| **News from Dinokeng** (Bush Telegraph, magazine, maps) | `content/dinokeng-updates.md` (PDFs in `assets/docs/dinokeng/`, covers in `assets/img/dinokeng/`), or in the admin under Website > Dinokeng updates |
 | **Phone, email, WhatsApp, links** | `content/settings.md` |
 
 Each file has instructions at the top. Lines starting with `>` are notes and don't show on the site.
 
 **The maps:** the camp map and the "A day at Kyleu" scroll map are edited in the admin under **Settings > Maps**. Staff can move campsites, text and buildings, draw roads and footpaths, add new campsites, and change the game drive route and the scroll map's story. In the demo, "Save to website" updates the maps in that browser. To publish for everyone, press "Download map file" and replace `assets/js/campmap-layout.js` with the downloaded file (the live version can save it on the server instead).
+
+**News from Dinokeng:** the Dinokeng page has a "News from the reserve" section: the newest item featured (cover, kind and date, heading, a few sentences, Read it / Download), the rest in a grid with tabs per kind (Bush Telegraph, Magazine, Dinokeng news), and maps and guides in their own row. Every item credits Dinokeng. Staff add, change, hide or pin items in the admin (Website > Dinokeng updates): upload the PDF (the cover is made from its first page) or paste a link, write a heading and a short announcement. Demo: changes and uploads stay in that browser; the live version saves them on the server. Ask Dinokeng before posting newsletters meant only for partners.
 
 **Email signatures:** in the admin under **Settings > Email signature**, each staff member's signature (name, job title, own mobile, email; camp phone, website and the line underneath are shared) in the website's style, with the Kyleu logo and "Proud DGR CP Member" (the DGR Certified Partner logo is loaded from Dinokeng's own website, dinokengreserve.co.za). **Copy signature** pastes into Gmail or Outlook (step-by-step help is on the page), **Download for Outlook** gives an .htm file. The Kyleu logo loads from the website (`assets/img/email/`), so copy it from the online admin, and again once the site moves to kyleu.co.za. Emails sent from the admin end with the sender's signature; the website's automatic emails are signed by the camp.
 

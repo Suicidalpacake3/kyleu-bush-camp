@@ -29,6 +29,44 @@
       }).catch(function () {});
     });
 
+    /* ---------- Dinokeng page: news from the reserve (content/dinokeng-updates.md + admin) ----------
+       The newest item is featured, the rest in a grid with filter tabs, maps and guides in their own row. */
+    $$('[data-dgr-updates]').forEach(function (el) {
+      var esc = K.esc, isMap = function (it) { return /map|guide/i.test(it.type); };
+      var fdate = function (d) { return d ? new Date(d + 'T12:00:00').toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' }) : ''; };
+      var btns = function (it, big) {
+        var b = [];
+        if (it.link) b.push('<a class="btn' + (big ? '' : ' btn-sm') + '" href="' + esc(it.link) + '" target="_blank" rel="noopener">' + esc(it.button || 'Open') + ' <svg><use href="#i-arrow"/></svg></a>');
+        if (it.file) b.push('<a class="btn' + (it.link ? ' btn-ghost' : '') + (big ? '' : ' btn-sm') + '" href="' + esc(it.file) + '" target="_blank" rel="noopener"><svg><use href="#i-doc"/></svg>' + (it.link ? 'Poster (PDF)' : isMap(it) ? 'Open the map' : 'Read it') + (it.size ? ' <small>' + esc(it.size) + '</small>' : '') + '</a>');
+        if (it.file && big) b.push('<a class="dgr-dl" href="' + esc(it.file) + '" download>Download</a>');
+        return b.join('');
+      };
+      var openUrl = function (it) { return it.link || it.file || '#'; };
+      var cover = function (it, cls) { return it.image ? '<a class="' + cls + '" href="' + esc(openUrl(it)) + '" target="_blank" rel="noopener" tabindex="-1" aria-hidden="true"><img src="' + esc(it.image) + '" alt="" loading="lazy"></a>' : '<span class="' + cls + ' none"><svg><use href="#i-news"/></svg></span>'; };
+      var label = function (it) { return '<span class="dgr-lab">' + esc(it.type) + (it.date && !isMap(it) ? ' · ' + fdate(it.date) : '') + '</span>'; };
+      var para = function (t) { return esc(t || '').split(/\n\s*\n/).map(function (x) { return '<p>' + x.trim().replace(/\n/g, '<br>') + '</p>'; }).join(''); };
+      K.dgrUpdates().then(function (all) {
+        all = all.filter(function (it) { return !it.hidden && it.title; });
+        var news = all.filter(function (it) { return !isMap(it); }), maps = all.filter(isMap), filter = '', more = false;
+        if (!all.length) { el.innerHTML = '<p class="muted">News from the reserve will appear here.</p>'; return; }
+        var types = []; news.forEach(function (it) { if (types.indexOf(it.type) < 0) types.push(it.type); });
+        function draw() {
+          var list = news.filter(function (it) { return !filter || it.type === filter; }), feat = list[0], rest = list.slice(1), shown = more ? rest : rest.slice(0, 6);
+          el.innerHTML = (types.length > 1 ? '<div class="dgr-tabs" role="tablist" aria-label="Show">' + [''].concat(types).map(function (t) { return '<button type="button" role="tab" aria-selected="' + (t === filter) + '" class="' + (t === filter ? 'on' : '') + '" data-dgr-f="' + esc(t) + '">' + esc(t || 'All') + '</button>'; }).join('') + '</div>' : '') +
+            (feat ? '<article class="dgr-feat">' + cover(feat, 'dgr-cover') + '<div class="dgr-body">' + label(feat) + '<h3>' + esc(feat.title) + '</h3>' + para(feat.text) + '<div class="dgr-acts">' + btns(feat, true) + '</div></div></article>' : '') +
+            (shown.length ? '<div class="dgr-grid">' + shown.map(function (it) { return '<article class="dgr-card">' + cover(it, 'dgr-thumb') + '<div class="dgr-body">' + label(it) + '<h4>' + esc(it.title) + '</h4><p>' + esc((it.text || '').split(/\n\s*\n/)[0]) + '</p><div class="dgr-acts">' + btns(it) + '</div></div></article>'; }).join('') + '</div>' : '') +
+            (rest.length > 6 && !more ? '<p class="center"><button type="button" class="btn btn-ghost" data-dgr-more>Show older (' + (rest.length - 6) + ')</button></p>' : '') +
+            (maps.length ? '<h3 class="dgr-maps-h"><svg><use href="#i-map"/></svg>Maps &amp; guides</h3><div class="dgr-maps">' + maps.map(function (it) { return '<article class="dgr-card map">' + cover(it, 'dgr-thumb') + '<div class="dgr-body"><h4>' + esc(it.title) + '</h4><p>' + esc((it.text || '').split(/\n\s*\n/)[0]) + '</p><div class="dgr-acts">' + btns(it) + '</div></div></article>'; }).join('') + '</div>' : '') +
+            '<p class="dgr-credit">Published by Dinokeng Game Reserve and shared by Kyleu, a proud DGR CP member. More on <a href="https://www.dinokengreserve.co.za" target="_blank" rel="noopener">dinokengreserve.co.za</a>.</p>';
+        }
+        el.addEventListener('click', function (e) {
+          var f = e.target.closest('[data-dgr-f]'); if (f) { filter = f.dataset.dgrF; more = false; draw(); return; }
+          if (e.target.closest('[data-dgr-more]')) { more = true; draw(); }
+        });
+        draw();
+      }).catch(function () { el.innerHTML = '<p class="muted">News from the reserve could not load right now.</p>'; });
+    });
+
     /* ---------- social media: live Instagram and Facebook, and hand-picked posts ----------
        Set on the admin's Social media page (falls back to content/settings.md). */
     $$('[data-guest-stories]').forEach(function (el) {

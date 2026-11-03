@@ -429,9 +429,9 @@
     { id: 'leuan', name: 'Leuan', role: 'Front desk', email: 'leuan@kyleu.co.za' }
   ];
   var ROLES = {
-    Owner: ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'rates', 'settings', 'news', 'social'],
-    Manager: ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'news', 'social'],
-    'Front desk': ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'shop', 'drives', 'news', 'social']
+    Owner: ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'rates', 'settings', 'news', 'dgrnews', 'social'],
+    Manager: ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'news', 'dgrnews', 'social'],
+    'Front desk': ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'shop', 'drives', 'news', 'dgrnews', 'social']
   };
   var NAV = [
     { id: 'dashboard', t: 'Dashboard', i: 'home', g: '' },
@@ -450,6 +450,7 @@
     { id: 'rates', t: 'Rates & fees', i: 'tag', g: 'Setup' },
     { id: 'settings', t: 'Settings', i: 'cog', g: 'Setup' },
     { id: 'news', t: 'Camp news', i: 'note', g: 'Website' },
+    { id: 'dgrnews', t: 'Dinokeng updates', i: 'news', g: 'Website' },
     { id: 'social', t: 'Social media', i: 'image', g: 'Website' }
   ];
   function can(view) { return ME && ROLES[ME.role].indexOf(view) >= 0; }
@@ -975,6 +976,85 @@
       '<div class="card flush"><table class="tbl"><thead><tr><th>Post</th><th>Date</th><th>Tags</th><th>Status</th></tr></thead><tbody>' +
       (ps.length ? ps.map(function (p) { return '<tr data-post="' + esc(p.key) + '" tabindex="0"><td data-l="Post"><span class="post-row">' + (p.image ? '<img src="' + esc(imgSrc(p.image)) + '" alt="">' : '<span class="post-noimg">' + ic('image') + '</span>') + '<span><b>' + esc(p.title) + '</b><small>' + esc(p.summary || '') + '</small></span></span></td><td data-l="Date" data-s="' + esc(p.date) + '">' + fd(p.date, { day: 'numeric', month: 'short', year: 'numeric' }) + '</td><td data-l="Tags">' + ((p.tags || []).map(function (t) { return '<span class="tag">' + esc(t) + '</span>'; }).join('') || '<span class="muted">None</span>') + '</td><td data-l="Status">' + pill(postState(p)) + '</td></tr>'; }).join('') : '<tr><td colspan="4" class="empty">No posts yet.</td></tr>') + '</tbody></table></div>' +
       '<p class="demo-note">' + ic('info') + 'Demo: posts you publish here show on the website\'s news page in this browser. In the live version they are saved on the server (or in WordPress), so every visitor sees them.</p>';
+  }
+  /* =========================================================
+     Dinokeng updates: the Bush Telegraph, the magazine, Dinokeng news
+     and maps, shown on the Dinokeng page under "News from the reserve".
+     The ones in content/dinokeng-updates.md can be changed or hidden here;
+     new ones are added here. Demo: kept in this browser ("kyleu-web-dgr"),
+     uploaded PDFs and covers in the browser's file store. Live: the server.
+     ========================================================= */
+  var DGRK = 'kyleu-web-dgr', DGRMD = null, DGRLOAD = false, DGR_TYPES = ['Bush Telegraph', 'Magazine', 'Dinokeng news', 'Map or guide'];
+  function dgrDB() { DB.dgr = DB.dgr || { items: [], over: {} }; DB.dgr.over = DB.dgr.over || {}; DB.dgr.items = DB.dgr.items || []; return DB.dgr; }
+  function dgrPush() { save(); try { localStorage.setItem(DGRK, JSON.stringify(dgrDB())); } catch (e) { toast('This browser is out of space.'); } }
+  function dgrLoad() { if (DGRLOAD) return; DGRLOAD = true; K.dgrFile().then(function (l) { DGRMD = l; }).catch(function () { DGRMD = []; }).then(function () { if (route() === 'dgrnews') render(); }); }
+  function dgrAll() {
+    var X = dgrDB();
+    return (DGRMD || []).map(function (it) { return Object.assign({}, it, X.over[it.slug] || {}, { key: 'f:' + it.slug }); })
+      .concat(X.items.map(function (it) { return Object.assign({ src: 'admin' }, it, { key: 'a:' + it.id }); }))
+      .sort(function (a, b) { return (!!b.pinned - !!a.pinned) || (a.date < b.date ? 1 : -1); });
+  }
+  function dgrGet(key) { return dgrAll().filter(function (x) { return x.key === key; })[0]; }
+  function mbSize(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
+  // the cover of a PDF: its first page, drawn with pdf.js
+  var PDFJS = null;
+  function pdfCover(file) {
+    if (!PDFJS) PDFJS = new Promise(function (ok, no) { var sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'; sc.onload = function () { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; ok(window.pdfjsLib); }; sc.onerror = no; document.head.appendChild(sc); });
+    return PDFJS.then(function (lib) { return file.arrayBuffer().then(function (buf) { return lib.getDocument({ data: buf }).promise; }); }).then(function (pdf) { return pdf.getPage(1); }).then(function (pg) {
+      var v1 = pg.getViewport({ scale: 1 }), vp = pg.getViewport({ scale: 720 / Math.max(v1.width, v1.height) }), c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+      var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+      return pg.render({ canvasContext: x, viewport: vp, intent: 'print' }).promise.then(function () { return new Promise(function (ok) { c.toBlob(ok, 'image/jpeg', .82); }); });
+    });
+  }
+  function dgrThumbs() {   // covers kept in the browser's file store
+    $$('[data-dgr-cover]').forEach(function (im) { K.files.get(im.dataset.dgrCover).then(function (b) { if (b) im.src = URL.createObjectURL(b); }); });
+  }
+  function vDgr() {
+    dgrLoad(); setTimeout(dgrThumbs, 0);
+    var all = dgrAll(), shown = all.filter(function (x) { return !x.hidden; });
+    return '<div class="page-h"><div><h1>Dinokeng updates</h1><p class="muted">The Bush Telegraph, the Dinokeng magazine, Dinokeng news and maps, shown on the Dinokeng page under "News from the reserve". The newest one is featured at the top, maps and guides get their own row, and every item credits Dinokeng.</p></div><div class="ph-act"><a class="btn ghost" href="../dinokeng.html#reserve-news" target="_blank" rel="noopener">' + ic('ext') + 'View on the website</a><button class="btn" data-act="dgr-new">' + ic('plus') + 'Add an update</button></div></div>' +
+      '<section class="card"><header class="card-h"><h3>On the website</h3><span class="count">' + shown.length + ' shown</span></header>' +
+      (DGRMD === null ? '<p class="empty">Loading…</p>' : all.length ? '<div class="list">' + all.map(function (x) {
+        var th = x.coverKey ? '<img data-dgr-cover="' + esc(x.coverKey) + '" alt="">' : x.image ? '<img src="' + esc(imgSrc(x.image)) + '" alt="">' : ic('news');
+        return '<button type="button" class="brow dgr-row' + (x.hidden ? ' off' : '') + '" data-act="dgr-edit" data-ref="' + esc(x.key) + '"><span class="dgr-th">' + th + '</span><span class="brow-g"><b>' + esc(x.title) + '</b><small>' + esc(x.type) + (x.date ? ' · ' + fd(x.date) : '') + (x.file || x.fileKey ? ' · PDF' + (x.size ? ' ' + esc(x.size) : '') : '') + (x.link ? ' · link' : '') + '</small></span>' +
+          (x.pinned ? '<span class="pill info">Shown first</span>' : '') + (x.hidden ? '<span class="pill muted">Hidden</span>' : '<span class="pill ok">Shown</span>') + ic('chev-r') + '</button>';
+      }).join('') + '</div>' : '<p class="empty">Nothing yet. Press Add an update.</p>') + '</section>' +
+      '<p class="demo-note">' + ic('info') + 'How it looks on the website: a cover (made from the PDF\'s first page if you do not add one), the kind and date, your heading and a few sentences, and buttons to read or download it. Demo: changes and uploads stay in this browser. In the live version they are saved on the server, so every visitor sees them. Ask Dinokeng before posting newsletters that were only meant for partners.</p>';
+  }
+  function actDgr(key) {
+    var X = dgrDB(), it = key ? dgrGet(key) : null, isFile = it && it.src === 'file', d = it || { type: 'Bush Telegraph', title: '', date: TODAY, text: '', link: '', button: '', pinned: false, hidden: false };
+    modal(it ? 'Edit update' : 'Add an update',
+      (isFile ? '<p class="hint">' + ic('info') + ' This one comes from the website\'s dinokeng-updates.md file. Your changes are saved on top of it.</p>' : '') +
+      '<div class="grid2"><label class="fld"><span>Kind</span><select name="type">' + DGR_TYPES.map(function (t) { return '<option' + (t === d.type ? ' selected' : '') + '>' + t + '</option>'; }).join('') + '</select></label><label class="fld"><span>Date</span><input type="date" name="date" value="' + esc(d.date || TODAY) + '"></label></div>' +
+      '<label class="fld"><span>Heading</span><input name="title" value="' + esc(d.title) + '" placeholder="e.g. A fresh start for the bush: block burns in the south"></label>' +
+      '<label class="fld"><span>Announcement (two or three sentences in your own words)</span><textarea name="text" rows="5" placeholder="What is it about, and why should a guest read it?">' + esc(d.text || '') + '</textarea></label>' +
+      '<h5>The file or link</h5><label class="fld"><span>PDF ' + ((d.file || d.fileKey) ? '(now: ' + esc(d.fileName || String(d.file).split('/').pop()) + (d.size ? ', ' + esc(d.size) : '') + '; choose another to replace it)' : '') + '</span><input type="file" name="pdf" accept="application/pdf"></label>' +
+      '<div class="grid2"><label class="fld"><span>Or a link (e.g. the magazine on Dinokeng\'s website)</span><input name="link" value="' + esc(d.link || '') + '" placeholder="https://"></label><label class="fld"><span>Button text for the link</span><input name="button" value="' + esc(d.button || '') + '" placeholder="e.g. Read the magazines"></label></div>' +
+      '<label class="fld"><span>Cover picture (optional: without one, the cover is made from the PDF\'s first page)</span><input type="file" name="cover" accept="image/*"></label>' +
+      '<label class="check"><input type="checkbox" name="pinned"' + (d.pinned ? ' checked' : '') + '><span>Show it first (featured at the top)</span></label>' +
+      '<label class="check"><input type="checkbox" name="shown"' + (d.hidden ? '' : ' checked') + '><span>Show it on the website</span></label>' +
+      (it && !isFile ? '<div class="m-acts left"><button type="button" class="btn ghost sm danger-t" data-dgr-del>' + ic('x') + 'Delete</button></div>' : ''),
+      it ? 'Save' : 'Add update', function (f) {
+        var v = { type: fval(f, 'type'), title: fval(f, 'title'), date: fval(f, 'date'), text: f.elements.text.value.trim(), link: fval(f, 'link'), button: fval(f, 'button'), pinned: !!fval(f, 'pinned'), hidden: !fval(f, 'shown') };
+        var pdf = f.elements.pdf.files[0], cov = f.elements.cover.files[0];
+        if (!v.title) { toast('Give it a heading'); return false; }
+        if (v.link && !/^https?:\/\//.test(v.link)) { toast('The link must start with https://'); return false; }
+        if (pdf && !/pdf$/i.test(pdf.type || pdf.name)) { toast('Choose a PDF file'); return false; }
+        if (!it && !pdf && !v.link) { toast('Add a PDF or a link'); return false; }
+        var id = it ? (isFile ? 'f-' + it.slug : it.id) : uid('dg'), jobs = [];
+        if (pdf) { v.fileKey = 'dgr-file-' + id; v.fileName = pdf.name; v.size = mbSize(pdf.size); jobs.push(K.files.put(v.fileKey, pdf)); }
+        if (cov) { v.coverKey = 'dgr-cover-' + id; jobs.push(K.files.put(v.coverKey, cov)); }
+        else if (pdf && !(it && (it.image || it.coverKey))) { v.coverKey = 'dgr-cover-' + id; toast('Making the cover from the PDF…'); jobs.push(Promise.race([pdfCover(pdf), new Promise(function (ok, no) { setTimeout(no, 20000); })]).then(function (b) { return K.files.put(v.coverKey, b); }).catch(function () { delete v.coverKey; })); }
+        Promise.all(jobs).then(function () {
+          if (isFile) X.over[it.slug] = Object.assign(X.over[it.slug] || {}, v);
+          else if (it) Object.assign(X.items.filter(function (x) { return x.id === it.id; })[0], v);
+          else X.items.unshift(Object.assign({ id: id }, v));
+          log((it ? 'Updated' : 'Added') + ' Dinokeng update: ' + v.title); dgrPush(); render(); toast(it ? 'Saved' : 'Added. It shows on the Dinokeng page now.');
+        }).catch(function () { toast('The file could not be saved in this browser.'); });
+      }, { wide: true, noFocus: true, onOpen: function (f) {
+        var del = $('[data-dgr-del]', f);
+        if (del) del.addEventListener('click', function () { var x = X.items.filter(function (y) { return y.id === it.id; })[0]; X.items.splice(X.items.indexOf(x), 1); if (x.fileKey) K.files.del(x.fileKey); if (x.coverKey) K.files.del(x.coverKey); log('Deleted Dinokeng update: ' + x.title); dgrPush(); closeModal(); render(); toast('Deleted'); });
+      } });
   }
   /* =========================================================
      Social media: the accounts, the live feeds and the hand-picked posts
@@ -2656,7 +2736,7 @@
     return { items: list.slice(p * size, p * size + size), bar: pages > 1 ? '<div class="pager"><span>' + (p * size + 1) + ' to ' + Math.min(list.length, p * size + size) + ' of ' + list.length + '</span><button class="icon-btn sm" data-pg="' + key + '|-1"' + (p ? '' : ' disabled') + ' aria-label="Previous page">' + ic('chev-l') + '</button><button class="icon-btn sm" data-pg="' + key + '|1"' + (p < pages - 1 ? '' : ' disabled') + ' aria-label="Next page">' + ic('chev-r') + '</button></div>' : '' };
   }
 
-  var VIEWS = { social: vSocial, dashboard: vDashboard, bookings: vBookings, eft: vEft, calendar: vCalendar, clients: vClients, payments: vPayments, shop: vShop, drives: vDrives, products: vProducts, vouchers: vVouchers, enquiries: vEnquiries, stands: vStands, rates: vRates, reports: vReports, news: vNews, settings: vSettings };
+  var VIEWS = { dgrnews: vDgr, social: vSocial, dashboard: vDashboard, bookings: vBookings, eft: vEft, calendar: vCalendar, clients: vClients, payments: vPayments, shop: vShop, drives: vDrives, products: vProducts, vouchers: vVouchers, enquiries: vEnquiries, stands: vStands, rates: vRates, reports: vReports, news: vNews, settings: vSettings };
   function route() { var v = (location.hash.match(/^#\/(\w+)/) || [])[1] || 'dashboard'; if (v === 'guests') v = 'clients'; return VIEWS[v] && can(v) ? v : 'dashboard'; }
 
   /* ---------- shell ---------- */
@@ -2755,6 +2835,8 @@
     if (act === 'news-new') return actPost(null);
     if (act === 'dgr') return openBooking(ref);
     if (act === 'inv-new') return actInvNew(ref);
+    if (act === 'dgr-new') return actDgr(null);
+    if (act === 'dgr-edit') return actDgr(ref);
     if (act === 'soc-add') return actSocPost(null);
     if (act === 'sig-copy' || act === 'sig-html' || act === 'sig-code') {
       var sgd = sigData(SIG_WHO || ME.id), html = sigHTML(sgd);

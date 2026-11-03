@@ -218,6 +218,50 @@
   K.settings = function () { return load('settings').then(parseSettings); };
   K.prices = function () { return load('prices').then(parsePrices); };
   K.blogFile = function () { return load('blog').then(parseBlog); };   // blog.md only (the admin uses this)
+
+  /* ---------- Dinokeng updates (content/dinokeng-updates.md + what staff add in the admin) ---------- */
+  function parseDgr(md) {
+    var out = [];
+    clean(md).replace(/<!--[\s\S]*?-->/g, '').split(/\n(?=##\s)/).forEach(function (p) {
+      var m = p.match(/^##\s+(.+)\n([\s\S]*)$/); if (!m) return;
+      var lines = m[2].replace(/^\n+/, '').split('\n'), meta = {}, i = 0;
+      for (; i < lines.length; i++) { var mm = lines[i].match(/^([a-zA-Z ]+):\s*(.*)$/); if (!mm || !lines[i].trim()) break; meta[norm(mm[1])] = mm[2].trim(); }
+      out.push({ title: m[1].trim(), slug: slug(m[1].trim()), type: meta.type || 'Dinokeng news', date: meta.date || '', image: meta.image || '', file: meta.file || '', size: meta.size || '', link: meta.link || '', button: meta.button || '',
+        pinned: /^(yes|true)$/i.test(meta.pinned || ''), hidden: /^(yes|true)$/i.test(meta.hidden || ''), text: lines.slice(i).join('\n').trim(), src: 'file' });
+    });
+    return out;
+  }
+  K.dgrFile = function () { return load('dinokeng-updates').then(parseDgr); };
+  // Demo: what staff add or change in the admin is kept in this browser ("kyleu-web-dgr"); uploaded files sit in the browser's file store.
+  // Live: the admin saves them on the server.
+  K.dgrUpdates = function () {
+    return K.dgrFile().catch(function () { return []; }).then(function (list) {
+      var x = null; try { x = JSON.parse(localStorage.getItem('kyleu-web-dgr') || 'null'); } catch (e) {}
+      if (x) {
+        var over = x.over || {};
+        list = list.map(function (it) { return Object.assign({}, it, over[it.slug] || {}); }).concat((x.items || []).map(function (it) { return Object.assign({ src: 'admin' }, it); }));
+      }
+      return Promise.all(list.map(function (it) {
+        var jobs = [];
+        if (it.fileKey) jobs.push(K.files.get(it.fileKey).then(function (b) { if (b) it.file = URL.createObjectURL(b); }));
+        if (it.coverKey) jobs.push(K.files.get(it.coverKey).then(function (b) { if (b) it.image = URL.createObjectURL(b); }));
+        return Promise.all(jobs).then(function () { return it; });
+      }));
+    }).then(function (list) {
+      return list.sort(function (a, b) { return (b.pinned - a.pinned) || (a.date < b.date ? 1 : -1); });
+    });
+  };
+  // a small file store in the browser (IndexedDB) for PDFs and covers uploaded in the demo admin
+  K.files = (function () {
+    var dbp = null;
+    function db() { if (!dbp) dbp = new Promise(function (ok, no) { if (!window.indexedDB) { no(); return; } var r = indexedDB.open('kyleu-files', 1); r.onupgradeneeded = function () { r.result.createObjectStore('f'); }; r.onsuccess = function () { ok(r.result); }; r.onerror = function () { no(r.error); }; }); return dbp; }
+    function tx(mode, fn) { return db().then(function (d) { return new Promise(function (ok, no) { var t = d.transaction('f', mode), st = t.objectStore('f'), req = fn(st); t.oncomplete = function () { ok(req && req.result); }; t.onerror = function () { no(t.error); }; }); }); }
+    return {
+      put: function (k, blob) { return tx('readwrite', function (st) { return st.put(blob, k); }); },
+      get: function (k) { return tx('readonly', function (st) { return st.get(k); }).catch(function () { return null; }); },
+      del: function (k) { return tx('readwrite', function (st) { return st.delete(k); }).catch(function () {}); }
+    };
+  })();
   K.slug = slug;
   // Map layout from the admin map editor: moved stands, stands taken off the map and new campsites.
   // Demo: saved in this browser. Live: assets/js/campmap-layout.js.

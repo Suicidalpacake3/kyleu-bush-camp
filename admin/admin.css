@@ -1167,3 +1167,8 @@ html:has(body.lock) { overflow: hidden; }
 .sig-how { border-top: 1px solid var(--line); padding: 8px 0; }
 .sig-how summary { cursor: pointer; font-weight: 800; }
 .sig-how ol { margin: 8px 0 0; padding-left: 20px; font-size: .88rem; display: grid; gap: 4px; }
+
+/* Dinokeng updates */
+.dgr-row.off { opacity: .55; }
+.dgr-th { width: 46px; height: 46px; border-radius: 8px; overflow: hidden; flex: none; display: grid; place-items: center; background: var(--line-2); color: var(--muted); }
+.dgr-th img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
