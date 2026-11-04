@@ -33,7 +33,7 @@
       .forEach(function (x) { var v = S.get(x[1], ''); if (v) BIZ[x[0]] = v; });
   }).catch(function () {});
   function notes() {
-    return ['Check-in from ' + BIZ.checkIn + ' · check-out by ' + BIZ.checkOut + '.',
+    return ['Arrival and departure times are flexible: we arrange them with you before your stay.',
       'Please note our Terms & Conditions, on our website (kyleu.co.za/policies.html).',
       'Camping at Kyleu Bush Camp is ENTIRELY AT YOUR OWN RISK: wild animals roam freely.',
       'There is no electricity anywhere in the bush camp (fenced and unfenced).',
@@ -60,7 +60,7 @@
   }
   function stayRows(inv) {
     var s = inv.stay || {}, o = { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' };
-    return [['Booking', inv.ref], ['Stand', s.stand], ['Arrive', s.ci ? nice(s.ci, o) + ', from ' + BIZ.checkIn : ''], ['Depart', s.co ? nice(s.co, o) + ', by ' + BIZ.checkOut : ''], ['Nights', s.nights], ['Guests', s.guests], ['Vehicles', s.vehicles]]
+    return [['Booking', inv.ref], ['Stand', s.stand], ['Arrive', s.ci ? nice(s.ci, o) : ''], ['Depart', s.co ? nice(s.co, o) : ''], ['Nights', s.nights], ['Guests', s.guests], ['Vehicles', s.vehicles]]
       .filter(function (r) { return r[1] !== undefined && r[1] !== ''; });
   }
   function totals(inv, st) {
@@ -73,6 +73,7 @@
   function bankRows() { return [['Account name', BIZ.accName], ['Bank', BIZ.bank], ['Account number', BIZ.accNo], ['Branch code', BIZ.branch], ['Account type', BIZ.accType], ['SWIFT', BIZ.swift]].filter(function (r) { return r[1]; }); }
   var THANKS = 'Kyleu management thanks you in advance for respecting the rules and abiding by them. We hope you have an enjoyable stay!';
   K.invoiceState = state;
+  K.bankRows = bankRows;
   K.invoiceName = function (inv) { return 'Kyleu ' + inv.kind.toLowerCase() + ' ' + inv.no + '.pdf'; };
   K.invoiceNo = function (ref, kind, n) { return (kind === 'Quote' ? 'Q-' : 'INV-') + String(ref).replace(/^KY/i, '') + '-' + (n || 1); };
 

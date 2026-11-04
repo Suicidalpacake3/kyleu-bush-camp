@@ -76,8 +76,13 @@
   /* ---------- booking helpers ---------- */
   function paid(b) { return (b.payments || []).reduce(function (a, p) { return a + p.amt; }, 0); }
   function balance(b) { return b.status === 'cancelled' ? 0 : Math.max(0, b.total - paid(b)); }
-  function deposit(b) { return Math.round(b.total * depPct() / 100); }
-  function depositDue(b) { return add(b.created.slice(0, 10), num('Booking rules', 'Deposit due within days of invoice', 5)); }
+  function deposit(b) { return payFullOf(b) ? b.total : Math.round(b.total * depPct() / 100); }   // a late booking pays the full amount to secure it
+  function depositDue(b) {   // never later than the balance date: a late booking pays in full by then (or straight away)
+    var c = b.created.slice(0, 10), d = add(c, num('Booking rules', 'Deposit due within days of invoice', 5)), bd = balanceDue(b), soon = add(c, 1);
+    if (soon > b.ci) soon = b.ci;
+    return bd < d ? (bd < soon ? soon : bd) : d;   // arriving within a week: the next day (or the arrival day)
+  }
+  function payFullOf(b) { return diff(b.created.slice(0, 10), b.ci) <= num('Booking rules', 'Balance due days before arrival', 7) + num('Booking rules', 'Deposit due within days of invoice', 5); }
   function balanceDue(b) { return add(b.ci, -num('Booking rules', 'Balance due days before arrival', 7)); }
   function guestName(b) { return b.guest.first + ' ' + b.guest.last; }
   function people(b) { return b.adults + b.pens + b.kids; }
@@ -577,7 +582,7 @@
   var TEMPLATES = {
     eft: { t: 'EFT deposit reminder', s: 'Your Kyleu booking: deposit reminder', b: function (b) { return 'Hi {first},\n\nThank you for booking {stand} from {ci} to {co}. To secure your stand please pay the deposit of {deposit} by {depdue} using reference {ref}.\n\nBank: FNB · Account: Kyleu Bush Camp · Acc no: 62000000000 · Branch: 250655\n\nUpload your proof of payment at www.kyleu.co.za/pop.html, or reply to this email with it attached.\n\nSee you in the bush!\nThe Kyleu team'; } },
     balance: { t: 'Balance reminder', s: 'Your Kyleu stay is coming up', b: function (b) { return 'Hi {first},\n\nYour stay at {stand} starts on {ci}. The balance of {balance} is due by {baldue}. Pay by EFT with reference {ref}, or reply and we will send a card payment link.\n\nThe Kyleu team'; } },
-    arrival: { t: 'Pre-arrival information', s: 'Getting to Kyleu Bush Camp', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}.\n\nDirections: enter Dinokeng at Tau Gate, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km.\n\nKyleu is a proud DGR CP member, so we send you a Conservation Fee Discount Voucher code for each vehicle. Enter it when you buy your conservation fees at https://dinokeng.plnktn.io to pay R85 instead of R100 per adult per night. To use the self-drive route, each vehicle also needs a Self Drive Permit (R250 once off).\n\nEvery adult signs an indemnity form when you arrive. Check-in from 13:00, check-out by 11:00. Gate questions: 060 458 4478.\n\nThe Kyleu team'; } },
+    arrival: { t: 'Pre-arrival information', s: 'Getting to Kyleu Bush Camp', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}.\n\nDirections: enter Dinokeng at Tau Gate, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km.\n\nKyleu is a proud DGR CP member, so we send you a Conservation Fee Discount Voucher code for each vehicle. Enter it when you buy your conservation fees at https://dinokeng.plnktn.io to pay R85 instead of R100 per adult per night. To use the self-drive route, each vehicle also needs a Self Drive Permit (R250 once off).\n\nEvery adult signs an indemnity form when you arrive. Let us know roughly when you will arrive and we will have your stand ready. Gate questions: 060 458 4478.\n\nThe Kyleu team'; } },
     thanks: { t: 'Thank you & review', s: 'Thanks for staying at Kyleu', b: function (b) { return 'Hi {first},\n\nThank you for camping with us at {stand}. We hope you loved the bush! If you have a minute, a Google review helps our small family camp a lot.\n\nThe Kyleu team'; } },
     invoice: { t: 'Invoice', s: 'Your Kyleu invoice {ref}', b: function (b) { return 'Hi {first},\n\nPlease find your invoice for {stand}, {ci} to {co}, attached.\n\nTotal {total}, paid so far {paid}, balance {balance}. Pay by EFT using reference {ref}.\n\nThe Kyleu team'; } },
     indemnity: { t: 'Indemnity form', s: 'Kyleu indemnity form for {ref}', b: function (b) { return 'Hi {first},\n\nPlease find the Kyleu indemnity form attached, one page per vehicle. Every adult signs it when you arrive. You are welcome to print it and fill it in before you come, which makes check-in quicker.\n\nSee you on {ci}!\nThe Kyleu team'; } },
@@ -1285,7 +1290,7 @@
     var bal = DB.bookings.filter(function (b) { return b.status === 'confirmed' && b.method !== 'card' && balance(b) > 0 && (diff(TODAY, balanceDue(b)) <= 14 || b.paidClaim); }).sort(function (a, b) { return a.ci < b.ci ? -1 : 1; });
     function card(b, kind) {
       var amt = kind === 'bal' ? balance(b) : deposit(b), due = kind === 'bal' ? balanceDue(b) : depositDue(b), left = diff(TODAY, due);
-      return '<article class="eft-card ' + kind + '"><div class="eft-top" data-open="' + b.ref + '"><div><b>' + esc(guestName(b)) + '</b><small>' + esc(b.ref) + ' · ' + esc(standById(b.stand).name) + ' · ' + fd(b.ci) + ' to ' + fd(b.co) + '</small></div><div class="eft-amt"><b>' + money(amt) + '</b><small>' + (kind === 'bal' ? 'balance' : depPct() + '% deposit') + (hasFee() ? ' · card ' + money(kind === 'bal' ? b.card - paid(b) : Math.round(b.card * depPct() / 100)) : '') + '</small></div></div>' +
+      return '<article class="eft-card ' + kind + '"><div class="eft-top" data-open="' + b.ref + '"><div><b>' + esc(guestName(b)) + '</b><small>' + esc(b.ref) + ' · ' + esc(standById(b.stand).name) + ' · ' + fd(b.ci) + ' to ' + fd(b.co) + '</small></div><div class="eft-amt"><b>' + money(amt) + '</b><small>' + (kind === 'bal' ? 'balance' : payFullOf(b) ? 'full amount (arrives soon)' : depPct() + '% deposit') + (hasFee() ? ' · card ' + money(kind === 'bal' ? b.card - paid(b) : Math.round(b.card * depPct() / 100)) : '') + '</small></div></div>' +
         '<div class="eft-due ' + (left < 0 ? 'bad-t' : left <= 1 ? 'warn-t' : '') + '">' + ic('clock') + (left < 0 ? 'Overdue by ' + -left + ' day' + (-left > 1 ? 's' : '') : 'Due ' + fd(due) + ' (' + rel(due) + ')') + (b.paidClaim ? '<span class="info-t pop-line">' + ic('bank') + esc(b.guest.first) + ' says they paid ' + money(b.paidClaim.amt) + ' on ' + fd(b.paidClaim.date) + ': check the bank</span>' : '') + (b.pop && (b.pops || []).length ? '<span class="info-t pop-line">' + ic('note') + 'Proof of payment received' + ((b.pops || []).length ? ' ' + whenSaid(b.pops[b.pops.length - 1].at) + ', check the bank:' : ': check the bank') + '</span>' + popChips(b) : '') + '</div>' +
         '<div class="eft-act"><button class="btn sm" data-act="pay" data-ref="' + b.ref + '">' + ic('check') + 'Money is in</button><button class="btn sm ghost" data-act="remind" data-ref="' + b.ref + '">' + ic('send') + 'Remind</button>' + (kind === 'over' ? '<button class="btn sm ghost danger-t" data-act="release" data-ref="' + b.ref + '">' + ic('x') + 'Release stand</button>' : '') + '</div></article>';
     }
@@ -1584,7 +1589,7 @@
   var QUICK = [
     ['We will check and come back to you', function () { return 'Thank you for your message. Let me check and come back to you today.'; }],
     ['Banking details for EFT', function () { return 'You can pay by EFT to:\nFNB · Kyleu Bush Camp · Account 62000000000 · Branch 250655\n\nPlease use your booking reference so we can match the payment, then upload your proof of payment at www.kyleu.co.za/pop.html (or simply reply to this email with it attached).'; }],
-    ['Directions', function () { return 'Enter Dinokeng at Tau Gate, follow the main road for 4.8 km, turn right onto Kaallaagte Road and continue 2 km to camp. Check-in is from 13:00 and check-out is by 11:00.'; }],
+    ['Directions', function () { return 'Enter Dinokeng at Tau Gate, follow the main road for 4.8 km, turn right onto Kaallaagte Road and continue 2 km to camp. Let us know roughly when you will arrive.'; }],
     ['Game drives', function () { return 'Our guided game drives leave at 06:00 and 15:30 and take about 2 hours. It is ' + money(num('Game drives', 'Game drive 3 or more people per person', 400)) + ' per person for 3 or more people, ' + money(num('Game drives', 'Game drive 2 people per person', 450)) + ' per person for 2, or ' + money(num('Game drives', 'Game drive 1 person', 900)) + ' for a private drive.'; }],
     ['Pensioner rate', function () { return 'The pensioner rate of ' + money(num('Ablution stands', 'Pensioner weekday per person per night', 115)) + ' per person per night applies to Monday to Thursday nights. Sunday nights and weekends are charged at the normal rate.'; }],
     ['Proof of payment received', function () { return 'Thank you, we have received your proof of payment. We will confirm your booking as soon as the money reflects in our account (usually within 1 working day).'; }]
@@ -1690,7 +1695,7 @@
     return Object.assign({ kind: kind, no: nextInvNo(b, kind), date: TODAY, ref: b.ref, guest: { name: guestName(b), email: b.guest.email, phone: b.guest.phone },
       stay: { stand: standById(b.stand).name, ci: b.ci, co: b.co, nights: diff(b.ci, b.co), guests: guestsLine(b), vehicles: b.vehTbc ? 'Not sure yet' : ensureCars(b).length },
       lines: lines, total: lines.reduce(function (a, l) { return a + l.amt; }, 0), paid: paid(b), deposit: deposit(b), depPct: depPct(), depositDue: depositDue(b), balanceDue: balanceDue(b),
-      payFull: diff(b.created.slice(0, 10), b.ci) <= num('Booking rules', 'Balance due days before arrival', 7), cancelled: b.status === 'cancelled' }, extra || {});
+      payFull: payFullOf(b), cancelled: b.status === 'cancelled' }, extra || {});
   }
   function invDoc(inv) { return { name: K.invoiceName(inv), inv: inv, build: function (doc) { K.invoiceDraw(doc, inv); } }; }
   function invByNo(b, no) { return (b.invoices || []).filter(function (x) { return x.no === no; })[0]; }
@@ -1777,7 +1782,7 @@
       k.head(title, (title === 'Invoice' ? 'Invoice ' : 'Reference ') + b.ref + ' · ' + fd(TODAY, LONGD));
       k.pairs(stayRows(b)); k.h('Your stay'); moneyLines(b, k); k.y(k.y() + 3);
       if (b.status === 'cancelled') k.box('This booking is cancelled.');
-      else if (b.status === 'pending') k.box('A deposit of ' + money(deposit(b)) + ' secures your stand and is due by ' + fd(depositDue(b), LONGD) + '. Pay by EFT to ' + BIZ.bank + ', using reference ' + b.ref + '. Then upload your proof of payment at www.kyleu.co.za/pop.html.');
+      else if (b.status === 'pending') k.box((payFullOf(b) ? 'The full amount of ' : 'A deposit of ') + money(deposit(b)) + ' secures your stand and is due by ' + fd(depositDue(b), LONGD) + '. Pay by EFT to ' + BIZ.bank + ', using reference ' + b.ref + '. Then upload your proof of payment at www.kyleu.co.za/pop.html.');
       else if (balance(b) > 0) k.box('The balance of ' + money(balance(b)) + ' is due by ' + fd(balanceDue(b), LONGD) + '. Pay by EFT to ' + BIZ.bank + ', using reference ' + b.ref + '.');
       else k.box('Paid in full. Thank you!');
       k.para('Dinokeng Game Reserve conservation and self-drive fees are paid to the reserve, not to Kyleu. Kyleu is a proud DGR CP member: we send you a Conservation Fee Discount Voucher code for each vehicle, for R85 instead of R100 per adult per night.', 8.5);

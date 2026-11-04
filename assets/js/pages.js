@@ -12,11 +12,23 @@
   function postCard(p, feature) {
     return '<a class="post-card' + (feature ? ' post-feature' : '') + '" href="news.html?post=' + p.slug + '" data-reveal>' +
       '<div class="img">' + (p.image ? '<img src="' + p.image + '" alt="" loading="lazy">' : '') + '</div>' +
-      '<div class="body"><div class="post-meta"><span>' + fmtDate(p.date) + '</span>' + (p.tags[0] ? '<span>· ' + K.esc(p.tags[0]) + '</span>' : '') + '</div>' +
+      '<div class="body"><div class="post-meta"><span>' + fmtDate(p.date) + '</span>' + (p.tags.length ? '<span>· ' + K.esc(p.tags.slice(0, 2).join(', ')) + '</span>' : '') + '</div>' +
       '<h3>' + K.esc(p.title) + '</h3><p>' + K.esc(p.summary) + '</p><span class="link-arrow">Read more</span></div></a>';
   }
 
   document.addEventListener('DOMContentLoaded', function () {
+
+    /* ---------- comparison table: on a phone, one card per camp area (built from the table, so there is one source) ---------- */
+    $$('table.compare').forEach(function (t) {
+      var heads = $$('thead th', t).slice(1), rows = $$('tbody tr', t);
+      var box = document.createElement('div'); box.className = 'compare-cards';
+      box.innerHTML = heads.map(function (h, i) {
+        return '<article class="cc"><h3>' + h.innerHTML + '</h3><dl>' + rows.map(function (r) {
+          var cell = r.children[i + 1]; return cell ? '<div><dt>' + r.children[0].innerHTML + '</dt><dd>' + cell.innerHTML + '</dd></div>' : '';
+        }).join('') + '</dl></article>';
+      }).join('');
+      var wrap = t.closest('.table-scroll') || t; wrap.parentNode.insertBefore(box, wrap.nextSibling); wrap.classList.add('compare-wide');
+    });
 
     /* ---------- latest posts (Experience Kyleu): the section only shows when there is news ---------- */
     $$('[data-latest-posts]').forEach(function (el) {
@@ -105,7 +117,9 @@
 
     /* ---------- Our stands: photos and details of every stand, per area ---------- */
     var galleries = $$('[data-stand-gallery]');
-    if (galleries.length) K.stands().then(function (stands) {
+    if (galleries.length) Promise.all([K.stands(), K.prices().catch(function () { return null; })]).then(function (res) {
+      var stands = res[0], PR = res[1];
+      var fromPrice = function (ss) { var v = PR ? PR.num(ss ? 'Self-sufficient' : 'Ablution stands', 'Weekday per person per night', ss ? 100 : 160) : (ss ? 100 : 160); return K.money(v); };
       galleries.forEach(function (box) {
         var area = box.dataset.standGallery;
         box.innerHTML = stands.filter(function (s) { return s.area === area; }).map(function (st) {
@@ -117,10 +131,10 @@
             (ss ? '<span class="badge map-tag">' + label + ' on the map</span>' : '') + (st.status === 'new' ? '<span class="badge new" style="position:absolute;bottom:10px;left:10px">New stand</span>' : '') +
             (st.photos.length ? '<button class="sc-photo-count" type="button" data-all-photos aria-label="See all photos"><svg><use href="#i-camera"/></svg>' + st.photos.length + '</button>' : '') + '</div>' +
             '<div class="sc-body"><div class="sc-title"><h3>' + K.esc(st.name) + '</h3></div><div class="sc-feel">' + K.esc(st.feel) + '</div>' +
-            '<div class="sc-meta"><span><svg><use href="#i-users"/></svg>Up to ' + st.guests + '</span><span><svg><use href="#i-tent"/></svg>' + K.esc(st.setups) + '</span><span><svg><use href="#' + (ss ? 'i-flame' : 'i-shower') + '"/></svg>' + (ss ? 'Braai &amp; boma' : 'Private ablution') + '</span></div>' +
+            '<div class="sc-meta"><span><svg><use href="#i-users"/></svg>Up to ' + st.guests + '</span><span><svg><use href="#i-tent"/></svg>' + K.esc(st.setups) + '</span><span><svg><use href="#' + (ss ? 'i-flame' : 'i-shower') + '"/></svg>' + (ss ? 'Fire boma &amp; grill' : 'Private ablution') + '</span></div>' +
             '<p class="gc-desc">' + K.esc(st.description) + '</p>' +
             (st.highlights.length ? '<ul class="gc-hl">' + st.highlights.slice(0, 4).map(function (h) { return '<li>' + K.esc(h) + '</li>'; }).join('') + '</ul>' : '') +
-            '<div class="sc-foot"><a class="btn btn-sm" href="stay.html#stand=' + st.id + '">Book this stand <svg><use href="#i-arrow"/></svg></a></div></div></article>';
+            '<div class="sc-foot"><span class="sc-price">from ' + fromPrice(ss) + '<small>per person per night</small></span><a class="btn btn-sm" href="stay.html#stand=' + st.id + '">Book this stand <svg><use href="#i-arrow"/></svg></a></div></div></article>';
         }).join('') || '<p class="muted">No stands in this area yet.</p>';
         $$('.gallery-card', box).forEach(function (card, idx) {
           var track = $('.sc-track', card), dots = $$('.sc-dots i', card), imgs = $$('.sc-track img', card);
@@ -174,7 +188,7 @@
           return '<article class="rate-card ' + (dk ? 'dark' : (/self/i.test(s.title) ? 'green' : '')) + (wide ? ' rates-full' : '') + '" data-reveal>' +
             '<header><h3>' + K.esc(s.title) + '</h3>' + (dk ? '<p>Paid to Dinokeng Game Reserve at the gate or online, not part of your Kyleu booking.</p>' : '') + '</header>' +
             '<ul class="rate-list"' + (wide && mode !== 'dinokeng' ? ' style="columns:2;column-gap:40px"' : '') + '>' + s.items.map(function (it) {
-              return '<li style="break-inside:avoid"><span class="lbl"><b>' + K.esc(it.label) + '</b>' + (it.note ? '<small>' + K.esc(it.note) + '</small>' : '') + '</span><span class="amt">' + (isNaN(it.amount) ? '' : (it.amount === 0 ? 'FREE' : dk ? K.money(it.amount) : K.dual(it.amount, P))) + '</span></li>';
+              return '<li style="break-inside:avoid"><span class="lbl"><b>' + K.esc(it.label) + '</b>' + (it.note ? '<small>' + K.esc(it.note) + '</small>' : '') + '</span><span class="amt">' + (isNaN(it.amount) ? '' : (it.amount === 0 ? 'Free' : dk ? K.money(it.amount) : K.dual(it.amount, P))) + '</span></li>';
             }).join('') + '</ul></article>';
         }).join('');
         box.innerHTML = html; K.reveal(box);
@@ -222,8 +236,11 @@
           document.head.appendChild(ld);
           return;
         }
-        var tags = []; posts.forEach(function (p) { p.tags.forEach(function (t) { if (tags.indexOf(t) < 0) tags.push(t); }); });
+        // filter buttons: only each post's main tag, so a handful of posts never gets a wall of buttons
+        var tags = []; posts.forEach(function (p) { var t = p.tags[0]; if (t && tags.indexOf(t) < 0) tags.push(t); });
+        if (posts.length < 4) tags = [];
         filt.innerHTML = '<button class="pill on" data-tag="">All posts</button>' + tags.map(function (t) { return '<button class="pill" data-tag="' + K.esc(t) + '">' + K.esc(t) + '</button>'; }).join('');
+        filt.hidden = !tags.length;
         var secs = $('[data-news-sections]');
         var ageDays = function (p) { var d = new Date(p.date + 'T12:00:00'); return isNaN(d) ? 999 : Math.floor((Date.now() - d.getTime()) / 864e5); };
         var render = function (tag) {
@@ -239,6 +256,8 @@
           if (!fresh.length && !recent.length && older.length) { recent = older.slice(0, 3); older = older.slice(3); }   // a long quiet spell: still show the last few
           $('[data-news-new]').innerHTML = fresh.map(function (p, i) { return postCard(p, i === 0); }).join('');
           $('[data-news-new]').hidden = !fresh.length; $('[data-news-quiet]').hidden = !!fresh.length;
+          // a quiet week: skip the "this week" box when there is other news to show
+          var wk = $('[data-news-new]').closest('.news-block'); if (wk) wk.hidden = !fresh.length && !!(recent.length || older.length);
           $('[data-news-recent-wrap]').hidden = !recent.length; $('[data-news-recent]').innerHTML = recent.map(function (p) { return postCard(p); }).join('');
           var ow = $('[data-news-older-wrap]'); ow.hidden = !older.length; $('[data-news-older]').innerHTML = older.map(function (p) { return postCard(p); }).join('');
           $('[data-news-older-count]').textContent = older.length + ' post' + (older.length === 1 ? '' : 's');

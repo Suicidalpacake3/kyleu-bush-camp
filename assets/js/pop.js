@@ -7,6 +7,9 @@
   var K = window.Kyleu || {}, $ = function (s, r) { return (r || document).querySelector(s); };
   var esc = function (s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
   var MAX = 10 * 1024 * 1024, picked = null;
+  // bank details from the invoice settings (content/settings.md), so they always match the invoice
+  function drawBank() { var dl = $('[data-bank]'); if (dl && K.bankRows) dl.innerHTML = K.bankRows().map(function (r) { return '<div><dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd></div>'; }).join(''); }
+  drawBank(); if (K.settings) K.settings().then(function () { setTimeout(drawBank, 50); }).catch(function () {});
   function kb(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
   function key(s) { return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
   // demo lookup: bookings made on this website, plus the admin demo's bookings in this browser

@@ -1,5 +1,5 @@
 <!--META
-{"title":"Send Proof of Payment | Kyleu Bush Camp","desc":"Paid for your Kyleu Bush Camp booking by EFT? Upload your proof of payment here with your booking reference and we will confirm your stand.","path":"pop.html","ogimg":"entrance-sign.jpg","nav":"","headerclass":"","footbg":"","extra_js":"<script src=\"assets/js/pop.js\" defer></script>"}
+{"title":"Send Proof of Payment | Kyleu Bush Camp","desc":"Paid for your Kyleu Bush Camp booking by EFT? Upload your proof of payment here with your booking reference and we will confirm your stand.","path":"pop.html","ogimg":"entrance-sign.jpg","nav":"","headerclass":"","footbg":"","extra_js":"<script src=\"assets/js/invoice.js\" defer></script><script src=\"assets/js/pop.js\" defer></script>"}
 -->
 <section class="page-hero page-hero-sm">
   <div class="bg" data-parallax="0.15" style="background-image:url('assets/img/hero/kyleu-camp.jpg');background-position:50% 55%"></div>
@@ -7,7 +7,7 @@
     <nav class="crumbs" aria-label="Breadcrumb"><a href="index.html">Home</a><span>/</span>Proof of payment</nav>
     <span class="eyebrow">Paid by EFT?</span>
     <h1 class="split-words">Send us your proof of payment</h1>
-    <p class="lead" data-reveal>Upload it here and it goes straight onto your booking. No need to email it.</p>
+    <p class="lead" data-reveal>You don't have to send it, but it speeds things up: upload it here and it goes straight onto your booking.</p>
   </div>
 </section>
 
@@ -27,7 +27,7 @@
             <input id="p-file" type="file" name="file" accept="application/pdf,image/*" data-file>
             <svg><use href="#i-doc"/></svg>
             <b>Choose a file or drop it here</b>
-            <small>PDF, JPG or PNG, up to 10 MB. A screenshot from your banking app is fine.</small>
+            <small class="drop-hint">PDF, JPG or PNG, up to 10 MB. A screenshot from your banking app is fine.</small>
           </label>
           <div class="drop-file" data-picked hidden></div>
           <span class="msg">Please choose your proof of payment</span>
@@ -44,7 +44,7 @@
         <li><b>2</b><span>Upload the proof of payment from your bank here. It goes straight onto your booking.</span></li>
         <li><b>3</b><span>We check the bank and email your confirmation, usually within one working day.</span></li>
       </ol>
-      <div class="eft-box"><b>Paid by card?</b><p class="muted" style="margin:6px 0 0">Then there is nothing to send: card payments confirm your booking straight away.</p></div>
+      <div class="eft-box pop-bank"><b>Our bank details</b><dl data-bank></dl><p class="muted" style="margin:6px 0 0">Use your booking reference (it starts with KY) as the payment reference.</p></div>
       <div class="eft-box"><b>Can't find your reference?</b><p class="muted" style="margin:6px 0 0">It's on your invoice email and starts with KY. You can also <a href="https://wa.me/27604584478" target="_blank" rel="noopener">WhatsApp us</a> or reply to your invoice email with the proof attached.</p></div>
     </aside>
   </div>

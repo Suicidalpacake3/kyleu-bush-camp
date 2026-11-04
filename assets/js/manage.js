@@ -113,17 +113,27 @@
     // no invoice kept yet: build one from the booking
     var sl = shopList(v.shop), shopAmt = price(v, shopSum(v.shop));
     return { kind: 'Invoice', no: K.invoiceNo(v.ref, 'Invoice', 1), date: v.created || today(), ref: v.ref, guest: { name: (v.first + ' ' + v.last).trim(), email: v.email, phone: v.phone }, stay: stayInfo,
-      lines: [stayLine(v, v, v.total - shopAmt)].concat(sl.map(function (x) { return shopLine(v, x); })),
-      total: v.total, paid: v.paid, deposit: Math.round(v.total * depPct / 100), depPct: depPct, depositDue: addD(v.created || today(), depDays()), balanceDue: addD(v.ci, -balDays()), payFull: nights(v.created || today(), v.ci) <= balDays() };
+      lines: stayLinesFor(v, v, v.total - shopAmt).concat(sl.map(function (x) { return shopLine(v, x); })),
+      total: v.total, paid: v.paid, deposit: Math.round(v.total * depPct / 100), depPct: depPct, depositDue: depDueOf(v), balanceDue: addD(v.ci, -balDays()), payFull: nights(v.created || today(), v.ci) <= balDays() + depDays() };
   }
-  function stayLine(v, g, amt) { var n = nights(v.ci, v.co); return { t: stand(v.stand).name + ' (Guests: ' + people(g) + ') · ' + peopleText(g), q: n, u: Math.round(amt / n), amt: amt, tag: 'stay' }; }
+  // the deposit is due within a few days of the invoice, but never after the balance date (a late booking pays in full by then)
+  function depDueOf(v) { var c = String(v.created || today()).slice(0, 10), d = addD(c, depDays()), bd = addD(v.ci, -balDays()), soon = addD(c, 1); if (soon > v.ci) soon = v.ci; return bd < d ? (bd < soon ? soon : bd) : d; }
+  // detailed lines when they add up to the stay amount (no special price from Kyleu), otherwise one line
+  function stayLinesFor(v, g, amt) {
+    if (v.method !== 'card' && K.stayLines) {
+      var ls = K.stayLines(P, stand(v.stand).area, stand(v.stand).name, v.ci, v.co, g);
+      if (Math.round(ls.reduce(function (x, l) { return x + l.amt; }, 0)) === Math.round(amt)) return ls;
+    }
+    return [stayLine(v, g, amt)];
+  }
+  function stayLine(v, g, amt) { var n = nights(v.ci, v.co); return { t: stand(v.stand).name + ' · ' + n + ' night' + (n === 1 ? '' : 's') + ' · ' + peopleText(g), q: n, u: Math.round(amt / n), amt: amt, tag: 'stay' }; }
   function shopLine(v, x) { return { t: x.label, q: x.qty, u: price(v, x.each), amt: price(v, x.qty * x.each), tag: 'shop' }; }
   // a new invoice after a change that alters the price
   function nextInvoice(v, a) {
     var cur = invoiceFor(v), n = (parseInt(String(cur.no).split('-').pop(), 10) || 1) + 1, lines = cur.lines.filter(function (l) { return l.tag !== 'adj'; });
     if (a.guests && a.guests.mode === 'direct') {
       var stayAmt = lines.filter(function (l) { return l.tag === 'stay'; }).reduce(function (x, l) { return x + (l.amt || 0); }, 0) + (a.guests.diff || 0);
-      lines = [stayLine(v, a.guests, stayAmt)].concat(lines.filter(function (l) { return l.tag !== 'stay'; }));
+      lines = stayLinesFor(v, a.guests, stayAmt).concat(lines.filter(function (l) { return l.tag !== 'stay'; }));
     }
     if (a.shopItems) lines = lines.filter(function (l) { return l.tag !== 'shop'; }).concat(a.shopItems.map(function (x) { return shopLine(v, x); }));
     var total = lines.reduce(function (x, l) { return x + (l.amt || 0); }, 0);
@@ -131,8 +141,11 @@
   }
   function invModal(v) {
     var inv = invoiceFor(v), st = K.invoiceState(inv), m = document.createElement('div');
-    m.className = 'inv-modal'; m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true'); m.setAttribute('aria-label', 'Your invoice');
-    m.innerHTML = '<div class="inv-modal-card"><div class="inv-modal-h"><h2>Your invoice</h2><button type="button" class="inv-x" data-inv-close aria-label="Close">' + svg('i-x') + '</button></div>' + K.invoiceHTML(inv) +
+    m.className = 'inv-modal'; m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true'); m.setAttribute('aria-label', v._paid ? 'Tell us you have paid' : 'Your invoice');
+    if (v._paid) m.innerHTML = '<div class="inv-modal-card paid-only"><div class="inv-modal-h"><h2>I have paid</h2><button type="button" class="inv-x" data-inv-close aria-label="Close">' + svg('i-x') + '</button></div>' +
+      '<p class="mg-paid-due">Still to pay on <b>' + esc(v.ref) + '</b>: <b>' + K.money(st.bal) + '</b>' + (st.now && st.now < st.bal ? ' (' + K.money(st.now) + ' due now)' : '') + '</p><div class="paid-box" data-paid-box></div>' +
+      '<p class="mg-paid-inv"><button type="button" class="link-btn" data-inv-full>See the invoice and our bank details</button></p></div>';
+    else m.innerHTML = '<div class="inv-modal-card"><div class="inv-modal-h"><h2>Your invoice</h2><button type="button" class="inv-x" data-inv-close aria-label="Close">' + svg('i-x') + '</button></div>' + K.invoiceHTML(inv) +
       '<div class="inv-acts"><button class="btn btn-ghost" type="button" data-inv-pdf>' + svg('i-doc') + 'Download PDF</button><button class="btn btn-ghost" type="button" data-inv-print>' + svg('i-doc') + 'Print</button>' +
       (st.bal > 0 && !v.claim ? '<button class="btn btn-green" type="button" data-inv-paid>' + svg('i-check') + 'I have paid</button>' : '') + '</div><div class="paid-box" data-paid-box>' + (v.claim ? K.paidThanks(v.claim, inv) : '') + '</div></div>';
     document.body.appendChild(m); document.body.classList.add('lock');
@@ -142,11 +155,12 @@
       if (e.target.closest('[data-inv-pdf]')) { K.downloadInvoice(inv).catch(function () { K.toast('The PDF could not be made. Check your internet connection.'); }); return; }
       if (e.target.closest('[data-inv-print]')) { K.printInvoice(inv).catch(function () { K.toast('The invoice could not be printed. Try Download PDF instead.'); }); return; }
       var pb = e.target.closest('[data-inv-paid]');
-      if (pb) K.paidForm($('[data-paid-box]', m), inv, function (c) { if (c) { pb.remove(); base.claim = c; } });
+      if (pb) K.paidForm($('[data-paid-box]', m), inv, function (c) { if (c) { pb.remove(); base.claim = c; drawSecs(); } });
+      if (e.target.closest('[data-inv-full]')) { if (base.claim && !$('form', m)) { close(); return; } m.remove(); var v2 = clone(v); v2._paid = false; invModal(v2); return; }
     });
     document.addEventListener('keydown', function esc0(e) { if (e.key === 'Escape' && document.body.contains(m)) { close(); document.removeEventListener('keydown', esc0); } });
     $('[data-inv-close]', m).focus();
-    if (v._paid) { var b0 = $('[data-inv-paid]', m); if (b0) b0.click(); }
+    if (v._paid) K.paidForm($('[data-paid-box]', m), inv, function (c) { if (c) { base.claim = c; drawSecs(); var x = $('[data-inv-full]', m); if (x) x.textContent = 'Close'; } else close(); });
   }
 
   function shopFor(v) {
@@ -215,9 +229,9 @@
     return '<div class="mg-booking"><div class="mg-bk-top"><span class="mg-ref">' + esc(v.ref) + '</span><span class="mg-st ' + stt[0] + '">' + stt[1] + '</span></div>' +
       '<h3>' + esc(st.name) + '</h3><p>' + svg('i-cal') + '<span><b>' + esc(nice(v.ci, true)) + '</b> to <b>' + esc(nice(v.co, true)) + '</b> (' + nights(v.ci, v.co) + ' night' + (nights(v.ci, v.co) === 1 ? '' : 's') + ')</span></p>' +
       '<p>' + svg('i-users') + '<span>' + esc(peopleText(v)) + '</span></p>' +
-      '<p class="mg-money">Total <b>' + K.money(v.total) + '</b> · Paid <b>' + K.money(v.paid) + '</b> · Still to pay <b>' + K.money(bal) + '</b></p>' +
+      '<p class="mg-money">Total <b>' + K.money(v.total) + '</b> · Paid <b>' + K.money(v.paid) + '</b>' + (v.claim ? ' (plus ' + K.money(v.claim.amt) + ' we are checking)' : '') + ' · Still to pay <b>' + K.money(bal) + '</b></p>' +
       (v.claim ? '<p class="mg-claim">' + svg('i-clock') + '<span>You told us you paid <b>' + K.money(v.claim.amt) + '</b> on ' + esc(nice(v.claim.date)) + '. We are checking the bank.</span></p>' : '') +
-      '<div class="mg-bk-acts"><button type="button" class="btn btn-light btn-sm" data-inv-open>' + svg('i-doc') + 'View my invoice</button>' + (bal > 0 && !v.claim && !started(v) ? '<button type="button" class="btn btn-green btn-sm" data-inv-open="paid">' + svg('i-check') + 'I have paid</button>' : '') + '</div></div>' +
+      '<div class="mg-bk-acts"><button type="button" class="btn btn-light btn-sm" data-inv-open>' + svg('i-doc') + 'View my invoice</button>' + (bal > (v.claim ? v.claim.amt : 0) && !started(v) ? '<button type="button" class="btn btn-green btn-sm" data-inv-open="paid">' + svg('i-check') + (v.claim ? 'I have paid more' : 'I have paid') + '</button>' : '') + '</div></div>' +
       (started(v) ? '' : locked(v) ? '<div class="mg-callout">' + svg('i-info') + '<p><b>Your stay starts within ' + balDays() + ' days.</b> To add or remove people now, please WhatsApp or email us.' + (finalMode(v) ? ' You can still finalise everything else here.' : '') + '</p></div>' : '');
   }
   function editor(id) {
@@ -230,7 +244,7 @@
       return '<p class="mg-help-t">For each vehicle, give the <b>registration</b>, the <b>driver</b> and <b>everyone else in it</b>. Every person in a vehicle signs an indemnity form at the gate, and we send one Dinokeng Conservation Fee Discount Voucher per vehicle, so this makes your arrival much quicker. Fill in what you know; you can come back and add the rest later.</p>' +
         '<div class="field"><label for="e-veh">How many vehicles are coming?</label><select id="e-veh" name="veh">' + opts + '<option value="0"' + (!d.vehicles ? ' selected' : '') + '>Not sure yet, I\'ll tell you later</option></select></div><div class="cars-list" data-cars></div>';
     }
-    if (id === 'eta') return '<p class="mg-help-t">Check-in is from 13:00 and check-out is by 11:00. Knowing roughly when you arrive helps us have your stand, firewood and ice ready.</p>' +
+    if (id === 'eta') return '<p class="mg-help-t">Times are flexible, so arrive when it suits you. Knowing roughly when you arrive helps us have your stand, firewood and ice ready.</p>' +
       '<div class="field"><label for="e-eta">Roughly when will you arrive?</label><select id="e-eta" name="eta">' + (d.eta ? '' : '<option value="">Choose a time</option>') + ETAS.map(function (t) { return '<option' + (t === d.eta ? ' selected' : '') + '>' + t + '</option>'; }).join('') + '</select></div>';
     if (id === 'shop') return '<p class="mg-help-t">Tap <b>+</b> to add and <b>&minus;</b> to remove. What you order is waiting for you when you arrive and goes on your invoice. Anything else you can buy at the camp shop.</p><div data-shop></div><div class="mg-shop-tot" data-shop-tot></div>';
     if (id === 'guests') {
@@ -376,7 +390,7 @@
     var newTotal = b.total + shopDiff + gDiff, bal = Math.max(0, newTotal - b.paid);
     $('[data-pane="3"]').innerHTML = '<p class="bw-of">Step 3 of 4</p><h2>Check your changes</h2><p class="bw-lead">Read through what will change on booking <b>' + esc(b.ref) + '</b>. If something is not right, go back and fix it.</p>' +
       blocks.map(function (x) { return '<div class="mg-chk"><h3>' + svg(x[0]) + x[1] + '</h3>' + x[2] + '</div>'; }).join('') +
-      nameWarn + (shopDiff || gDiff ? '<div class="mg-total"><div><span>Total before</span><b>' + K.money(b.total) + '</b></div>' + (gDiff ? '<div><span>Guests change</span><b class="' + (gDiff > 0 ? 'up' : 'down') + '">' + (gDiff > 0 ? '+' : '&minus;') + K.money(Math.abs(gDiff)) + '</b></div>' : '') + (shopDiff ? '<div><span>Camp shop change</span><b class="' + (shopDiff > 0 ? 'up' : 'down') + '">' + (shopDiff > 0 ? '+' : '&minus;') + K.money(Math.abs(shopDiff)) + '</b></div>' : '') + '<div class="big"><span>New total</span><b>' + K.money(newTotal) + '</b></div><div><span>Paid so far</span><b>' + K.money(b.paid) + '</b></div><div class="big"><span>Still to pay</span><b>' + K.money(bal) + '</b></div></div>' : '') +
+      nameWarn + (shopDiff || gDiff ? '<div class="mg-total"><div><span>Total before</span><b>' + K.money(b.total) + '</b></div>' + (gDiff ? '<div><span>Guests change</span><b class="' + (gDiff > 0 ? 'up' : 'down') + '">' + (gDiff > 0 ? '+' : '&minus;') + K.money(Math.abs(gDiff)) + '</b></div>' : '') + (shopDiff ? '<div><span>Camp shop change</span><b class="' + (shopDiff > 0 ? 'up' : 'down') + '">' + (shopDiff > 0 ? '+' : '&minus;') + K.money(Math.abs(shopDiff)) + '</b></div>' : '') + '<div class="big"><span>New total</span><b>' + K.money(newTotal) + '</b></div><div><span>Paid so far</span><b>' + K.money(b.paid) + '</b></div>' + (b.claim ? '<div><span>You told us you paid (we are checking)</span><b>' + K.money(b.claim.amt) + '</b></div>' : '') + '<div class="big"><span>Still to pay</span><b>' + K.money(bal) + '</b></div></div>' : '') +
       '<p class="mg-nochange">' + svg('i-info') + '<span><b>Nothing is saved yet.</b> Press <b>Save my changes</b> to send them to Kyleu.</span></p>' +
       '<div class="bw-nav"><button class="btn btn-ghost" type="button" data-back2>' + svg('i-arrow-l') + 'Back: make more changes</button><button class="btn" type="button" data-save' + (named > tot ? ' disabled title="Fix the number of people first"' : '') + '>' + svg('i-check') + 'Save my changes</button></div>';
   }
@@ -407,12 +421,24 @@
     if (a.shop) steps.push('Your shop order is on your invoice. Your new total is <b>' + K.money(base.total) + '</b>' + (bal ? ' and <b>' + K.money(bal) + '</b> is still to pay' : '') + '. Pay by EFT with reference <b>' + esc(base.ref) + '</b>.');
     if (a.guests && a.guests.mode === 'direct' && !a.guests.extra) steps.push('Your booking is now for <b>' + esc(peopleText(base)) + '</b>' + (a.guests.diff ? ' and your new total is <b>' + K.money(base.total) + '</b>' : '') + '.');
     if (a.request) steps.push('We look at your ' + (a.guests && a.guests.mode === 'request' && changed0(was, a, 'dates') ? 'new dates and number of guests' : a.guests && a.guests.mode === 'request' ? 'new number of guests' : 'new dates') + ' and get back to you by email or WhatsApp, usually within one working day. <b>Your booking stays as it is until we confirm.</b>');
-    if (finalMode(base) && (base.vehicles === 0 || base.cars.some(function (c) { return !c.reg || !c.driver; }))) steps.push('Still missing some vehicle details? Come back with the link to your booking any time before ' + esc(nice(base.ci)) + ' to add them.');
+    // what is still missing before the stay, so "finalised" never hides an empty box
+    var missing = [];
+    if (finalMode(base)) {
+      var nv = base.vehicles || 0, cars0 = (base.cars || []).slice(0, nv), named0 = cars0.reduce(function (x, c) { return x + (c.driver ? 1 : 0) + (c.guests || []).filter(Boolean).length; }, 0), tot0 = people(base);
+      if (!nv) missing.push('how many vehicles are coming');
+      else {
+        var noReg = cars0.filter(function (c) { return !c.reg; }).length;
+        if (noReg) missing.push(noReg === 1 ? 'one registration number' : noReg + ' registration numbers');
+        if (named0 < tot0) missing.push('the name' + (tot0 - named0 === 1 ? '' : 's') + ' of ' + (tot0 - named0) + ' more ' + (tot0 - named0 === 1 ? 'person' : 'people'));
+      }
+      if (!base.eta) missing.push('roughly when you arrive');
+    }
+    if (missing.length) steps.push('<b>Still to add before you arrive:</b> ' + esc(missing.length > 1 ? missing.slice(0, -1).join(', ') + ' and ' + missing[missing.length - 1] : missing[0]) + '. Come back with the link to your booking any time before ' + esc(nice(base.ci)) + '.');
     if (a.guests && a.guests.extra) steps.unshift('<b>Your booking is waiting for payment again:</b> ' + K.money(base.total - base.paid) + ' is owing for the added guests. Once it is paid, you can finalise the rest of your booking here.');
     if (a.invoice) steps.unshift('We have emailed your <b>updated invoice</b> to <b>' + esc(base.email) + '</b>. <button type="button" class="link-btn" data-inv-open>View it here</button>.');
     $('[data-pane="4"]').innerHTML = '<div class="success mg-done"><div class="success-badge"><svg class="ring" viewBox="0 0 110 110" fill="none" stroke="#3f7d3a" stroke-width="6" stroke-linecap="round"><circle cx="55" cy="55" r="50"/><path d="M34 57l14 14 28-30"/></svg></div>' +
-      '<p class="bw-of">Step 4 of 4</p><h2>' + (a.finalise ? 'Your booking is finalised' : 'Your changes are saved') + '</h2><p class="muted">Booking <b>' + esc(base.ref) + '</b> · ' + esc(stand(base.stand).name) + ' · ' + esc(nice(base.ci)) + ' to ' + esc(nice(base.co)) + '</p>' +
-      '<p class="mg-small">You changed: ' + esc(a.summary.join(', ')) + '.</p>' +
+      '<p class="bw-of">Step 4 of 4</p><h2>' + (a.finalise && !missing.length ? 'Your booking is finalised' : a.finalise ? 'Saved. Nearly done!' : 'Your changes are saved') + '</h2><p class="muted">Booking <b>' + esc(base.ref) + '</b> · ' + esc(stand(base.stand).name) + ' · ' + esc(nice(base.ci)) + ' to ' + esc(nice(base.co)) + '</p>' +
+      (function () { var ch = a.summary.filter(function (x) { return x !== 'finalised the booking'; }); return ch.length ? '<p class="mg-small">You changed: ' + esc(ch.length > 1 ? ch.slice(0, -1).join(', ') + ' and ' + ch[ch.length - 1] : ch[0]) + '.</p>' : ''; })() +
       '<ol class="next-steps">' + steps.map(function (t, i) { return '<li><b>' + (i + 1) + '</b><span>' + t + '</span></li>'; }).join('') + '</ol>' +
       '<div class="cta-actions"><button class="btn" type="button" data-again>' + svg('i-edit') + 'Back to my booking</button><a class="btn btn-ghost" href="index.html">Back to the home page</a></div>' +
       '<div class="demo-flag" style="margin:22px 0 0;text-align:left">' + svg('i-info') + '<span>Demo mode: nothing was sent anywhere. The change stays in this browser, so you can see it arrive on the booking in the admin demo.</span></div></div>';

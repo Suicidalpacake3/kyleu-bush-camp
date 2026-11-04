@@ -210,7 +210,7 @@
   K.cardFee = function (P) { return P ? P.num('Booking rules', 'Card payment fee percentage', 3) : 3; };
   K.toCard = function (n, P) { return Math.round(n * (1 + K.cardFee(P) / 100)); };
   K.dualPair = function (cardAmt, eftAmt, tag) {
-    if (!eftAmt) return 'FREE';
+    if (!eftAmt) return 'Free';
     if (cardAmt === eftAmt) return money(eftAmt);   // no card fee: one price for everyone
     return '<span class="dual"><s class="dual-card" title="Card price">' + money(cardAmt) + '</s> <span class="dual-eft">' + money(eftAmt) + '</span>' + (tag === false ? '' : '<small class="dual-tag">EFT</small>') + '</span>';
   };
@@ -309,7 +309,7 @@
         var parts = el.getAttribute('data-price').split('|');
         var v = P.num(parts[0], parts[1], null);
         if (v == null) return;
-        if (/dinokeng/i.test(parts[0]) || el.hasAttribute('data-plain')) el.textContent = v === 0 && el.hasAttribute('data-free') ? 'FREE' : money(v);   // Dinokeng's fees are not Kyleu's
+        if (/dinokeng/i.test(parts[0]) || el.hasAttribute('data-plain')) el.textContent = v === 0 && el.hasAttribute('data-free') ? 'Free' : money(v);   // Dinokeng's fees are not Kyleu's
         else el.innerHTML = K.dual(v, P, !el.hasAttribute('data-notag'));
       });
       document.querySelectorAll('[data-rates-year]').forEach(function (el) { if (P.year) el.textContent = P.year; });

@@ -40,12 +40,12 @@ image: assets/img/wildlife/tree-sunset.jpg
 summary: Meet our newest stand: a private, completely self-sufficient spot on the Kaallaagte spruit.
 tags: New stand, Self-sufficient
 
-We've opened a sixth self-sufficient stand along the Kaallaagte spruit. Like its neighbours it has **no facilities** (no water, no electricity and no braai), which is exactly why our self-sufficient campers love it.
+We've opened a sixth self-sufficient stand along the Kaallaagte spruit. Like its neighbours it has **no facilities** (no water, no electricity and no braai stand, only a small fire boma with a grill), which is exactly why our self-sufficient campers love it.
 
 ### What to bring
 - All your water (plan for at least 10-15 litres per person per day)
 - Your own power: solar, a battery pack or a generator-free setup
-- A braai stand or fire basket (fires only in the loose boma provided)
+- A braai stand or fire basket (fires only in the fire boma provided)
 - A porta potty, or hire one from us for R100 a night (including cleaning)
 
 [Book Self-Sufficient 6](stay.html?area=self-sufficient)
@@ -63,7 +63,7 @@ Self-driving is great, but there's something special about heading out with a gu
 - **R450 per person** for 2 people
 - **R900** for a private drive for 1 person
 
-Children over 5 are welcome. Please enquire in advance. Drives are subject to availability. You can add a game drive while you book your stand, or WhatsApp us on 060 458 4478.
+Children over 5 are welcome. Please enquire in advance. Drives are subject to availability. To book a drive, WhatsApp us on 060 458 4478.
 
 ## What to pack for your first Kyleu weekend
 date: 2026-06-14

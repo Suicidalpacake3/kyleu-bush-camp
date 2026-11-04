@@ -103,6 +103,29 @@
     return acc;
   };
 
+  // the same invoice lines as a new booking: weekend nights and weekday nights with their dates and rate, children free
+  K.stayLines = function (P, area, name, ci, co, g) {
+    var ss = area === 'self-sufficient', sec = ss ? 'Self-sufficient' : 'Ablution stands';
+    var R = { wk: P.num(sec, 'Weekend per person per night', ss ? 180 : 245), wd: P.num(sec, 'Weekday per person per night', ss ? 100 : 160), pe: P.num(sec, 'Pensioner weekday per person per night', ss ? 100 : 115) };
+    var p = function (s) { var a = s.split('-'); return new Date(+a[0], a[1] - 1, +a[2]); }, iso = function (d) { return new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10); };
+    var grp = { wk: [], wd: [] }, amt = { wk: 0, wd: 0 }, pensUsed = false, paying = g.adults + g.pens;
+    for (var d = p(ci), end = p(co); d < end; d.setDate(d.getDate() + 1)) {
+      var dow = d.getDay(), nx = new Date(d); nx.setDate(nx.getDate() + 1);
+      var wk = dow === 5 || dow === 6 || !!P.holidays[iso(nx)], k = wk ? 'wk' : 'wd';
+      var pr = (!wk && dow >= 1 && dow <= 4) ? R.pe : (wk ? R.wk : R.wd); if (g.pens && pr !== (wk ? R.wk : R.wd)) pensUsed = true;
+      grp[k].push(new Date(d)); amt[k] += g.adults * (wk ? R.wk : R.wd) + g.pens * pr;
+    }
+    var out = [];
+    ['wk', 'wd'].forEach(function (k) {
+      var ds = grp[k]; if (!ds.length || !paying) return;
+      var dl = ds.map(function (d, i) { return d.toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric' }) + (i === ds.length - 1 || d.getMonth() !== ds[i + 1].getMonth() ? ' ' + d.toLocaleDateString('en-ZA', { month: 'short' }) : ''); });
+      var dtxt = dl.length > 1 ? dl.slice(0, -1).join(', ') + ' & ' + dl[dl.length - 1] : dl[0], word = k === 'wk' ? 'weekend' : 'weekday';
+      out.push({ t: name + ' · ' + word + ' night' + (ds.length > 1 ? 's' : '') + ': ' + dtxt + ' · ' + paying + ' adult' + (paying === 1 ? '' : 's') + (k === 'wd' && pensUsed ? ' (pensioner rate Mon-Thu)' : ' at ' + K.money(k === 'wk' ? R.wk : R.wd) + ' per person'), q: ds.length, u: Math.round(amt[k] / ds.length), amt: amt[k], tag: 'stay' });
+    });
+    if (g.kids) out.push({ t: 'Child' + (g.kids === 1 ? '' : 'ren') + ' under 12 (free)', q: g.kids, amt: 0, free: true, tag: 'stay' });
+    return out;
+  };
+
   /* ---------- camp shop ---------- */
   var IMG = [[/sekelbos|firewood/i, 'sekelbos-wood.jpg'], [/long.?burning/i, 'long-burning-wood.jpg'], [/^ice/i, 'ice.jpg'], [/firelighter/i, 'firelighters.jpg'], [/mug/i, 'mugs.jpg'], [/cap/i, 'caps.jpg'], [/starter|tokkie/i, 'fire-starter.jpg']];
   K.shopImg = function (label) { for (var i = 0; i < IMG.length; i++) if (IMG[i][0].test(label)) return 'assets/img/shop/' + IMG[i][1]; return 'assets/img/logo-small.png'; };

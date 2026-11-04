@@ -34,7 +34,28 @@
     var r = hash(stand.id + '|' + key);
     return r < (wk ? 0.3 : 0.07);
   }
-  function isFree(stand, ci, co) { return nightsOf(ci, co).every(function (d) { return !fakeBooked(stand, d); }); }
+  // Demo: when the admin demo has been opened in this browser, its bookings and blocked dates are the calendar,
+  // so the website never offers a stand that the admin shows as taken. Website bookings made here count too.
+  // Live: both read the same booking database.
+  var TAKEN = null;
+  function takenList() {
+    if (TAKEN) return TAKEN;
+    TAKEN = []; var db = null;
+    try { db = JSON.parse(localStorage.getItem('kyleu-admin-demo-v1') || 'null'); } catch (e) {}
+    if (db && db.bookings) {
+      db.bookings.forEach(function (b) { if (b.status !== 'cancelled') TAKEN.push({ stand: b.stand, from: b.ci, to: b.co }); });
+      (db.blocks || []).forEach(function (k) { TAKEN.push({ stand: k.stand, from: k.from, to: k.to }); });
+      TAKEN.admin = true;
+    }
+    try { JSON.parse(localStorage.getItem('kyleu-web-bookings') || '[]').forEach(function (b) { if (b.stand && b.ci && b.co && !b.cancelled) TAKEN.push({ stand: b.standId || b.stand, from: b.ci, to: b.co }); }); } catch (e) {}
+    return TAKEN;
+  }
+  function bookedOn(stand, d) {
+    var t = takenList(), k = iso(d);
+    if (t.some(function (x) { return (x.stand === stand.id || x.stand === stand.name) && x.from <= k && k < x.to; })) return true;
+    return t.admin ? false : fakeBooked(stand, d);
+  }
+  function isFree(stand, ci, co) { return nightsOf(ci, co).every(function (d) { return !bookedOn(stand, d); }); }
 
   /* ---------- pricing ---------- */
   function rates(stand) {
@@ -82,7 +103,7 @@
     var depPct = P.num('Booking rules', 'Deposit percentage', 50);
     var daysToArrive = Math.round((ci - today()) / DAY);
     var balDays = P.num('Booking rules', 'Balance due days before arrival', 7);
-    return { nights: nights.length, wkN: wkN, wdN: wdN, lines: lines, stay: stay, exLines: exLines, exTotal: exTotal, total: total, deposit: Math.round(total * depPct / 100), depPct: depPct, cardStay: cardStay, cardTotal: cardTotal, cardDeposit: Math.round(cardTotal * depPct / 100), fee: K.cardFee(P), payFull: daysToArrive <= balDays, balanceDue: addDays(ci, -balDays), R: R };
+    return { nights: nights.length, wkN: wkN, wdN: wdN, lines: lines, stay: stay, exLines: exLines, exTotal: exTotal, total: total, deposit: Math.round(total * depPct / 100), depPct: depPct, cardStay: cardStay, cardTotal: cardTotal, cardDeposit: Math.round(cardTotal * depPct / 100), fee: K.cardFee(P), payFull: daysToArrive <= balDays + depDays(), balanceDue: addDays(ci, -balDays), fullDue: daysToArrive <= balDays ? (daysToArrive >= 1 ? addDays(today(), 1) : today()) : addDays(ci, -balDays), R: R };
   }
   function dinokengFees(ci, co, g, vehicles) {
     var n = nightsOf(ci, co).length, cap = P.num('Dinokeng', 'Conservation fee cap per person per stay', 300);
@@ -116,7 +137,7 @@
   function cover(st) { return st.photos[0] || ({ fenced: 'assets/img/photos/fenced-camp-lawn.jpg', unfenced: 'assets/img/photos/trailer-unfenced.jpg', 'self-sufficient': 'assets/img/wildlife/tree-sunset.jpg' })[st.area]; }
   function photosOf(st) { return st.photos.length ? st.photos : [cover(st)]; }
   function areaIcon(a) { return a === 'fenced' ? 'i-fence' : a === 'unfenced' ? 'i-paw' : 'i-tree'; }
-  function facilityText(st) { return st.area === 'self-sufficient' ? 'Braai & boma' : 'Private ablution'; }
+  function facilityText(st) { return st.area === 'self-sufficient' ? 'Fire boma & grill' : 'Private ablution'; }
   function onlinePay() { return !!(S && /^(on|yes|true)/i.test(S.get('Online payments', 'off'))); }
   function noFee(q) { return !q.fee; }
 
@@ -222,7 +243,7 @@
     var ph = photosOf(st);
     var hl = st.highlights.map(function (h) { var no = /^no /i.test(h); return '<li class="' + (no ? 'no' : '') + '"><svg><use href="#' + (no ? 'i-x' : 'i-check') + '"/></svg>' + K.esc(h) + '</li>'; }).join('');
     var base = st.area === 'self-sufficient'
-      ? ['Braai and boma on the stand', 'Pool area access in the fenced camp', 'No ablution, water or electricity', 'Unfenced: wild animals roam freely']
+      ? ['Small fire boma with a grill', 'Pool area access in the fenced camp', 'No ablution, water or electricity', 'Unfenced: wild animals roam freely']
       : ['Shower, toilet, basin & scullery', 'Hot water (gas geyser) & solar LED lights', 'No electricity at the stand', '1 free bag of firewood per night'];
     base = base.map(function (h) { var no = /^no |unfenced/i.test(h); return '<li class="' + (no ? 'no' : '') + '"><svg><use href="#' + (no ? 'i-info' : 'i-check') + '"/></svg>' + h + '</li>'; }).join('');
     $('.sheet-scroll', sheet).innerHTML =
@@ -255,7 +276,7 @@
     ['M', 'T', 'W', 'T', 'F', 'S', 'S'].forEach(function (d) { h += '<span class="dow">' + d + '</span>'; });
     for (var i = 0; i < start; i++) h += '<span></span>';
     for (var d = 1; d <= dim; d++) {
-      var dt = new Date(m.getFullYear(), m.getMonth(), d), past = dt < today(), bk = fakeBooked(current, dt), cls = [];
+      var dt = new Date(m.getFullYear(), m.getMonth(), d), past = dt < today(), bk = bookedOn(current, dt), cls = [];
       if (bk) cls.push('bk'); if (isWeekendNight(dt)) cls.push('we');
       if (sel.ci && +dt === +sel.ci) cls.push('sel'); if (sel.co && +dt === +sel.co) cls.push('sel');
       if (sel.ci && sel.co && dt > sel.ci && dt < sel.co) cls.push('mid');
@@ -267,7 +288,7 @@
       b.onclick = function () {
         var dt = parse(b.dataset.d);
         if (!sel.ci || (sel.ci && sel.co) || dt <= sel.ci) {
-          if (fakeBooked(current, dt)) { K.toast('That night is already booked'); return; }
+          if (bookedOn(current, dt)) { K.toast('That night is already booked'); return; }
           sel.ci = dt; sel.co = null;
         } else {
           if (!isFree(current, sel.ci, dt)) { K.toast('Some nights in that range are booked. Try other dates'); return; }
@@ -281,13 +302,13 @@
   function updateSheetPrice() {
     var bd = $('[data-bd]', sheet), bb = $('.book-box', sheet);
     if (!sel.co) {
-      bd.innerHTML = '<div class="row sub"><span>' + (sel.ci ? 'Now pick your check-out date' : 'Pick your arrival date on the calendar above') + '</span></div>';
-      $('.tot', bb).innerHTML = '<b>-</b><small>Select check-out</small>';
+      bd.innerHTML = '<div class="row sub"><span>' + (sel.ci ? 'Now pick your departure date' : 'Pick your arrival date on the calendar above') + '</span></div>';
+      $('.tot', bb).innerHTML = '<b>-</b><small>Pick your departure date</small>';
       $('[data-reserve]', bb).disabled = true; return;
     }
     var free = isFree(current, sel.ci, sel.co), q = quote(current, sel.ci, sel.co);
     bd.innerHTML = '<div class="row sub"><span>' + nice(sel.ci) + ' → ' + nice(sel.co) + '</span><span>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + '</span></div>' +
-      q.lines.map(function (l) { return '<div class="row"><span>' + l.t + '</span><span>' + (l.free ? 'FREE' : K.money(l.c)) + '</span></div>'; }).join('') +
+      q.lines.map(function (l) { return '<div class="row"><span>' + l.t + '</span><span>' + (l.free ? 'Free' : K.money(l.c)) + '</span></div>'; }).join('') +
       (noFee(q) ? '<div class="row total"><span>Total</span><span>' + K.money(q.stay) + '</span></div>' :
       '<div class="row"><span><b>Total</b> (card price, incl. ' + q.fee + '% card fee)</span><span><b>' + K.money(q.cardStay) + '</b></span></div>' +
       '<div class="row eft-row"><span>EFT discount</span><span>-' + K.money(q.cardStay - q.stay) + '</span></div>' +
@@ -320,7 +341,8 @@
   }
   function closeCheckout() { bwMark(wstep); modal.classList.remove('open'); if (!sheet.classList.contains('open')) document.body.classList.remove('lock'); }
   function goStep(n) {
-    step = n; bwMark(Math.min(8, n + 4));
+    step = n; bwMark(Math.min(8, n + 4)); if (K.toastHide) K.toastHide();
+    var mini = $('[data-mini]', modal); if (mini) mini.hidden = n === 4 || n === 2;
     $$('.mc-step', modal).forEach(function (s) { s.classList.toggle('on', +s.dataset.step === n); });
     $$('.steps li', modal).forEach(function (li, i) { li.classList.toggle('on', i + 1 === n); li.classList.toggle('done', i + 1 < n); });
     $('.mc-main', modal).scrollTop = 0;
@@ -332,15 +354,25 @@
     var tot = card ? q.cardTotal : q.total, dep = card ? q.cardDeposit : q.deposit;
     side.innerHTML = '<div class="ms-img"><img src="' + cover(b.stand) + '" alt=""></div><div class="ms-body">' +
       '<div><span class="badge area-' + b.stand.area + '">' + b.stand.areaInfo.short + '</span><h3 style="margin-top:8px">' + K.esc(b.stand.name) + '</h3></div>' +
-      '<div class="ms-dates"><div><small>Check-in</small><b>' + nice(b.ci) + '</b></div><div><small>Check-out</small><b>' + nice(b.co) + '</b></div></div>' +
+      '<div class="ms-dates"><div><small>Arrive</small><b>' + nice(b.ci) + '</b></div><div><small>Depart</small><b>' + nice(b.co) + '</b></div></div>' +
       '<div class="muted" style="font-size:.88rem;font-weight:700">' + (b.g.adults + b.g.pens) + ' adult' + (b.g.adults + b.g.pens > 1 ? 's' : '') + (b.g.pens ? ' (' + b.g.pens + ' pensioner' + (b.g.pens > 1 ? 's' : '') + ')' : '') + (b.g.kids ? ' · ' + b.g.kids + ' child' + (b.g.kids > 1 ? 'ren' : '') : '') + '</div>' +
-      '<div class="breakdown">' + q.lines.map(function (l) { return '<div class="row"><span>' + l.t + '</span><span>' + (l.free ? 'FREE' : K.money(l.c)) + '</span></div>'; }).join('') +
+      '<div class="breakdown">' + q.lines.map(function (l) { return '<div class="row"><span>' + l.t + '</span><span>' + (l.free ? 'Free' : K.money(l.c)) + '</span></div>'; }).join('') +
       q.exLines.map(function (l) { return '<div class="row"><span>' + K.esc(l.t) + '</span><span>' + K.money(l.c) + '</span></div>'; }).join('') +
       (noFee(q) ? '<div class="row total"><span>Total</span><span>' + K.money(q.total) + '</span></div>' : card
         ? '<div class="row total"><span>Total (card)</span><span>' + K.money(q.cardTotal) + '</span></div><div class="row sub"><span>Includes the ' + q.fee + '% card fee. Choose EFT to save ' + K.money(q.cardTotal - q.total) + '.</span></div>'
         : '<div class="row"><span>Card price</span><span><s class="dual-card">' + K.money(q.cardTotal) + '</s></span></div><div class="row eft-row"><span>EFT discount</span><span>-' + K.money(q.cardTotal - q.total) + '</span></div><div class="row total"><span>Total with EFT</span><span>' + K.money(q.total) + '</span></div>') +
-      (q.payFull ? '<div class="row sub"><span>Arriving within 7 days: full payment due now</span></div>' : '<div class="row sub"><span>' + q.depPct + '% deposit to secure</span><span>' + K.money(dep) + '</span></div><div class="row sub"><span>Balance due by ' + nice(q.balanceDue, { day: 'numeric', month: 'short' }) + '</span><span>' + K.money(tot - dep) + '</span></div>') +
+      (q.payFull ? '<div class="row sub"><span>You arrive soon, so the full amount is due ' + (q.fullDue <= today() ? 'now' : 'by ' + nice(q.fullDue, { day: 'numeric', month: 'short' })) + '</span></div>' : '<div class="row sub"><span>' + q.depPct + '% deposit to secure</span><span>' + K.money(dep) + '</span></div><div class="row sub"><span>Balance due by ' + nice(q.balanceDue, { day: 'numeric', month: 'short' }) + '</span><span>' + K.money(tot - dep) + '</span></div>') +
       '</div><p class="muted" style="font-size:.8rem;margin:0">Dinokeng Game Reserve charges its own entry fees, paid to the reserve. <a href="dinokeng.html#fees" target="_blank">Dinokeng fees</a></p></div>';
+    // the same summary for phones (where the side panel is hidden) and on the "Check your booking" step
+    var gTxt = (b.g.adults + b.g.pens) + ' adult' + (b.g.adults + b.g.pens > 1 ? 's' : '') + (b.g.pens ? ' (' + b.g.pens + ' pensioner' + (b.g.pens > 1 ? 's' : '') + ')' : '') + (b.g.kids ? ' and ' + b.g.kids + ' child' + (b.g.kids > 1 ? 'ren' : '') : '');
+    var dueTxt = q.payFull ? 'You arrive soon, so please pay the full ' + K.money(tot) + (q.fullDue <= today() ? ' as soon as you can' : ' by ' + nice(q.fullDue, { day: 'numeric', month: 'long' })) + '.'
+      : 'Pay the ' + q.depPct + '% deposit of ' + K.money(dep) + ' within ' + depDays() + ' days to secure your stand. The balance of ' + K.money(tot - dep) + ' is due by ' + nice(q.balanceDue, { day: 'numeric', month: 'long' }) + '.';
+    var mini = $('[data-mini]', modal);
+    if (mini) mini.innerHTML = '<b>' + K.esc(b.stand.name) + '</b><span>' + nice(b.ci) + ' to ' + nice(b.co) + ' · ' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + '</span><span>' + gTxt + ' · <b>Total ' + K.money(tot) + '</b></span>';
+    var cs = $('[data-check-sum]', modal);
+    if (cs) cs.innerHTML = '<dl><div><dt>Stand</dt><dd>' + K.esc(b.stand.name) + ' <small>' + b.stand.areaInfo.short + '</small></dd></div><div><dt>Arrive</dt><dd>' + nice(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }) + '</dd></div><div><dt>Depart</dt><dd>' + nice(b.co, { weekday: 'long', day: 'numeric', month: 'long' }) + ' <small>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + '</small></dd></div><div><dt>Guests</dt><dd>' + gTxt + '</dd></div><div class="tot"><dt>Total</dt><dd>' + K.money(tot) + '</dd></div></dl><p>' + dueTxt + '</p><button type="button" class="link-btn" data-edit-stay>Change something</button>';
+    var eb = cs && $('[data-edit-stay]', cs); if (eb) eb.onclick = function () { closeCheckout(); };
+    var invSmall = $('.pay-opt[data-pay="invoice"] small', modal); if (invSmall && !onlinePay()) invSmall.textContent = dueTxt;
     // pay option amounts
     var eftNow = q.payFull ? q.total : q.deposit, cardEq = q.payFull ? q.cardTotal : q.cardDeposit;
     var amt = { deposit: q.cardDeposit, full: q.cardTotal, eft: eftNow, invoice: eftNow };
@@ -373,6 +405,7 @@
       var v = inp.type === 'checkbox' ? inp.checked : inp.value.trim(), bad = !v;
       if (!bad && inp.type === 'email') bad = !/^\S+@\S+\.\S+$/.test(inp.value);
       if (!bad && inp.name === 'phone') bad = inp.value.replace(/\D/g, '').length < 9;
+      if (inp.name === 'phone') { var pm = $('.msg', inp.closest('.field')); if (pm && pm.dataset.msgBad) pm.textContent = inp.value.trim() ? pm.dataset.msgBad : pm.dataset.msgEmpty; }
       if (!bad && inp.name === 'cardnum') bad = !luhn(inp.value);
       if (!bad && inp.name === 'exp') bad = !validExp(inp.value);
       if (!bad && inp.name === 'cvc') bad = !/^\d{3,4}$/.test(inp.value);
@@ -414,7 +447,7 @@
         vehicles: cv.count, vehTbc: !cv.count, cars: cv.cars,
         shop: SHOP.filter(function (it) { return shopQty[it.label]; }).map(function (it) { return { label: it.label, qty: shopQty[it.label], each: it.each }; }),
         pay: pay, paid: paid, eft: q.total, card: q.cardTotal, invoice: inv });
-      localStorage.setItem('kyleu-web-bookings', JSON.stringify(saved.slice(-50)));
+      localStorage.setItem('kyleu-web-bookings', JSON.stringify(saved.slice(-50))); TAKEN = null;
     } catch (e) {}
     var box = $('[data-success]', modal);
     box.innerHTML = '<div class="success"><div class="success-badge"><svg class="ring" viewBox="0 0 110 110" fill="none" stroke="#3f7d3a" stroke-width="6" stroke-linecap="round"><circle cx="55" cy="55" r="50"/><path d="M34 57l14 14 28-30"/></svg></div>' +
@@ -425,17 +458,23 @@
       (paid ? '<p class="muted" style="font-size:.9rem">' + K.money(paid) + ' received' + (isCard ? '' : ' by instant EFT') + '.</p>' : '') +
       // the invoice is emailed straight away, then shown here too
       '<div class="inv-sent" data-inv-sent role="status"><span class="spin"></span>Emailing your invoice to ' + K.esc(f('email')) + '…</div>' +
-      '<div class="inv-wrap">' + K.invoiceHTML(inv) + '</div>' +
-      '<div class="inv-acts"><button class="btn btn-ghost" type="button" data-inv-pdf><svg><use href="#i-doc"/></svg>Download PDF</button><button class="btn btn-ghost" type="button" data-inv-print><svg><use href="#i-doc"/></svg>Print</button>' + (paid < inv.total ? '<button class="btn btn-green" type="button" data-inv-paid><svg><use href="#i-check"/></svg>I have paid</button>' : '') + '</div>' +
-      '<div class="paid-box" data-paid-box></div>' +
-      '<div class="bk-link"><svg><use href="#i-doc"/></svg><div><b>The link to your booking</b><p>We have emailed it to you too. Use it to tell us you have paid or to amend your booking, and once it is paid in full, to finalise it.</p><a href="' + blink + '">' + K.esc(location.href.replace(/[^/]*$/, '') + blink) + '</a></div></div>' +
+      // what to do now comes first: how much, by when, where to pay, then "I have paid"
+      (paid < inv.total ? (function () {
+        var st = K.invoiceState(inv);
+        return '<div class="pay-now"><h3>Pay ' + K.money(st.now) + ' by EFT</h3><p>' + (q.payFull ? 'The full amount, ' + (q.fullDue <= today() ? 'as soon as you can' : 'by ' + nice(q.fullDue, { weekday: 'long', day: 'numeric', month: 'long' })) + ', because you arrive soon.' : 'This is the ' + q.depPct + '% deposit, due by ' + nice(parse(inv.depositDue), { weekday: 'long', day: 'numeric', month: 'long' }) + '. The balance of ' + K.money(inv.total - inv.deposit) + ' is due by ' + nice(q.balanceDue, { day: 'numeric', month: 'long' }) + '.') + '</p>' +
+          '<dl>' + K.bankRows().map(function (r) { return '<div><dt>' + r[0] + '</dt><dd>' + K.esc(r[1]) + '</dd></div>'; }).join('') + '<div class="ref-row"><dt>Payment reference</dt><dd>' + ref + '</dd></div></dl>' +
+          '<button class="btn btn-green" type="button" data-inv-paid><svg><use href="#i-check"/></svg>I have paid</button><div class="paid-box" data-paid-box></div></div>';
+      })() : '') +
+      '<div class="bk-link"><svg><use href="#i-doc"/></svg><div><b>The link to your booking</b><p>We have emailed it to you too. Use it to tell us you have paid or to amend your booking, and once it is paid in full, to finalise it.</p><a href="' + blink + '">Open my booking</a></div></div>' +
       '<h3 style="margin:26px 0 6px">What happens next</h3><ol class="next-steps">' +
-      (pay === 'invoice' ? '<li><b>1</b><span>Pay the ' + (q.payFull ? 'full amount of ' + K.money(q.total) : q.depPct + '% deposit of ' + K.money(q.deposit)) + ' by EFT within ' + depDays() + ' days, using reference <b>' + ref + '</b>. Then press <b>I have paid</b>, here or later with <a href="' + blink + '">the link to your booking</a>. We check the bank and confirm.</span></li>' : '') +
+      (pay === 'invoice' ? '<li><b>1</b><span>Pay the ' + (q.payFull ? 'full amount of ' + K.money(q.total) : q.depPct + '% deposit of ' + K.money(q.deposit)) + ' by EFT ' + (q.payFull ? (q.fullDue <= today() ? 'as soon as you can' : 'by ' + nice(q.fullDue, { day: 'numeric', month: 'long' })) : 'within ' + depDays() + ' days') + ', using reference <b>' + ref + '</b>. Then press <b>I have paid</b>, here or later with <a href="' + blink + '">the link to your booking</a>. We check the bank and confirm.</span></li>' : '') +
       (!q.payFull && pay !== 'full' ? '<li><b>' + (pay === 'invoice' ? 2 : 1) + '</b><span>Balance of ' + K.money(isCard ? q.cardTotal - q.cardDeposit : q.total - q.deposit) + ' is due by ' + nice(q.balanceDue, { day: 'numeric', month: 'long' }) + '. We\'ll send a reminder.</span></li>' : '') +
       '<li><b>✓</b><span>Pay your Dinokeng conservation &amp; self-drive fees online or at the gate. Kyleu is a proud DGR CP member, so before your stay we send you a <b>Conservation Fee Discount Voucher</b> code for each vehicle (R85 instead of R100 per adult per night). <a href="dinokeng.html#fees">Dinokeng fees</a></span></li>' +
       '<li><b>✓</b><span>Once your booking is <b>paid in full</b>, we email you a link to <b>finalise</b> it: your vehicles and who is in each one, roughly when you arrive, and anything you want waiting from the camp shop.</span></li>' +
       '<li><b>✓</b><span>Enter at Dinokeng <b>Tau Gate</b>, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km. <a href="contact.html">Directions</a></span></li></ol>' +
-      '<div class="cta-actions"><button class="btn" type="button" data-ics><svg><use href="#i-cal"/></svg>Add to calendar</button><a class="btn btn-green" target="_blank" rel="noopener" href="https://wa.me/27604584478?text=' + encodeURIComponent('Hi Kyleu! My booking reference is ' + ref + ' (' + booking.stand.name + ', ' + iso(booking.ci) + ' to ' + iso(booking.co) + ').') + '"><svg><use href="#i-wa"/></svg>Share with Kyleu</a></div>' +
+      '<div class="cta-actions"><button class="btn" type="button" data-ics><svg><use href="#i-cal"/></svg>Add to calendar</button><a class="btn btn-green" target="_blank" rel="noopener" href="https://wa.me/27604584478?text=' + encodeURIComponent('Hi Kyleu! My booking reference is ' + ref + ' (' + booking.stand.name + ', ' + iso(booking.ci) + ' to ' + iso(booking.co) + ').') + '"><svg><use href="#i-wa"/></svg>WhatsApp us your reference</a></div>' +
+      '<details class="inv-fold"><summary>See your invoice</summary><div class="inv-wrap">' + K.invoiceHTML(inv) + '</div></details>' +
+      '<div class="inv-acts"><button class="btn btn-ghost" type="button" data-inv-pdf><svg><use href="#i-doc"/></svg>Download invoice (PDF)</button><button class="btn btn-ghost" type="button" data-inv-print><svg><use href="#i-doc"/></svg>Print</button></div>' +
       '<div class="demo-flag" style="margin:22px 0 0;text-align:left"><svg><use href="#i-info"/></svg><span>Demo mode: this is a mock-up. No booking was made, nothing was charged and no details were sent anywhere. A copy stays in this browser only, so you can see it in the admin demo.</span></div></div>';
     $('[data-ics]', box).onclick = downloadICS;
     setTimeout(function () { var s = $('[data-inv-sent]', box); if (s) { s.className = 'inv-sent ok'; s.innerHTML = '<svg><use href="#i-check"/></svg>Invoice sent to ' + K.esc(f('email')) + ' by email'; } }, 1400);
@@ -467,7 +506,7 @@
     return { kind: 'Invoice', no: K.invoiceNo(ref, 'Invoice', 1), date: iso(t), ref: ref,
       guest: { name: (fv('first') + ' ' + fv('last')).trim(), email: fv('email'), phone: fv('phone') },
       stay: { stand: booking.stand.name, ci: iso(booking.ci), co: iso(booking.co), nights: q.nights, guests: a + ' adult' + (a === 1 ? '' : 's') + (g.pens ? ' (' + g.pens + ' pensioner' + (g.pens === 1 ? '' : 's') + ')' : '') + (g.kids ? ', ' + g.kids + ' child' + (g.kids === 1 ? '' : 'ren') : ''), vehicles: cv.count || '' },
-      lines: lines, total: isCard ? q.cardTotal : q.total, paid: paid, deposit: isCard ? q.cardDeposit : q.deposit, depPct: q.depPct, depositDue: iso(q.payFull ? (due < booking.ci ? due : t) : due), balanceDue: iso(q.balanceDue), payFull: q.payFull };
+      lines: lines, total: isCard ? q.cardTotal : q.total, paid: paid, deposit: isCard ? q.cardDeposit : q.deposit, depPct: q.depPct, depositDue: iso(q.payFull ? q.fullDue : due), balanceDue: iso(q.balanceDue), payFull: q.payFull };
   }
   function downloadICS() {
     var b = booking, d = function (x) { return iso(x).replace(/-/g, ''); };

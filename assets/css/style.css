@@ -95,7 +95,7 @@ input, select, textarea { font: inherit; color: inherit; }
    ========================================================= */
 .loader {
   position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: radial-gradient(circle at 50% 45%, #3a2616 0%, #1a110a 70%);
-  transition: opacity .7s var(--ease), visibility .7s;
+  transition: opacity .4s var(--ease), visibility .4s;
 }
 .loader.done { opacity: 0; visibility: hidden; }
 .loader-inner { display: grid; place-items: center; gap: 22px; }
@@ -440,13 +440,13 @@ section { position: relative; }
 /* =========================================================
    Reveal animations
    ========================================================= */
-[data-reveal] { opacity: 0; transform: translateY(28px); transition: opacity .9s var(--ease), transform .9s var(--ease); transition-delay: var(--d, 0s); }
+[data-reveal] { opacity: 0; transform: translateY(18px); transition: opacity .55s var(--ease), transform .55s var(--ease); transition-delay: min(var(--d, 0s), .4s); }
 [data-reveal="left"] { transform: translateX(-40px); }
 [data-reveal="right"] { transform: translateX(40px); }
 [data-reveal="zoom"] { transform: scale(.92); }
 [data-reveal].in { opacity: 1; transform: none; }
 .split-words .w { display: inline-block; overflow: hidden; vertical-align: top; padding: 0 .22em .1em 0; margin: 0 -.22em -.1em 0; }   /* room for italic letters that lean past their box */
-.split-words .w > span { display: inline-block; transform: translateY(105%); transition: transform .9s var(--ease); transition-delay: calc(var(--i) * 55ms + .15s); }
+.split-words .w > span { display: inline-block; transform: translateY(105%); transition: transform .6s var(--ease); transition-delay: min(calc(var(--i) * 35ms + .05s), .5s); }
 .split-words.in .w > span { transform: none; }
 .draw-line path { stroke-dasharray: 1200; stroke-dashoffset: 1200; transition: stroke-dashoffset 2.4s var(--ease); }
 .draw-line.in path { stroke-dashoffset: 0; }
@@ -679,3 +679,32 @@ html:has(body.lock) { overflow: hidden; }
    light background behind the dark-green version, and clear space all round it */
 .dgr-badge { gap: 26px; padding: 12px 20px 12px 16px; }
 .foot-dgr img, .foot-logos .foot-dgr img { padding: 12px 22px; border-radius: 10px; box-sizing: content-box; }
+
+/* readability: text over photos gets a stronger shade behind it and a soft shadow */
+.hero .lead, .page-hero .lead, .hero-tagline, .band p { color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.6), 0 2px 16px rgba(0,0,0,.45); }
+.page-hero::after { background: linear-gradient(180deg, rgba(18,10,4,.62), rgba(18,10,4,.58) 50%, rgba(18,10,4,.86)); }
+.band::after { background: radial-gradient(ellipse at center, rgba(20,12,6,.6), rgba(20,12,6,.82)); }
+.band .hand, .hero-hand { text-shadow: 0 1px 2px rgba(0,0,0,.7), 0 0 14px rgba(0,0,0,.55); }
+.band .hand { font-size: 2em; }
+@media (max-width: 700px) {
+  .hero::after { background: linear-gradient(180deg, rgba(18,10,4,.62) 0%, rgba(18,10,4,.5) 35%, rgba(18,10,4,.7) 62%, rgba(18,10,4,.92) 100%); }
+}
+
+/* footer: the WhatsApp button never covers the bottom links, links are easy to tap, logos the same height (DGR guide) */
+.foot-bottom { padding-right: 84px; font-size: .9rem; }
+.foot-bottom a { display: inline-block; padding: 6px 2px; }
+.foot-brand > .foot-logos > img { height: 74px; margin: 0; }
+.foot-dgr img, .foot-logos .foot-dgr img { height: 54px; padding: 10px 16px; }
+@media (max-width: 760px) {
+  .foot-bottom { padding-right: 0; }
+  .site-footer ul { gap: 2px; }
+  .site-footer ul a { display: inline-block; padding: 9px 0; }
+}
+
+/* laptops with short screens (e.g. 1366 x 768): keep the hero, buttons and DGR badge above the fold */
+@media (min-width: 900px) and (max-height: 820px) {
+  .hero-content { padding-top: calc(var(--header-h) + 18px); padding-bottom: 80px; }
+  .hero h1 { font-size: clamp(2.4rem, 4.6vw, 3.9rem); margin-bottom: .3em; }
+  .hero .lead { font-size: 1.02rem; margin-bottom: 10px; }
+  .hero-tagline { margin: 6px 0 14px; }
+}

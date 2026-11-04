@@ -15,9 +15,10 @@
     var seen = false; try { seen = sessionStorage.getItem('ky-loaded') === '1'; } catch (e) {}
     if (seen) { loader.remove(); loader = null; document.documentElement.classList.add('ready'); }
     else {
-      var minTime = new Promise(function (r) { setTimeout(r, 1300); });
-      var loaded = new Promise(function (r) { if (document.readyState === 'complete') r(); else window.addEventListener('load', r); });
-      Promise.race([Promise.all([minTime, loaded]), new Promise(function (r) { setTimeout(r, 4000); })]).then(function () {
+      // short: the page is shown as soon as it is ready (never longer than 1.8 seconds), images keep loading behind it
+      var minTime = new Promise(function (r) { setTimeout(r, 600); });
+      var loaded = new Promise(function (r) { if (document.readyState !== 'loading') r(); else document.addEventListener('DOMContentLoaded', r); });
+      Promise.race([Promise.all([minTime, loaded]), new Promise(function (r) { setTimeout(r, 1800); })]).then(function () {
         hideLoader(); try { sessionStorage.setItem('ky-loaded', '1'); } catch (e) {}
         setTimeout(function () { if (loader) loader.remove(); }, 900);
       });
@@ -86,9 +87,9 @@
         Array.prototype.slice.call(node.childNodes).forEach(function (n) {
           if (n.nodeType === 3) {
             var frag = document.createDocumentFragment();
-            n.textContent.split(/(\s+)/).forEach(function (w) {
+            n.textContent.split(/([ \t\r\n]+)/).forEach(function (w) {   // not on a no-break space, so "50 km" stays together
               if (!w) return;
-              if (/^\s+$/.test(w)) { frag.appendChild(document.createTextNode(w)); return; }
+              if (/^[ \t\r\n]+$/.test(w)) { frag.appendChild(document.createTextNode(w)); return; }
               var o = document.createElement('span'); o.className = 'w';
               var s = document.createElement('span'); s.textContent = w; s.style.setProperty('--i', i++);
               o.appendChild(s); frag.appendChild(o);
@@ -102,12 +103,13 @@
     /* ---------- reveal on scroll ---------- */
     var io = new IntersectionObserver(function (entries) {
       entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
-    }, { threshold: 0.14, rootMargin: '0px 0px -40px 0px' });
+    }, { threshold: 0.01, rootMargin: '0px 0px 8% 0px' });   // starts just before it scrolls into view, so nothing sits blank
     K.reveal = function (root) { $$('[data-reveal]:not(.in), .split-words:not(.in), .draw-line:not(.in)', root).forEach(function (el) { io.observe(el); }); };
     K.reveal();
     $$('[data-stagger]').forEach(function (p) { $$('[data-reveal]', p).forEach(function (c, i) { c.style.setProperty('--d', (i * 0.09) + 's'); }); });
     // fail-safe
-    setTimeout(function () { $$('[data-reveal]:not(.in)').forEach(function (el) { var r = el.getBoundingClientRect(); if (r.top < innerHeight) el.classList.add('in'); }); }, 2600);
+    var failSafe = function () { $$('[data-reveal]:not(.in), .split-words:not(.in)').forEach(function (el) { var r = el.getBoundingClientRect(); if (r.top < innerHeight * 1.2) el.classList.add('in'); }); };
+    setTimeout(failSafe, 1200); var fsT; window.addEventListener('scroll', function () { clearTimeout(fsT); fsT = setTimeout(failSafe, 250); }, { passive: true });
 
     /* ---------- counters ---------- */
     var co = new IntersectionObserver(function (entries) {
@@ -119,6 +121,8 @@
           el.textContent = dec ? v.toFixed(dec) : Math.round(v).toLocaleString('en-ZA').replace(/,/g, ' ');
           if (p < 1) requestAnimationFrame(tick);
         })(t0);
+        // if the browser pauses the animation (tab in the background, slow phone), still end on the right number
+        setTimeout(function () { el.textContent = dec ? to.toFixed(dec) : Math.round(to).toLocaleString('en-ZA').replace(/,/g, ' '); }, dur + 120);
       });
     }, { threshold: 0.5 });
     $$('[data-count]').forEach(function (el) { co.observe(el); });
@@ -269,6 +273,7 @@
     var t = document.querySelector('.toast'); if (!t) { t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
     t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(function () { t.classList.remove('show'); }, 3200);
   };
+  K.toastHide = function () { var t = document.querySelector('.toast'); if (t) { clearTimeout(t._h); t.classList.remove('show'); } };
 
   /* ---------- NOAA sunrise/sunset ---------- */
   function sunTimes(date, lat, lng) {

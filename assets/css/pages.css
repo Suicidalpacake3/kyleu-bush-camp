@@ -369,7 +369,10 @@
   .sheet-body { padding: 18px 16px 24px; }
   .book-box { padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); }
   .map-wrap, .map-wrap iframe { min-height: 360px; }
-  .steps li { font-size: .62rem; }
+  .steps li { font-size: .72rem; letter-spacing: .03em; }
+  .mc-step > h2 { padding-right: 46px; }
+  .mc-actions { flex-wrap: wrap; }
+  .mc-actions .btn { flex: 1 1 auto; justify-content: center; }
 }
 
 /* button spinner */
@@ -682,7 +685,8 @@ body.header-hidden .searchbar-wrap, body.header-hidden .subnav { top: 0; }
   .bw-dates, .bw-areas { grid-template-columns: 1fr; }
   .bw-person { padding: 12px 14px; }
   .bw-areas .area-pick img { width: 72px; height: 72px; }
-  .bw-nav .btn { flex: 1; justify-content: center; }
+  .bw-nav .btn { flex: 1 1 auto; min-width: 0; justify-content: center; white-space: normal; text-align: center; padding: 14px 16px; }
+  .bw-nav .btn-ghost { flex: 0 0 auto; }
   .bw-nav > span:empty { display: none; }
 }
 
@@ -935,3 +939,101 @@ body.header-hidden .searchbar-wrap, body.header-hidden .subnav { top: 0; }
 @media (max-width: 720px) { .dgr-feat { grid-template-columns: 1fr; padding: 16px; } .dgr-cover { aspect-ratio: 4 / 3; } }
 
 .dgr-card .dgr-body p { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* checkout: what you are booking, shown on phones (the side panel is hidden there) and on the Check step */
+.mc-mini { display: none; }
+@media (max-width: 1080px) {
+  .mc-mini:not([hidden]) { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; margin: -8px 0 18px; font-size: .92rem; color: var(--ink-soft); }
+  .mc-mini b { color: var(--bark); }
+  .mc-mini span { flex: 1 1 100%; }
+}
+.check-sum { background: var(--paper); border: 1.5px solid var(--line); border-radius: 16px; padding: 14px 16px; margin: 14px 0 6px; }
+.check-sum dl { margin: 0; display: grid; gap: 6px; }
+.check-sum dl > div { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.check-sum dt { color: var(--ink-soft); font-weight: 700; font-size: .92rem; }
+.check-sum dd { margin: 0; text-align: right; font-weight: 800; color: var(--bark); }
+.check-sum dd small { display: block; font-weight: 600; color: var(--ink-soft); font-size: .85rem; }
+.check-sum .tot { border-top: 1px dashed var(--line); padding-top: 8px; margin-top: 2px; }
+.check-sum .tot dd { font-family: var(--font-display); font-size: 1.3rem; }
+.check-sum p { margin: 10px 0 0; font-size: .95rem; color: var(--ink); line-height: 1.5; }
+.check-sum .link-btn { margin-top: 8px; background: none; border: 0; padding: 4px 0; font: inherit; font-weight: 800; color: var(--ember); text-decoration: underline; cursor: pointer; }
+.small-note { font-size: .92rem; }
+
+
+/* booking done: pay now box first, the full invoice folded away underneath */
+.pay-now { text-align: left; margin: 18px 0 0; padding: 18px 18px 16px; border-radius: 16px; background: #fff; border: 2px solid var(--sun); }
+.pay-now h3 { margin: 0 0 4px; font-size: 1.35rem; }
+.pay-now > p { margin: 0 0 12px; color: var(--ink); line-height: 1.5; }
+.pay-now dl { margin: 0 0 14px; display: grid; gap: 4px; }
+.pay-now dl > div { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px dashed var(--line); padding: 4px 0; }
+.pay-now dt { color: var(--ink-soft); font-weight: 700; }
+.pay-now dd { margin: 0; font-weight: 800; color: var(--bark); text-align: right; word-break: break-word; }
+.pay-now .ref-row dd { color: var(--ember); font-size: 1.1rem; letter-spacing: .04em; }
+.pay-now [data-inv-paid] { width: 100%; justify-content: center; }
+.bk-link a { word-break: normal; font-size: 1rem; }
+.inv-fold { margin: 22px 0 0; text-align: left; border: 1.5px solid var(--line); border-radius: 16px; background: #fff; }
+.inv-fold summary { cursor: pointer; padding: 14px 18px; font-weight: 800; color: var(--bark); list-style: none; display: flex; justify-content: space-between; align-items: center; }
+.inv-fold summary::-webkit-details-marker { display: none; }
+.inv-fold summary::after { content: "Show"; font-size: .9rem; color: var(--ember); }
+.inv-fold[open] summary::after { content: "Hide"; }
+.inv-fold .inv-wrap { padding: 0 10px 12px; }
+
+/* booking page: "I have paid" opens just the form */
+.inv-modal-card.paid-only { max-width: 560px; }
+.mg-paid-due { margin: 0 0 6px; font-size: 1.02rem; }
+.mg-paid-inv { margin: 14px 0 0; text-align: center; }
+.mg-paid-inv .link-btn, .mg-done .link-btn { background: none; border: 0; padding: 4px 0; font: inherit; font-weight: 800; color: var(--ember); text-decoration: underline; cursor: pointer; }
+
+/* proof of payment page: bank details */
+.pop-bank dl { margin: 8px 0 0; display: grid; gap: 2px; }
+.pop-bank dl > div { display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px dashed var(--line); padding: 4px 0; font-size: .95rem; }
+.pop-bank dt { color: var(--ink-soft); }
+.pop-bank dd { margin: 0; font-weight: 800; color: var(--bark); text-align: right; }
+.drop .drop-hint { font-size: .88rem; }
+
+/* comparison table: cards on phones */
+.compare-cards { display: none; }
+@media (max-width: 760px) {
+  .compare-wide { display: none; }
+  .compare-cards { display: grid; gap: 16px; }
+  .compare-cards .cc { background: var(--paper); border-radius: 18px; box-shadow: var(--shadow-sm); overflow: hidden; }
+  .compare-cards h3 { margin: 0; background: var(--bark); color: #fff; padding: 14px 16px; font-size: 1.2rem; }
+  .compare-cards h3 small { display: block; font-family: var(--font-body); font-size: .85rem; font-weight: 700; opacity: .8; margin-top: 2px; }
+  .compare-cards dl { margin: 0; padding: 6px 16px 10px; }
+  .compare-cards dl > div { display: grid; grid-template-columns: 40% 1fr; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: .98rem; }
+  .compare-cards dl > div:last-child { border-bottom: 0; }
+  .compare-cards dt { font-weight: 800; color: var(--bark-2); }
+  .compare-cards dd { margin: 0; }
+  .compare-cards .yes, .compare-cards .no { display: inline-flex; gap: 6px; align-items: flex-start; }
+}
+
+/* Experience: a way past the long scroll-through day, and bigger timeline stops */
+.dm-skip { display: inline-block; margin-top: 6px; font-weight: 800; font-size: .92rem; color: var(--gold); text-decoration: underline; }
+.dm-ticks button::before { content: ""; position: absolute; inset: -12px; }
+@media (max-width: 700px) {
+  .dm-ticks button { width: 16px; height: 16px; }
+  .dm-ticks button span { font-size: .72rem; }
+  .dm-ticks button:nth-child(even) span { display: none; }
+}
+/* chips that scroll sideways fade at the edge, so it is clear there is more */
+@media (max-width: 900px) {
+  .subnav-inner { -webkit-mask-image: linear-gradient(90deg, #000 82%, transparent); mask-image: linear-gradient(90deg, #000 82%, transparent); padding-right: 40px; }
+}
+
+/* readability: small labels a little bigger everywhere */
+.eyebrow { font-size: .86rem; }
+.post-meta, .bw-of, .mg-tag, .dgr-lab { font-size: .84rem; }
+.area-feats li, .gallery-card .gc-hl li, .cal-note, .field .msg, .dgr-badge small { font-size: .86rem; }
+.badge, .sc-photo-count, .area-tag { font-size: .8rem; }
+.sc-price small, .fact small, .guest-pop small { font-size: .84rem; }
+.ms-dates small, .info-row .k, .sb-field label { font-size: .74rem; }
+.dual-tag { font-size: .7rem; }
+@media (max-width: 700px) { .chip { font-size: .82rem; } }
+
+#reviews .quote::before { display: none; }
+.news-links { display: flex; flex-wrap: wrap; gap: 8px 22px; }
+
+.gallery-card .sc-foot { justify-content: space-between; align-items: center; }
+.map-tabs { right: 12px; flex-wrap: wrap; }
+.hero-jump { margin: 4px 0 18px; font-weight: 800; }
+.hero-jump a { color: var(--gold); text-decoration: underline; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
