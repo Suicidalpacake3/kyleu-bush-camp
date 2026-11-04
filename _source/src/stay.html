@@ -16,16 +16,15 @@
     <ol class="bw-steps" aria-label="Booking steps">
       <li data-s="1"><button type="button" data-bw-go="1"><span class="n">1</span><span class="t">Dates</span></button></li>
       <li data-s="2"><button type="button" data-bw-go="2"><span class="n">2</span><span class="t">Who's coming</span></button></li>
-      <li data-s="3"><button type="button" data-bw-go="3"><span class="n">3</span><span class="t">Camp area</span></button></li>
-      <li data-s="4"><button type="button" data-bw-go="4"><span class="n">4</span><span class="t">Your stand</span></button></li>
-      <li data-s="5"><span><span class="n">5</span><span class="t">Your details</span></span></li>
-      <li data-s="6"><span><span class="n">6</span><span class="t">Check &amp; agree</span></span></li>
-      <li data-s="7"><span><span class="n">7</span><span class="t">Pay</span></span></li>
+      <li data-s="3"><button type="button" data-bw-go="3"><span class="n">3</span><span class="t">Your stand</span></button></li>
+      <li data-s="4"><span><span class="n">4</span><span class="t">Your details</span></span></li>
+      <li data-s="5"><span><span class="n">5</span><span class="t">Check &amp; agree</span></span></li>
+      <li data-s="6"><span><span class="n">6</span><span class="t">Pay</span></span></li>
     </ol>
     <div class="bw-bar" aria-hidden="true"><span data-bw-bar></span></div>
 
     <div class="bw-pane" data-pane="1">
-      <p class="bw-of">Step 1 of 7</p>
+      <p class="bw-of">Step 1 of 6</p>
       <h2>When are you coming?</h2>
       <p class="bw-lead">First choose your <b>arrival</b> date. The calendar for your <b>departure</b> date opens straight after.</p>
       <div class="bw-dates">
@@ -45,7 +44,7 @@
     </div>
 
     <div class="bw-pane" data-pane="2" hidden>
-      <p class="bw-of">Step 2 of 7</p>
+      <p class="bw-of">Step 2 of 6</p>
       <h2>Who's coming?</h2>
       <p class="bw-lead">Use the <b>+</b> and <b>&minus;</b> buttons. Children under 12 stay free.</p>
       <div class="bw-people">
@@ -54,31 +53,24 @@
         <div class="bw-person"><span><b>Children</b><small>Under 12 years old: free</small></span><span class="bw-stepper"><button type="button" data-gstep="kids" data-d="-1" aria-label="One less child">&minus;</button><output data-g="kids">0</output><button type="button" data-gstep="kids" data-d="1" aria-label="One more child">+</button></span></div>
       </div>
       <div class="bw-sum ok" data-people-sum></div>
-      <div class="bw-nav"><button class="btn btn-ghost" type="button" data-bw-go="1"><svg><use href="#i-arrow-l"/></svg> Back</button><button class="btn" type="button" data-bw-next="3">Next: where to stay <svg><use href="#i-arrow"/></svg></button></div>
+      <div class="bw-nav"><button class="btn btn-ghost" type="button" data-bw-go="1"><svg><use href="#i-arrow-l"/></svg> Back</button><button class="btn" type="button" data-bw-next="3">Next: choose your stand <svg><use href="#i-arrow"/></svg></button></div>
     </div>
 
-    <div class="bw-pane" data-pane="3" hidden>
-      <p class="bw-of">Step 3 of 7</p>
-      <h2>Where would you like to stay?</h2>
-      <p class="bw-lead">Tap a camp area. We show how many stands are free for your dates.</p>
-      <div class="bw-areas">
-        <button class="area-pick" type="button" data-area="fenced"><img src="assets/img/photos/fenced-camp-lawn.jpg" alt=""><span><b>Fenced Bush Camp</b><small>Behind a fence, near the pool. Each stand has its own bathroom.</small><span class="from">from <span data-price="Ablution stands|Weekday per person per night">R160</span> per person per night</span><span class="bw-free" data-free></span></span></button>
-        <button class="area-pick" type="button" data-area="unfenced"><img src="assets/img/photos/wildebeest-at-camp.jpg" alt=""><span><b>Open (Unfenced) Bush Camp</b><small>No fence, so animals walk past. Each stand has its own bathroom.</small><span class="from">from <span data-price="Ablution stands|Weekday per person per night">R160</span> per person per night</span><span class="bw-free" data-free></span></span></button>
-        <button class="area-pick" type="button" data-area="self-sufficient"><img src="assets/img/photos/gazebo-campfire.jpg" alt=""><span><b>Self-sufficient stands</b><small>On the spruit, with a small fire boma and grill. No bathroom, water or power.</small><span class="from">from <span data-price="Self-sufficient|Weekday per person per night">R160</span> per person per night</span><span class="bw-free" data-free></span></span></button>
-        <button class="area-pick" type="button" data-area=""><img src="assets/img/photos/camp-panorama.jpg" alt=""><span><b>No preference</b><small>Show me every stand that is free.</small><span class="bw-free" data-free></span></span></button>
-      </div>
-      <div class="bw-nav"><button class="btn btn-ghost" type="button" data-bw-go="2"><svg><use href="#i-arrow-l"/></svg> Back</button><span></span></div>
-    </div>
-
-    <div class="bw-pane bw-pick" data-pane="4" hidden>
-      <p class="bw-of">Step 4 of 7</p>
+    <div class="bw-pane bw-pick" data-pane="3" hidden>
+      <p class="bw-of">Step 3 of 6</p>
       <h2>Choose your stand</h2>
       <div class="bw-chips">
         <button type="button" class="bw-chip" data-bw-go="1"><svg><use href="#i-cal"/></svg><span data-chip="dates"></span><small>Change</small></button>
         <button type="button" class="bw-chip" data-bw-go="2"><svg><use href="#i-users"/></svg><span data-chip="people"></span><small>Change</small></button>
-        <button type="button" class="bw-chip" data-bw-go="3"><svg><use href="#i-tent"/></svg><span data-chip="area"></span><small>Change</small></button>
       </div>
-      <p class="bw-lead">Press <b>View &amp; book</b> on a stand to see its photos and price, then press <b>Reserve</b>.</p>
+      <p class="bw-area-h">Which camp area? <span>Tap one to see only its stands.</span></p>
+      <div class="area-filter" role="group" aria-label="Camp area">
+        <button type="button" data-area-f=""><b>All areas</b><small>Every stand that is free</small><span class="bw-free" data-free></span></button>
+        <button type="button" data-area-f="fenced"><b>Fenced</b><small>Own bathroom, near the pool</small><span class="bw-free" data-free></span></button>
+        <button type="button" data-area-f="unfenced"><b>Open (unfenced)</b><small>Own bathroom, animals walk past</small><span class="bw-free" data-free></span></button>
+        <button type="button" data-area-f="self-sufficient"><b>Self-sufficient</b><small>No bathroom or water, small fire boma</small><span class="bw-free" data-free></span></button>
+      </div>
+      <p class="bw-lead">Then press <b>View &amp; book</b> on a stand to see its photos and price, and press <b>Reserve</b>.</p>
     </div>
   </div>
 </div>
@@ -125,7 +117,7 @@
   <div class="modal-card">
     <button class="mc-close" type="button" aria-label="Close"><svg><use href="#i-x"/></svg></button>
     <div class="mc-main">
-      <ol class="steps"><li>5. Your details</li><li>6. Check &amp; agree</li><li>7. Pay</li><li>Done</li></ol>
+      <ol class="steps"><li>4. Your details</li><li>5. Check &amp; agree</li><li>6. Pay</li><li>Done</li></ol>
       <div class="mc-mini" data-mini></div>
 
       <div class="mc-step" data-step="1">

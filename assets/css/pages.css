@@ -1037,3 +1037,18 @@ body.header-hidden .searchbar-wrap, body.header-hidden .subnav { top: 0; }
 .map-tabs { right: 12px; flex-wrap: wrap; }
 .hero-jump { margin: 4px 0 18px; font-weight: 800; }
 .hero-jump a { color: var(--gold); text-decoration: underline; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
+
+/* booking step 3: the camp area is a filter right above the stands */
+.bw-steps { grid-template-columns: repeat(6, 1fr); }
+.bw-area-h { margin: 6px 0 8px; font-weight: 900; color: var(--bark); font-size: 1.05rem; }
+.bw-area-h span { display: block; font-weight: 600; font-size: .92rem; color: var(--ink-soft); }
+.area-filter { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 0 0 14px; }
+.area-filter button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 12px 14px; border-radius: 14px; border: 2px solid var(--line); background: #fff; font: inherit; color: var(--bark); cursor: pointer; min-height: 56px; }
+.area-filter button:hover { border-color: var(--sun); }
+.area-filter button.on { border-color: var(--sun); background: #fff6e8; box-shadow: 0 0 0 3px rgba(232,115,28,.15); }
+.area-filter b { font-size: 1rem; line-height: 1.2; }
+.area-filter small { color: var(--ink-soft); font-size: .84rem; line-height: 1.3; }
+.area-filter .bw-free { margin-top: 4px; font-size: .88rem; }
+.area-filter button.full { opacity: .7; }
+.area-filter button.full .bw-free { color: var(--bad); }
+@media (max-width: 900px) { .area-filter { grid-template-columns: 1fr 1fr; } }
