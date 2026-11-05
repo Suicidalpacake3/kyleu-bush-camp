@@ -122,7 +122,8 @@
     grid.addEventListener('click', function (e) { var b = e.target.closest('.dp-d'); if (b && !b.disabled) pick(parseIso(b.dataset.d)); });
     grid.addEventListener('mouseover', function (e) {
       if (!ci || co || busy) return;
-      var b = e.target.closest('.dp-d'), d = b && !b.disabled ? parseIso(b.dataset.d) : null;
+      var c = e.target.closest('.dp-c'); if (!c || c.classList.contains('dp-blank')) return;
+      var b = c.querySelector('.dp-d'), d = b && !b.disabled ? parseIso(b.dataset.d) : null;
       if (!same(d, hover)) { hover = d; draw(); }
     });
     grid.addEventListener('mouseleave', function () { if (hover) { hover = null; draw(); } });

@@ -318,10 +318,12 @@
     box.addEventListener('click', function (e) { var b = e.target.closest('.dp-d'); if (b && !b.disabled) calPick(parse(b.dataset.d)); });
     box.addEventListener('mouseover', function (e) {
       if (!sel.ci || sel.co || calBusy) return;
-      var b = e.target.closest('.dp-d'), d = b && !b.disabled ? parse(b.dataset.d) : null;
+      var c = e.target.closest('.dp-c'); if (!c || c.classList.contains('dp-blank')) return;
+      var b = c.querySelector('.dp-d'), d = b && !b.disabled ? parse(b.dataset.d) : null;
       if ((d && +d) !== (calHover && +calHover)) { calHover = d; renderCal(); }
     });
     box.addEventListener('mouseleave', function () { if (calHover) { calHover = null; renderCal(); } });
+    box.addEventListener('mouseout', function (e) { if (calHover && !box.contains(e.relatedTarget)) { calHover = null; renderCal(); } });
   }
 
   function updateSheetPrice() {
