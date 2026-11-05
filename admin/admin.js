@@ -92,6 +92,7 @@
     if (b.status === 'out') return { k: 'out', t: 'Departed', tone: 'muted' };
     if (b.status === 'in') return { k: 'in', t: 'In camp', tone: 'ok' };
     if (b.status === 'pending') {
+      if (b.softHold) return { k: 'soft', t: 'Soft hold until ' + fd(b.softHold), tone: 'bad' };
       if (b.pop) return { k: 'pop', t: 'Proof of payment in', tone: 'info' };
       if (TODAY > depositDue(b)) return { k: 'overdue', t: 'EFT overdue', tone: 'bad' };
       return { k: 'pending', t: 'Awaiting EFT', tone: 'warn' };
@@ -293,7 +294,24 @@
     if (DB.stands) { CONTENT_STANDS.forEach(function (s) { if (!DB.stands.some(function (x) { return x.id === s.id; }) && !DB.gone[s.id]) DB.stands.push(JSON.parse(JSON.stringify(s))); }); STANDS = DB.stands; }   // campsites added in the map editor join the list   // stands added or changed in this admin
     if (!DB.products) DB.products = defaultProducts();
     DB.threads = DB.threads || []; DB.popSeen = DB.popSeen || {}; applyHol();
-    migrate(); importWeb(); importAmend(); importPop(); importPaid();
+    migrate(); importWeb(); importAmend(); importPop(); importPaid(); sweepHolds();
+  }
+  /* ---------- an unpaid quotation holds the stand for 5 days ----------
+     After that the stand is released by itself. If the guest said they paid (or sent proof of payment)
+     and it is not confirmed yet, a soft hold keeps the stand one more day while Kyleu checks the bank.
+     Live version: the server does this every night. */
+  function sweepHolds() {
+    var n = 0;
+    DB.bookings.forEach(function (b) {
+      if (b.status !== 'pending' || paid(b) > 0) { if (b.softHold) b.softHold = null; return; }
+      var claimed = !!(b.paidClaim || b.pop), h = K.quoteHold({ due: depositDue(b), paid: 0, claimed: claimed, today: TODAY });
+      if (h.state === 'released') {
+        b.status = 'cancelled'; b.softHold = null; b.released = { at: nowStamp(), due: depositDue(b) };
+        b.notes = b.notes || []; b.notes.push({ at: nowStamp(), by: 'System', text: 'Stand released automatically: the quotation was valid until ' + fd(depositDue(b)) + ' and no payment came in.' + (claimed ? ' The guest said they paid, but it was not confirmed within the extra day.' : '') });
+        log('Stand released automatically: ' + guestName(b) + ', ' + standById(b.stand).name + ', ' + fd(b.ci) + ' (quotation not paid)', b.ref); n++;
+      } else b.softHold = h.state === 'soft' ? h.until : null;
+    });
+    if (n) save();
   }
   // proof of payment uploaded on the website (pop.html), same browser in the demo
   var POPK = 'kyleu-web-pop';
@@ -504,7 +522,7 @@
     if ((b.status === 'confirmed' || b.status === 'in') && b.ci <= TODAY && b.co >= TODAY && dueN) acts.push('<button class="btn green" data-act="checkin" data-ref="' + b.ref + '">' + ic('in') + 'Check in' + (cs0.length > 1 ? ' a vehicle' : '') + '</button>');
     if (inN) acts.push('<button class="btn green" data-act="checkout" data-ref="' + b.ref + '">' + ic('out') + 'Check out' + (cs0.length > 1 ? ' a vehicle' : '') + '</button>');
     acts.push('<button class="btn ghost" data-act="remind" data-ref="' + b.ref + '">' + ic('send') + 'Send a message</button>');
-    if (b.status !== 'cancelled') acts.push('<button class="btn ghost" data-act="send-doc" data-ref="' + b.ref + '|invoice">' + ic('note') + 'Send invoice</button>');
+    if (b.status !== 'cancelled') acts.push('<button class="btn ghost" data-act="send-doc" data-ref="' + b.ref + '|invoice">' + ic('note') + (paid(b) > 0 ? 'Send invoice' : 'Send quotation') + '</button>');
     acts.push('<button class="btn ghost" data-act="edit" data-ref="' + b.ref + '">' + ic('edit') + 'Edit booking</button>');
     if (b.status !== 'cancelled' && b.status !== 'out') acts.push('<button class="btn ghost danger-t" data-act="cancel" data-ref="' + b.ref + '">' + ic('x') + 'Cancel booking</button>');
     return '<header class="d-head"><div><span class="muted small">Booking</span><h2>' + esc(b.ref) + '</h2>' + pill(s) + (b.pop && b.status === 'pending' ? ' <span class="pill info">' + ic('note') + 'Check bank</span>' : '') + '</div><button class="icon-btn" data-dclose aria-label="Close">' + ic('x') + '</button></header>' +
@@ -565,10 +583,19 @@
         if (m !== 'card' && b.method === 'card' && !paid(b)) { b.method = m; b.total = b.eft; }
         b.payments.push({ d: fval(f, 'd'), amt: amt, m: m, type: fval(f, 'type'), ref: fval(f, 'ref') });
         if (b.status === 'pending') { b.status = 'confirmed'; b.pop = false; }
+        b.softHold = null;
+        // the first payment turns the quotation into an invoice
+        var newInv = null, docs0 = b.invoices || [];
+        if (!docs0.some(function (x) { return x.kind === 'Invoice'; })) {
+          var lastQ = docs0.filter(function (x) { return x.kind === 'Quote'; }).pop();
+          newInv = invFor(b, 'Invoice', null, { by: ME.name, note: lastQ ? 'Replaces quotation ' + lastQ.no + '.' : '' });
+          b.invoices = docs0; b.invoices.push(newInv); K.commitNo('Invoice', newInv.no);
+          log((lastQ ? 'Quotation ' + lastQ.no + ' is now ' : 'Made ') + K.kindName(newInv).toLowerCase() + ' ' + newInv.no + ' for ' + guestName(b), b.ref);
+        }
         if (b.paidClaim) { b.notes.push({ at: nowStamp(), by: ME.name, text: 'Payment the guest told us about is confirmed: ' + money(amt) + ' is in the bank.' }); b.paidClaim = null; if (b.status !== 'pending') b.pop = false; }
         log(money(amt) + ' ' + methodLabel(m) + ' payment recorded on ' + b.ref, b.ref); save(); refresh(); toast(money(amt) + ' recorded');
         var pp = b.payments[b.payments.length - 1];
-        setTimeout(function () { sendBox({ b: b, title: 'Send the receipt', value: 'receipt', load: function () { return { subject: 'Payment received: ' + b.ref, text: 'Hi ' + b.guest.first + ',\n\nThank you! We received ' + money(pp.amt) + ' for your booking ' + b.ref + ' (' + standById(b.stand).name + ', ' + fd(b.ci, { day: 'numeric', month: 'long' }) + ').\n\n' + (balance(b) > 0 ? 'Still to pay: ' + money(balance(b)) + ', due by ' + fd(balanceDue(b), { day: 'numeric', month: 'long' }) + '.' : 'Your stay is now paid in full.') + ' Your receipt is attached.' + (balance(b) <= 0 && !b.finalised ? '\n\nPlease finalise your booking here: tell us your vehicles and who is in each one, roughly when you arrive, and anything you want waiting from the camp shop.\n' + bookingLink(b) + '\n\nRather not use the website? Just reply with the details and we will add them for you.' : '') + '\n\nThe Kyleu team', docs: [docReceipt(b, pp)] }; } }); }, 0);
+        setTimeout(function () { sendBox({ b: b, title: 'Send the receipt', value: 'receipt', load: function () { return { subject: 'Payment received: ' + b.ref, text: 'Hi ' + b.guest.first + ',\n\nThank you! We received ' + money(pp.amt) + ' for your booking ' + b.ref + ' (' + standById(b.stand).name + ', ' + fd(b.ci, { day: 'numeric', month: 'long' }) + ').\n\n' + (balance(b) > 0 ? 'Still to pay: ' + money(balance(b)) + ', due by ' + fd(balanceDue(b), { day: 'numeric', month: 'long' }) + '.' : 'Your stay is now paid in full.') + (newInv ? ' Your ' + K.kindName(newInv).toLowerCase() + ' ' + newInv.no + ' is attached.' : ' Your receipt is attached.') + (balance(b) <= 0 && !b.finalised ? '\n\nPlease finalise your booking here: tell us your vehicles and who is in each one, roughly when you arrive, and anything you want waiting from the camp shop.\n' + bookingLink(b) + '\n\nRather not use the website? Just reply with the details and we will add them for you.' : '') + '\n\nThe Kyleu team', docs: [newInv ? invDoc(newInv) : docReceipt(b, pp)] }; } }); }, 0);
       }, { onOpen: function (f) {
         var upd = function () {
           var m = $('[name=m]:checked', f).value, h = $('[data-hint]', f), a = f.elements.amt;
@@ -577,14 +604,18 @@
           else { a.value = dueNow; h.textContent = m === 'eft' ? 'Check the money is in the bank before saving.' : ''; }
         };
         $$('[name=m]', f).forEach(function (x) { x.addEventListener('change', upd); }); upd();
+        // the type follows the amount: the whole amount still owing is a full payment (or the balance)
+        var setType = function () { var a = parseFloat(String(f.elements.amt.value).replace(/[^\d.]/g, '')) || 0, owe = Math.max(0, b.total - paid(b)); f.elements.type.value = a >= owe ? (paid(b) ? 'Balance' : 'Full payment') : paid(b) ? 'Balance' : 'Deposit'; };
+        f.elements.amt.addEventListener('input', setType); setType();
       } });
   }
   var TEMPLATES = {
-    eft: { t: 'EFT deposit reminder', s: 'Your Kyleu booking: deposit reminder', b: function (b) { return 'Hi {first},\n\nThank you for booking {stand} from {ci} to {co}. To secure your stand please pay the deposit of {deposit} by {depdue} using reference {ref}.\n\nBank: FNB · Account: Kyleu Bush Camp · Acc no: 62000000000 · Branch: 250655\n\nUpload your proof of payment at www.kyleu.co.za/pop.html, or reply to this email with it attached.\n\nSee you in the bush!\nThe Kyleu team'; } },
+    eft: { t: 'EFT deposit reminder', s: 'Your Kyleu booking: deposit reminder', b: function (b) { return 'Hi {first},\n\nThank you for booking {stand} from {ci} to {co}. To secure your stand please pay the deposit of {deposit} by {depdue} using reference {ref}. Your quotation is valid until then; after that the stand is released.\n\nBank: {bank}\n\nUpload your proof of payment at www.kyleu.co.za/pop.html, or reply to this email with it attached.\n\nSee you in the bush!\nThe Kyleu team'; } },
     balance: { t: 'Balance reminder', s: 'Your Kyleu stay is coming up', b: function (b) { return 'Hi {first},\n\nYour stay at {stand} starts on {ci}. The balance of {balance} is due by {baldue}. Pay by EFT with reference {ref}, or reply and we will send a card payment link.\n\nThe Kyleu team'; } },
     arrival: { t: 'Pre-arrival information', s: 'Getting to Kyleu Bush Camp', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}.\n\nDirections: enter Dinokeng at Tau Gate, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km.\n\nKyleu is a proud DGR CP member, so we send you a Conservation Fee Discount Voucher code for each vehicle. Enter it when you buy your conservation fees at https://dinokeng.plnktn.io to pay R85 instead of R100 per adult per night. To use the self-drive route, each vehicle also needs a Self Drive Permit (R250 once off).\n\nEvery adult signs an indemnity form when you arrive. Let us know roughly when you will arrive and we will have your stand ready. Gate questions: 060 458 4478.\n\nThe Kyleu team'; } },
     thanks: { t: 'Thank you & review', s: 'Thanks for staying at Kyleu', b: function (b) { return 'Hi {first},\n\nThank you for camping with us at {stand}. We hope you loved the bush! If you have a minute, a Google review helps our small family camp a lot.\n\nThe Kyleu team'; } },
-    invoice: { t: 'Invoice', s: 'Your Kyleu invoice {ref}', b: function (b) { return 'Hi {first},\n\nPlease find your invoice for {stand}, {ci} to {co}, attached.\n\nTotal {total}, paid so far {paid}, balance {balance}. Pay by EFT using reference {ref}.\n\nThe Kyleu team'; } },
+    invoice: { t: 'Quotation or invoice', s: 'Your Kyleu {doc} {ref}', b: function (b) { return b && b.payments && paid(b) > 0 ? 'Hi {first},\n\nPlease find your invoice for {stand}, {ci} to {co}, attached.\n\nTotal {total}, paid so far {paid}, balance {balance}. Pay by EFT using reference {ref}.\n\nThe Kyleu team'
+      : 'Hi {first},\n\nThank you for booking {stand}, {ci} to {co}. Please find your quotation attached, with our bank details and your booking reference {ref}.\n\nThis quotation is valid for 5 days, until {qvalid}. To secure your stand, please pay {deposit} by then, using reference {ref}.\n\nOnce payment has been made, upload your proof of payment directly to your booking:\n{link}\n\nThe Kyleu team'; } },
     indemnity: { t: 'Indemnity form', s: 'Kyleu indemnity form for {ref}', b: function (b) { return 'Hi {first},\n\nPlease find the Kyleu indemnity form attached, one page per vehicle. Every adult signs it when you arrive. You are welcome to print it and fill it in before you come, which makes check-in quicker.\n\nSee you on {ci}!\nThe Kyleu team'; } },
     update: { t: 'Booking updated', s: 'Your Kyleu booking {ref} has been updated', b: function (b) { return 'Hi {first},\n\nWe have updated your booking {ref}: {stand}, {ci} to {co}.\nTotal {total}, paid {paid}, balance {balance}.\n\nIf anything looks wrong, just reply to this email.\n\nThe Kyleu team'; } },
     extra: { t: 'Extra amount to pay', s: 'Your updated Kyleu invoice {ref}', b: function (b) { return 'Hi {first},\n\nThank you for letting us know about the change to your booking {ref}. Your new total is {total}. You have already paid {paid}, so {balance} is still to pay.\n\nThe updated invoice is attached. Please pay the {balance} by EFT using reference {ref} before you arrive on {ci}.\n\nThe Kyleu team'; } },
@@ -595,7 +626,7 @@
   };
   function fill(t, b) {
     var dcodes = (b.cars || []).map(function (c) { return c.dgr; }).filter(Boolean);
-    var map = { link: bookingLink(b), voucher: dcodes.length ? dcodes.join(', ') : 'the codes we send you', first: b.guest.first, stand: standById(b.stand).name, ci: fd(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }), co: fd(b.co, { weekday: 'long', day: 'numeric', month: 'long' }), deposit: money(deposit(b)), depdue: fd(depositDue(b), { day: 'numeric', month: 'long' }), ref: b.ref, balance: money(balance(b)), baldue: fd(balanceDue(b), { day: 'numeric', month: 'long' }), total: money(b.total), paid: money(paid(b)) };
+    var map = { doc: b && b.payments && paid(b) > 0 ? 'invoice' : 'quotation', bank: bankLine(), qvalid: fd(depositDue(b), { weekday: 'long', day: 'numeric', month: 'long' }), link: bookingLink(b), voucher: dcodes.length ? dcodes.join(', ') : 'the codes we send you', first: b.guest.first, stand: standById(b.stand).name, ci: fd(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }), co: fd(b.co, { weekday: 'long', day: 'numeric', month: 'long' }), deposit: money(deposit(b)), depdue: fd(depositDue(b), { day: 'numeric', month: 'long' }), ref: b.ref, balance: money(balance(b)), baldue: fd(balanceDue(b), { day: 'numeric', month: 'long' }), total: money(b.total), paid: money(paid(b)) };
     return t.replace(/\{(\w+)\}/g, function (_, k) { return map[k] != null ? map[k] : _; });
   }
   function actRemind(ref) { var b = byRef(ref); sendTemplate(b, defaultTemplate(b)); }
@@ -737,7 +768,7 @@
         if (!g.adults && !g.pens) { toast('Add at least one adult'); return false; }
         var ex = { gd: +fval(f, 'gd') || 0 }, q = quote(sid, a, z, g, ex), linked = false;
         if (!cl) { cl = findClient(ng.email, ng.phone); linked = !!cl; if (!cl) cl = newClient(ng); }
-        var b = { ref: 'KY' + a.slice(2, 4) + '-' + Math.random().toString(36).slice(2, 6).toUpperCase(), created: nowStamp(), source: fval(f, 'source'), cid: cl.id, guest: { first: cl.first, last: cl.last, email: cl.email, phone: cl.phone, consent: cl.consent }, stand: sid, ci: a, co: z, adults: g.adults, pens: g.pens, kids: g.kids, vehicles: Math.max(1, Math.min(20, +fval(f, 'veh') || 1)), setup: '', extras: ex, method: m, eft: q.eft, card: q.card, total: m === 'card' ? q.card : q.eft, payments: [], status: 'pending', notes: [], pop: false };
+        var b = { ref: K.takeNo('Ref'), created: nowStamp(), source: fval(f, 'source'), cid: cl.id, guest: { first: cl.first, last: cl.last, email: cl.email, phone: cl.phone, consent: cl.consent }, stand: sid, ci: a, co: z, adults: g.adults, pens: g.pens, kids: g.kids, vehicles: Math.max(1, Math.min(20, +fval(f, 'veh') || 1)), setup: '', extras: ex, method: m, eft: q.eft, card: q.card, total: m === 'card' ? q.card : q.eft, payments: [], status: 'pending', notes: [], pop: false };
         if (m !== 'eft') b.status = 'confirmed';
         if (fval(f, 'usecredit')) { var need = b.total; creditsFor(b.guest.email).forEach(function (c) { var take = Math.min(need, c.amt - c.used); if (take <= 0) return; c.used += take; need -= take; b.payments.push({ d: TODAY, amt: take, m: 'credit', type: 'Credit', ref: 'Credit from ' + c.from }); }); if (paid(b) >= deposit(b)) b.status = 'confirmed'; }
         ensureCars(b); DB.bookings.push(b); DB.bookings.sort(function (x, y) { return x.ci < y.ci ? -1 : 1; });
@@ -1232,6 +1263,13 @@
     });
     var nAge = can('news') ? newsAge() : null; if (nAge !== null && nAge > 14) attention.push({ i: 'note', tone: 'muted', t: nAge === 999 ? 'No camp news posted yet. A short post makes the news page feel alive.' : 'No camp news for ' + nAge + ' days. A short post keeps the news page fresh.', go: 'news', o: 7 });
     attention.sort(function (a, b) { return a.o - b.o; });
+    // soft holds go right at the top: the stand is released at midnight unless the payment is confirmed
+    var softs = DB.bookings.filter(function (b) { return b.status === 'pending' && b.softHold; }).sort(function (a, b) { return a.softHold < b.softHold ? -1 : 1; });
+    var softHtml = softs.map(function (b) {
+      var c = b.paidClaim, when = b.softHold === TODAY ? 'tonight at midnight' : 'tomorrow at midnight';
+      return '<button type="button" class="soft-alert" data-open="' + b.ref + '">' + ic('alert') + '<span><b>Soft hold ends ' + when + ': ' + esc(guestName(b)) + ', ' + esc(standById(b.stand).name) + ', ' + fd(b.ci) + '.</b> ' +
+        (c ? esc(b.guest.first) + ' says they paid ' + money(c.amt) + ' on ' + fd(c.date) : 'Proof of payment was uploaded') + ', but it is not confirmed yet. Check the bank and press <b>Money is in</b>, or the stand is released automatically.</span>' + ic('chev-r', 'chev') + '</button>';
+    }).join('');
     // occupancy next 30 nights
     var occ = []; for (var i = 0; i < 30; i++) { var d = add(TODAY, i), n = Object.keys(standsBookedOn(d)).length, wk = isWeekendNight(d); occ.push({ label: D(d).getDate(), a: n, tip: fdw(d) + ': ' + n + ' of ' + STANDS.length + ' stands booked (' + Math.round(n / STANDS.length * 100) + '%)', hl: wk }); }
     var woodBags = Object.keys(tonight).filter(function (id) { return standById(id).area !== 'self-sufficient'; }).length;
@@ -1249,7 +1287,7 @@
         return '<div class="cols"><section class="card" id="today"><header class="card-h"><h3>Today at camp</h3><div class="tabs" role="tablist">' + [['arr', 'Arriving', arr.length], ['dep', 'Departing', dep.length], ['in', 'In camp', nT]].map(function (x) { return '<button class="' + (DP.tab === x[0] ? 'on' : '') + '" data-dtab="' + x[0] + '">' + x[1] + ' <span>' + x[2] + '</span></button>'; }).join('') + '</div></header>' +
           (pg.items.length ? pg.items.map(row).join('') : '<p class="empty">' + ({ arr: 'No arrivals today.', dep: 'No departures today.', in: 'Nobody in camp tonight.' })[DP.tab] + '</p>') + pg.bar +
           '<footer class="card-f"><span>' + ic('car') + '<b>' + carsInCamp() + '</b> vehicles in camp</span><span>' + ic('fire') + '<b>' + woodBags + '</b> free firewood bags tonight</span><span>' + ic('car') + '<b>' + drives.length + '</b> game drive' + (drives.length === 1 ? '' : 's') + ' booked</span><span>' + ic('ice') + '<b>' + ice + '</b> bags of ice to hand out</span></footer></section>' +
-          '<section class="card"><header class="card-h"><h3>Needs attention</h3><span class="count">' + attention.length + '</span></header>' + (attention.length ? '<ul class="attn">' + at.items.map(function (a) { return '<li><button ' + (a.ref ? 'data-open="' + a.ref + '"' : 'data-go="' + a.go + '"') + '><span class="attn-i ' + a.tone + '">' + ic(a.i) + '</span><span>' + a.t + '</span>' + ic('chev-r', 'chev') + '</button></li>'; }).join('') + '</ul>' + at.bar : '<p class="empty">All clear. Enjoy the bush!</p>') + '</section></div>' +
+          '<section class="card"><header class="card-h"><h3>Needs attention</h3><span class="count">' + (attention.length + softs.length) + '</span></header>' + softHtml + (attention.length ? '<ul class="attn">' + at.items.map(function (a) { return '<li><button ' + (a.ref ? 'data-open="' + a.ref + '"' : 'data-go="' + a.go + '"') + '><span class="attn-i ' + a.tone + '">' + ic(a.i) + '</span><span>' + a.t + '</span>' + ic('chev-r', 'chev') + '</button></li>'; }).join('') + '</ul>' + at.bar : '<p class="empty">All clear. Enjoy the bush!</p>') + '</section></div>' +
           '<div class="cols"><section class="card"><header class="card-h"><h3>Stands booked, next 30 nights</h3><span class="muted small">Weekend nights in bold</span></header>' + colChart(occ, { max: STANDS.length, label: 'Stands booked per night', colA: C_CARD, band: 24 }) + '</section>' +
           '<section class="card"><header class="card-h"><h3>Recent activity</h3><span class="count">' + DB.log.length + '</span></header><ul class="feed">' + ac.items.map(function (l) { return '<li' + (l.ref ? ' data-open="' + l.ref + '"' : '') + '><span>' + esc(l.text) + '</span><small>' + esc(l.by) + ' · ' + esc(l.at) + '</small></li>'; }).join('') + '</ul>' + ac.bar + '</section></div>';
       })();
@@ -1291,7 +1329,7 @@
     function card(b, kind) {
       var amt = kind === 'bal' ? balance(b) : deposit(b), due = kind === 'bal' ? balanceDue(b) : depositDue(b), left = diff(TODAY, due);
       return '<article class="eft-card ' + kind + '"><div class="eft-top" data-open="' + b.ref + '"><div><b>' + esc(guestName(b)) + '</b><small>' + esc(b.ref) + ' · ' + esc(standById(b.stand).name) + ' · ' + fd(b.ci) + ' to ' + fd(b.co) + '</small></div><div class="eft-amt"><b>' + money(amt) + '</b><small>' + (kind === 'bal' ? 'balance' : payFullOf(b) ? 'full amount (arrives soon)' : depPct() + '% deposit') + (hasFee() ? ' · card ' + money(kind === 'bal' ? b.card - paid(b) : Math.round(b.card * depPct() / 100)) : '') + '</small></div></div>' +
-        '<div class="eft-due ' + (left < 0 ? 'bad-t' : left <= 1 ? 'warn-t' : '') + '">' + ic('clock') + (left < 0 ? 'Overdue by ' + -left + ' day' + (-left > 1 ? 's' : '') : 'Due ' + fd(due) + ' (' + rel(due) + ')') + (b.paidClaim ? '<span class="info-t pop-line">' + ic('bank') + esc(b.guest.first) + ' says they paid ' + money(b.paidClaim.amt) + ' on ' + fd(b.paidClaim.date) + ': check the bank</span>' : '') + (b.pop && (b.pops || []).length ? '<span class="info-t pop-line">' + ic('note') + 'Proof of payment received' + ((b.pops || []).length ? ' ' + whenSaid(b.pops[b.pops.length - 1].at) + ', check the bank:' : ': check the bank') + '</span>' + popChips(b) : '') + '</div>' +
+        '<div class="eft-due ' + (left < 0 ? 'bad-t' : left <= 1 ? 'warn-t' : '') + '">' + ic('clock') + (b.softHold && kind !== 'bal' ? '<b>Soft hold until ' + (b.softHold === TODAY ? 'tonight' : fd(b.softHold) + ' night') + '.</b> Confirm the payment, or the stand is released' : left < 0 ? 'Overdue by ' + -left + ' day' + (-left > 1 ? 's' : '') : 'Due ' + fd(due) + ' (' + rel(due) + ')') + (b.paidClaim ? '<span class="info-t pop-line">' + ic('bank') + esc(b.guest.first) + ' says they paid ' + money(b.paidClaim.amt) + ' on ' + fd(b.paidClaim.date) + ': check the bank</span>' : '') + (b.pop && (b.pops || []).length ? '<span class="info-t pop-line">' + ic('note') + 'Proof of payment received' + ((b.pops || []).length ? ' ' + whenSaid(b.pops[b.pops.length - 1].at) + ', check the bank:' : ': check the bank') + '</span>' + popChips(b) : '') + '</div>' +
         '<div class="eft-act"><button class="btn sm" data-act="pay" data-ref="' + b.ref + '">' + ic('check') + 'Money is in</button><button class="btn sm ghost" data-act="remind" data-ref="' + b.ref + '">' + ic('send') + 'Remind</button>' + (kind === 'over' ? '<button class="btn sm ghost danger-t" data-act="release" data-ref="' + b.ref + '">' + ic('x') + 'Release stand</button>' : '') + '</div></article>';
     }
     var sec = function (title, sub, list, kind) { return '<section class="eft-sec"><h3>' + title + ' <span class="count">' + list.length + '</span></h3><p class="muted small">' + sub + '</p>' + (list.length ? '<div class="eft-grid">' + list.map(function (b) { return card(b, kind); }).join('') + '</div>' : '<p class="empty">Nothing here.</p>') + '</section>'; };
@@ -1588,7 +1626,7 @@
   var BOXES = [['open', 'Needs reply'], ['waiting', 'Waiting on guest'], ['closed', 'Closed'], ['all', 'All']];
   var QUICK = [
     ['We will check and come back to you', function () { return 'Thank you for your message. Let me check and come back to you today.'; }],
-    ['Banking details for EFT', function () { return 'You can pay by EFT to:\nFNB · Kyleu Bush Camp · Account 62000000000 · Branch 250655\n\nPlease use your booking reference so we can match the payment, then upload your proof of payment at www.kyleu.co.za/pop.html (or simply reply to this email with it attached).'; }],
+    ['Banking details for EFT', function () { return 'You can pay by EFT to:\n' + bankLine() + '\n\nPlease use your booking reference so we can match the payment, then upload your proof of payment at www.kyleu.co.za/pop.html (or simply reply to this email with it attached).'; }],
     ['Directions', function () { return 'Enter Dinokeng at Tau Gate, follow the main road for 4.8 km, turn right onto Kaallaagte Road and continue 2 km to camp. Let us know roughly when you will arrive.'; }],
     ['Game drives', function () { return 'Our guided game drives leave at 06:00 and 15:30 and take about 2 hours. It is ' + money(num('Game drives', 'Game drive 3 or more people per person', 400)) + ' per person for 3 or more people, ' + money(num('Game drives', 'Game drive 2 people per person', 450)) + ' per person for 2, or ' + money(num('Game drives', 'Game drive 1 person', 900)) + ' for a private drive.'; }],
     ['Pensioner rate', function () { return 'The pensioner rate of ' + money(num('Ablution stands', 'Pensioner weekday per person per night', 115)) + ' per person per night applies to Monday to Thursday nights. Sunday nights and weekends are charged at the normal rate.'; }],
@@ -1604,7 +1642,9 @@
      opens with the message typed in, you attach the files). The box stays open
      so you can send both ways.
      ========================================================= */
-  var BIZ = { name: 'Kyleu Bush Camp', addr: 'Plot 77 Klipdrift 90 JR, Kaallaagte Road, Dinokeng Game Reserve, Gauteng', phone: '060 458 4478', email: 'info@kyleu.co.za', bank: 'FNB, account Kyleu Bush Camp, number 62000000000, branch 250655' };
+  var BIZ = { name: 'Kyleu Bush Camp', addr: 'Plot 77 Klipdrift 90 JR, Kaallaagte Road, Dinokeng Game Reserve, Gauteng', phone: '060 458 4478', email: 'info@kyleu.co.za', get bank() { return bankLine(); } };
+  // the bank details from Settings > Quotes & invoices (the same ones printed on quotations and invoices)
+  function bankLine() { var B = K.BIZ || {}; return (B.bank || 'FNB') + ' · Account name: ' + (B.accName || '') + ' · Account number: ' + (B.accNo || '') + ' · Branch code: ' + (B.branch || ''); }
   var LONGD = { day: 'numeric', month: 'long', year: 'numeric' };
   function waDigits(p) { var d = String(p || '').replace(/[^\d+]/g, ''); if (!d) return ''; if (d[0] === '+') return d.slice(1); if (d.indexOf('00') === 0) return d.slice(2); if (d[0] === '0') return '27' + d.slice(1); return d; }
   // must run straight from a click, so the browser does not block the new tab
@@ -1689,7 +1729,13 @@
     if (Math.round(sum) !== Math.round(b.total)) L.push({ t: 'Discount or adjustment', amt: b.total - sum, tag: 'adj' });
     return L;
   }
-  function nextInvNo(b, kind) { return K.invoiceNo(b.ref, kind, (b.invoices || []).filter(function (x) { return x.kind === kind; }).length + 1); }
+  function nextInvNo(b, kind) { return K.peekNo(kind); }
+  // the document to send now: a quotation until a payment is in, then an invoice; the last one again if nothing changed
+  function curDoc(b) {
+    var list = b.invoices || [], last = list[list.length - 1], kind = paid(b) > 0 ? 'Invoice' : 'Quote';
+    if (last && last.kind === kind && Math.round(last.total) === Math.round(b.total) && Math.round(last.paid || 0) === Math.round(paid(b))) return last;
+    return invFor(b, kind, null, kind === 'Quote' ? { validTo: depositDue(b) } : {});
+  }
   function invFor(b, kind, lines, extra) {
     kind = kind || 'Invoice'; lines = lines || invLines(b);
     return Object.assign({ kind: kind, no: nextInvNo(b, kind), date: TODAY, ref: b.ref, guest: { name: guestName(b), email: b.guest.email, phone: b.guest.phone },
@@ -1701,7 +1747,7 @@
   function invByNo(b, no) { return (b.invoices || []).filter(function (x) { return x.no === no; })[0]; }
   function recordInv(b, inv, via, to) {
     b.invoices = b.invoices || [];
-    var x = invByNo(b, inv.no); if (!x) { x = JSON.parse(JSON.stringify(inv)); x.by = x.by || (ME ? ME.name : 'Staff'); b.invoices.push(x); }
+    var x = invByNo(b, inv.no); if (!x) { x = JSON.parse(JSON.stringify(inv)); x.by = x.by || (ME ? ME.name : 'Staff'); b.invoices.push(x); K.commitNo(inv.kind, inv.no); }
     x.sent = { at: nowStamp(), via: via, to: to || '', by: ME ? ME.name : '' };
   }
   // the website emails the invoice by itself; it shows in the inbox like any email
@@ -1714,15 +1760,17 @@
   }
   function invMailBody(b, inv, updated) {
     var st = K.invoiceState(inv);
+    if (inv.kind === 'Quote') return 'Hi ' + b.guest.first + ',\n\n' + (updated ? 'Your booking ' + b.ref + ' was changed, so here is your updated quotation ' + inv.no + '.' : 'Thank you for booking ' + standById(b.stand).name + ' from ' + fd(b.ci, LONGD) + ' to ' + fd(b.co, LONGD) + '. Your quotation ' + inv.no + ' is attached, with our bank details and your booking reference ' + b.ref + '.') +
+      '\n\nThis quotation is valid for 5 days, until ' + fd(inv.validTo || depositDue(b), LONGD) + '. To secure your stand, pay ' + money(st.now || deposit(b)) + ' by then, using reference ' + b.ref + '.\n\nOnce payment has been made, upload your proof of payment directly to your booking (press "I have paid"):\n' + bookingLink(b) + '\n\nSee you in the bush!\nThe Kyleu team';
     return 'Hi ' + b.guest.first + ',\n\n' + (updated === 'staff' ? 'Please find your invoice ' + inv.no + ' for ' + standById(b.stand).name + ', ' + fd(b.ci, LONGD) + ' to ' + fd(b.co, LONGD) + ', attached.' : updated ? 'Your booking ' + b.ref + ' was changed, so here is your updated invoice ' + inv.no + '.' : 'Thank you for booking ' + standById(b.stand).name + ' from ' + fd(b.ci, LONGD) + ' to ' + fd(b.co, LONGD) + '. Your invoice ' + inv.no + ' is attached.') + '\n\n' +
       (st.k === 'due' ? st.t + '. Pay by EFT using reference ' + b.ref + '; our banking details are on the invoice. When you have paid, press "I have paid" on your booking page:\n' + bookingLink(b) + '\n\nOnce your booking is paid in full, the same link lets you finalise it (vehicles, passengers and arrival time).' : st.t) + '\n\nSee you in the bush!\nThe Kyleu team';
   }
   function invSec(b) {
     var list = (b.invoices || []).slice().reverse();
     return '<section class="d-sec"><h4 class="h4-row">Invoices &amp; quotes<button type="button" class="link-btn" data-act="inv-new" data-ref="' + b.ref + '">' + ic('plus') + 'New invoice or quote</button></h4>' +
-      (list.length ? '<div class="list">' + list.map(function (x) { return '<button type="button" class="brow" data-act="inv-view" data-ref="' + b.ref + '|' + esc(x.no) + '"><span class="brow-st">' + esc(x.no) + '</span><span class="brow-g"><b>' + esc(x.kind) + ' · ' + money(x.total) + '</b><small>' + fd(x.date) + ' · made by ' + esc(x.by || 'staff') + (x.sent ? ' · sent by ' + esc(x.sent.via) + ' ' + esc(x.sent.at) : ' · not sent yet') + '</small></span>' + ic('chev-r') + '</button>'; }).join('') + '</div>'
+      (list.length ? '<div class="list">' + list.map(function (x) { return '<button type="button" class="brow" data-act="inv-view" data-ref="' + b.ref + '|' + esc(x.no) + '"><span class="brow-st">' + esc(x.no) + '</span><span class="brow-g"><b>' + esc(K.kindName(x)) + ' · ' + money(x.total) + '</b><small>' + fd(x.date) + ' · made by ' + esc(x.by || 'staff') + (x.sent ? ' · sent by ' + esc(x.sent.via) + ' ' + esc(x.sent.at) : ' · not sent yet') + '</small></span>' + ic('chev-r') + '</button>'; }).join('') + '</div>'
         : '<p class="muted small">No invoice or quote yet. Website bookings get one by email straight away.</p>') +
-      '<div class="row-btns"><button type="button" class="btn ghost sm" data-act="inv-cur" data-ref="' + b.ref + '">' + ic('note') + 'Preview the current invoice</button></div></section>';
+      '<div class="row-btns"><button type="button" class="btn ghost sm" data-act="inv-cur" data-ref="' + b.ref + '">' + ic('note') + (paid(b) > 0 ? 'Preview the current invoice' : 'Preview the current quotation') + '</button></div></section>';
   }
   function invView(b, inv, fresh) {
     modal(esc(inv.kind) + ' ' + esc(inv.no), '<div class="inv-admin">' + K.invoiceHTML(inv) + '</div>' +
@@ -1742,7 +1790,7 @@
     var b = byRef(ref), locked = paid(b) > 0, lines = invLines(b);
     var row = function (l) { return '<div class="inv-ed-row"><input name="t" value="' + esc(l.t) + '" aria-label="Description"><input name="a" inputmode="decimal" value="' + Math.round(l.amt) + '" aria-label="Amount in rand"' + (locked ? ' readonly' : '') + '>' + (locked ? '' : '<button type="button" class="icon-btn sm" data-inv-rm aria-label="Remove line">' + ic('x') + '</button>') + '</div>'; };
     modal('New invoice or quote · ' + esc(guestName(b)),
-      '<div class="grid2"><label class="fld"><span>What is it?</span><select name="kind"><option>Invoice</option><option>Quote</option></select></label><label class="fld" data-valid hidden><span>Quote valid until</span><input type="date" name="valid" value="' + add(TODAY, 14) + '"></label></div>' +
+      '<div class="grid2"><label class="fld"><span>What is it?</span><select name="kind"><option value="Invoice">Invoice</option><option value="Quote">Quotation</option></select></label><label class="fld" data-valid hidden><span>Quotation valid until</span><input type="date" name="valid" value="' + add(TODAY, num('Booking rules', 'Deposit due within days of invoice', 5)) + '"></label></div>' +
       (locked ? '<p class="callout warn cflex">' + ic('lock') + '<span><b>Prices are locked</b> because ' + esc(b.guest.first) + ' has already paid ' + money(paid(b)) + '. You can still make and send a new invoice with the current amounts. To change the stay itself, use Edit booking.</span></p>'
         : '<p class="hint">' + ic('info') + ' Change any amount, or add a line (a discount is a minus amount, e.g. -200). The booking total changes to match when you save.</p>') +
       '<div class="inv-ed-head"><span>Description</span><span>Amount (R)</span></div><div class="inv-ed" data-inv-lines>' + lines.map(row).join('') + '</div>' +
@@ -1761,8 +1809,8 @@
           b.notes.push({ at: nowStamp(), by: ME.name, text: 'Price adjusted by ' + (d > 0 ? '+' : '-') + money(Math.abs(d)) + ' on a new ' + kind.toLowerCase() + '. Total is now ' + money(b.total) + '.' + (why ? ' Reason: ' + why : '') });
         }
         var inv = invFor(b, kind, ls, { note: fval(f, 'note'), validTo: kind === 'Quote' ? fval(f, 'valid') : '', by: ME.name });
-        b.invoices = b.invoices || []; b.invoices.push(inv);
-        log(kind + ' ' + inv.no + ' made for ' + guestName(b), b.ref); save(); refresh();
+        b.invoices = b.invoices || []; b.invoices.push(inv); K.commitNo(kind, inv.no);
+        log(K.kindName(inv) + ' ' + inv.no + ' made for ' + guestName(b), b.ref); save(); refresh();
         setTimeout(function () { invView(b, inv, true); }, 50);
       }, { wide: true, noFocus: true, onOpen: function (f) {
         var box = $('[data-inv-lines]', f);
@@ -1777,7 +1825,7 @@
       } });
   }
   function docBooking(b, title) {
-    if (title === 'Invoice') { var cur = invFor(b, 'Invoice'); CUR_INV[b.ref + '|' + cur.no] = cur; return invDoc(cur); }
+    if (title === 'Invoice') { var cur = curDoc(b); CUR_INV[b.ref + '|' + cur.no] = cur; return invDoc(cur); }
     return { name: 'Kyleu ' + title.toLowerCase() + ' ' + b.ref + '.pdf', build: function (doc, k) {
       k.head(title, (title === 'Invoice' ? 'Invoice ' : 'Reference ') + b.ref + ' · ' + fd(TODAY, LONGD));
       k.pairs(stayRows(b)); k.h('Your stay'); moneyLines(b, k); k.y(k.y() + 3);
@@ -2649,14 +2697,36 @@
       '<details class="sig-how"><summary>iPhone, Android and Apple Mail</summary><ol><li>Phone mail apps only keep plain text signatures well. Use: ' + esc(d.name) + ', Kyleu Bush Camp, ' + esc(sh.phone) + '.</li><li>Apple Mail on a Mac: <b>Mail</b>, <b>Settings</b>, <b>Signatures</b>, add one, paste, and untick "Always match my default message font".</li></ol></details>' +
       '</section></div>';
   }
+  // Settings > Quotes & invoices: how numbers start and the next number, VAT, and the bank details on every document
+  function docsPage() {
+    var c = K.docCfg(), B = K.BIZ || {};
+    var numRow = function (kind, title, sub, pk, nk) {
+      return '<div class="doc-num"><div><b>' + title + '</b><small>' + sub + '</small></div><label class="fld"><span>Starts with</span><input data-doc="' + pk + '" value="' + esc(c[pk]) + '" maxlength="12" autocapitalize="characters"></label><label class="fld"><span>Next number</span><input data-doc="' + nk + '" value="' + esc(c[nk]) + '" inputmode="numeric"></label><p class="doc-next">Next one: <b data-doc-prev="' + kind + '">' + esc(K.peekNo(kind)) + '</b></p></div>';
+    };
+    var bankF = function (k, label) { return '<label class="fld"><span>' + label + '</span><input data-doc="' + k + '" value="' + esc(c[k] || B[k] || '') + '"></label>'; };
+    return '<div class="cols"><section class="card"><header class="card-h"><h3>Numbers</h3></header>' +
+      '<p class="muted small">Every booking, quotation and invoice gets the next number. Change the start each year if you like (KY26 to KY27).</p>' +
+      numRow('Ref', 'Booking reference', 'Guests use it as the payment reference', 'refPrefix', 'refNext') +
+      numRow('Quote', 'Quotation', 'Sent when a booking is made', 'quotePrefix', 'quoteNext') +
+      numRow('Invoice', 'Invoice', 'Made once a payment is confirmed', 'invPrefix', 'invNext') +
+      '<p class="hint">' + ic('info') + ' Only lower a next number if you are sure it has not been used yet, or two documents could share a number.</p></section>' +
+      '<section class="card"><header class="card-h"><h3>VAT</h3><label class="switch"><input type="checkbox" data-doc="vatOn"' + (c.vatOn ? ' checked' : '') + '><span></span>' + (c.vatOn ? 'VAT registered' : 'Not VAT registered') + '</label></header>' +
+      (c.vatOn ? '<div class="grid2"><label class="fld"><span>VAT number</span><input data-doc="vatNo" value="' + esc(c.vatNo) + '" inputmode="numeric" placeholder="e.g. 4123456789"></label><label class="fld"><span>VAT rate (%)</span><input data-doc="vatRate" value="' + esc(c.vatRate) + '" inputmode="decimal"></label></div>' +
+        '<p class="muted small">Invoices are called <b>Tax invoice</b> and show the VAT number, and the total shows the VAT included. Prices stay the same (they include VAT).</p>'
+        : '<p class="muted small">Off: no VAT number or VAT line appears anywhere. Switch it on when Kyleu registers for VAT and enter the VAT number.</p>') + '</section></div>' +
+      '<section class="card"><header class="card-h"><h3>EFT bank details</h3><span class="muted small">Printed on every quotation and invoice, and used in emails</span></header>' +
+      '<div class="grid2">' + bankF('bank', 'Bank') + bankF('accName', 'Account name') + '</div><div class="grid2">' + bankF('accNo', 'Account number') + bankF('branch', 'Branch code') + '</div><div class="grid2">' + bankF('accType', 'Account type') + bankF('swift', 'SWIFT code (for payments from abroad)') + '</div>' +
+      '<p class="demo-note">' + ic('info') + 'Demo: kept in this browser and used by the website demo too. In the live version these are saved on the server.</p></section>';
+  }
   function vSettings() {
-    var tabs = [['staff', 'Staff & access'], ['payments', 'Payments'], ['camp', 'Check-in & Dinokeng'], ['maps', 'Maps'], ['emails', 'Email templates'], ['sig', 'Email signature'], ['data', 'Data & privacy']];
+    var tabs = [['staff', 'Staff & access'], ['docs', 'Quotes & invoices'], ['payments', 'Payments'], ['camp', 'Check-in & Dinokeng'], ['maps', 'Maps'], ['emails', 'Email templates'], ['sig', 'Email signature'], ['data', 'Data & privacy']];
     var body = '';
     if (SET === 'staff') body = '<section class="card flush"><table class="tbl"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Last seen</th></tr></thead><tbody>' + STAFF.map(function (s, i) { return '<tr><td data-l="Name"><b>' + s.name + '</b>' + (ME.id === s.id ? ' <span class="tag ok">You</span>' : '') + '</td><td data-l="Email">' + s.email + '</td><td data-l="Role"><select aria-label="Role for ' + s.name + '"' + (ME.role !== 'Owner' ? ' disabled' : '') + '>' + Object.keys(ROLES).map(function (r) { return '<option' + (r === s.role ? ' selected' : '') + '>' + r + '</option>'; }).join('') + '</select></td><td data-l="Last seen">' + (ME.id === s.id ? 'Now' : ['Today 07:12', 'Yesterday', '3 days ago', 'Today 09:40'][i]) + '</td></tr>'; }).join('') + '</tbody></table></section>' +
       '<section class="card"><header class="card-h"><h3>What each role can see</h3></header><table class="tbl perm"><thead><tr><th>Section</th>' + Object.keys(ROLES).map(function (r) { return '<th>' + r + '</th>'; }).join('') + '</tr></thead><tbody>' + NAV.map(function (n) { return '<tr><td>' + n.t + '</td>' + Object.keys(ROLES).map(function (r) { return '<td>' + (ROLES[r].indexOf(n.id) >= 0 ? ic('check', 'ok-t') : '<span class="muted">No</span>') + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table><button class="btn ghost" data-act="invite">' + ic('plus') + 'Invite a staff member</button></section>';
     if (SET === 'payments') body = '<div class="cols"><section class="card"><header class="card-h"><h3>Card payments</h3><span class="pill warn"><i></i>Not connected</span></header><p class="muted small">Guests pay on a secure page from the card company, so card numbers never touch the Kyleu website. Choose a South African provider:</p><div class="prov">' + ['Yoco', 'PayFast', 'Peach Payments', 'Paystack'].map(function (p) { return '<button class="prov-b" data-act="connect" data-ref="' + p + '"><b>' + p + '</b><small>Connect</small></button>'; }).join('') + '</div>' +
       '<div class="grid2"><label class="fld"><span>Card fee added to card prices</span><input value="' + cardFee() + '%" disabled></label><label class="fld"><span>Provider charges (for reports)</span><input data-provfee value="' + (DB.settings.providerFee || 2.95) + '" inputmode="decimal"></label></div><p class="muted small">Change the card fee on the Rates & fees page.</p></section>' +
-      '<section class="card"><header class="card-h"><h3>EFT bank details</h3><span class="muted small">Printed on invoices</span></header><div class="grid2"><label class="fld"><span>Bank</span><input value="FNB"></label><label class="fld"><span>Account name</span><input value="Kyleu Bush Camp"></label></div><div class="grid2"><label class="fld"><span>Account number</span><input value="62000000000"></label><label class="fld"><span>Branch code</span><input value="250655"></label></div><p class="muted small">Demo details. Guests use their booking reference (e.g. KY26-4F2K) so payments are easy to match.</p></section></div>';
+      '<section class="card"><header class="card-h"><h3>EFT bank details</h3></header><p class="small">The bank details printed on quotations and invoices are under <button type="button" class="link-btn" data-set="docs">Quotes &amp; invoices</button>.</p></section></div>';
+    if (SET === 'docs') body = docsPage();
     if (SET === 'emails') body = '<div class="tpl-grid">' + Object.keys(TEMPLATES).map(function (k) { var t = TEMPLATES[k]; return '<section class="card"><header class="card-h"><h3>' + t.t + '</h3><span class="muted small">' + ({ confirm: 'Sent when a booking is made', eft: 'Sent 3 days after an unpaid EFT invoice', balance: 'Sent 10 days before arrival', arrival: 'Sent 3 days before arrival', thanks: 'Sent the day after departure' })[k] + '</span></header><p class="small"><b>' + esc(t.s) + '</b></p><pre class="tpl">' + esc(t.b({})) + '</pre></section>'; }).join('') + '</div><p class="demo-note">' + ic('info') + 'Words in {curly brackets} are filled in for each guest. In the live version these send automatically.</p>';
     if (SET === 'maps') body = '<p class="muted small me-intro">Move campsites, text and buildings, draw roads and footpaths, add new campsites, and change the game drive route and story of the "A day at Kyleu" scroll map. Press Save in the editor when you are done.</p><div class="me-wrap"><iframe class="me-frame" src="map-editor.html" title="Map editor"></iframe></div><div class="row-btns"><a class="btn ghost sm" href="map-editor.html" target="_blank" rel="noopener">' + ic('ext') + 'Open the editor full screen</a></div><p class="demo-note">' + ic('info') + 'Demo: Save updates the website maps in this browser. For the live site, press "Download map file" in the editor and replace assets/js/campmap-layout.js with it (or the live version saves it on the server).</p>';
     if (SET === 'sig') body = sigPage();
@@ -2883,7 +2953,7 @@
     }
     if (act === 'link-copy') { var lb = byRef(ref), lk = bookingLink(lb); try { navigator.clipboard.writeText(lk).then(function () { toast('Link copied'); }, function () { prompt('Copy the link', lk); }); } catch (e) { prompt('Copy the link', lk); } return; }
     if (act === 'fin-mark') { var fb = byRef(ref); fb.finalised = { at: nowStamp(), by: ME.name }; fb.notes.push({ at: nowStamp(), by: ME.name, text: 'Booking finalised by staff.' }); log('Booking ' + fb.ref + ' finalised', fb.ref); save(); refresh(); toast('Marked as finalised'); return; }
-    if (act === 'inv-cur') { var cb = byRef(ref), ci_ = invFor(cb, 'Invoice'); CUR_INV[cb.ref + '|' + ci_.no] = ci_; return invView(cb, ci_); }
+    if (act === 'inv-cur') { var cb = byRef(ref), ci_ = curDoc(cb); CUR_INV[cb.ref + '|' + ci_.no] = ci_; return invView(cb, ci_); }
     if (act === 'inv-view' || act === 'inv-dl' || act === 'inv-send') {
       var ip = ref.split('|'), ib = byRef(ip[0]), iv = invGet(ib, ip[1]); if (!iv) { toast('Invoice not found'); return; }
       if (act === 'inv-view') return invView(ib, iv);
@@ -2961,6 +3031,10 @@
     if (t.matches('[data-indemnity]')) { DB.settings.indemnity = t.value; save(); return; }
     if (t.matches('[data-dgrlink]')) { DB.settings.dgrLink = t.value.trim(); save(); return; }
     if (t.matches('[data-provfee]')) { DB.settings.providerFee = parseFloat(t.value) || 0; save(); return; }
+    if (t.matches('[data-doc]') && t.type !== 'checkbox') {
+      var dc = K.docCfg(), dk = t.dataset.doc; dc[dk] = /Next$/.test(dk) ? (parseInt(String(t.value).replace(/\D/g, ''), 10) || 1) : dk === 'vatRate' ? (parseFloat(t.value) || 0) : t.value.trim();
+      K.docSave(dc); $$('[data-doc-prev]').forEach(function (p) { p.textContent = K.peekNo(p.dataset.docPrev); }); return;
+    }
     if (t.matches('[data-match]')) {
       var q = t.value.trim().toUpperCase().replace(/\s/g, ''), out = $('[data-match-out]');
       if (q.length < 3) { out.innerHTML = 'Tip: guests use their booking reference when they pay, so you can paste it straight from the bank app.'; return; }
@@ -3000,6 +3074,7 @@
     if (t.matches('[data-rp-cmp]')) { RP.compare = t.checked; rpSave(); rpInstant = true; render(); }
     if (t.matches('[data-copy-from]')) { actStand(null, t.value || null); }
     if (t.matches('[data-ph-file]')) { Array.prototype.slice.call(t.files || []).slice(0, 10).forEach(function (file) { shrink(file, function (url) { if (EDIT) { EDIT.photos.push(url); phRefresh(); } }); }); t.value = ''; }
+    if (t.matches('[data-doc][type=checkbox]')) { var dv = K.docCfg(); dv[t.dataset.doc] = t.checked; K.docSave(dv); log('VAT switched ' + (t.checked ? 'on' : 'off') + ' for quotations and invoices'); render(); return; }
     if (t.matches('[data-close-stand]')) { var id = t.dataset.closeStand; if (t.checked) delete DB.closed[id]; else DB.closed[id] = true; log(standById(id).name + (t.checked ? ' opened' : ' closed') + ' for bookings'); save(); render(); toast(standById(id).name + (t.checked ? ' is open for bookings' : ' is closed to new bookings')); }
   }
   function onSubmit(e) {

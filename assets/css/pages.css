@@ -1154,3 +1154,4 @@ body.header-hidden .searchbar-wrap, body.header-hidden .subnav { top: 0; }
 .cal-note i.k-we { background: var(--sun); border-radius: 50%; width: 6px; height: 6px; vertical-align: 1px; }
 .book-box.pop { animation: bw-pop .55s var(--ease) both; }
 @media (max-width: 400px) { .dp-inline .dp-d { width: 38px; height: 38px; } .dp-inline .dp-c::before { height: 38px; } .dp-inline .dp-c { height: 50px; } }
+.mg-claim.bad { background: rgba(178,58,42,.18); }

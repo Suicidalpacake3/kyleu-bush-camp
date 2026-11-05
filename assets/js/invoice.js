@@ -31,21 +31,52 @@
     [['bank', 'Bank'], ['accName', 'Account name'], ['accNo', 'Account number'], ['branch', 'Branch code'], ['accType', 'Account type'], ['swift', 'SWIFT code'],
      ['reg', 'Company registration'], ['postal', 'Postal address'], ['checkIn', 'Check-in time'], ['checkOut', 'Check-out time'], ['signer', 'Invoices signed by'], ['phone', 'Phone'], ['email', 'Email']]
       .forEach(function (x) { var v = S.get(x[1], ''); if (v) BIZ[x[0]] = v; });
+    applyCfg();
   }).catch(function () {});
+
+  /* ---------- quotes & invoices settings, shared by the website and the admin ----------
+     Admin > Settings > Quotes & invoices: the start of each number (e.g. KY26, QUO, INV), the next number,
+     VAT on or off with the VAT number, and the bank details printed on every quotation and invoice.
+     Demo: kept in this browser ("kyleu-docs"). Live: saved on the server, so numbers never repeat. */
+  var CFG_KEY = 'kyleu-docs';
+  var CFG0 = { refPrefix: 'KY26', refNext: 5901, quotePrefix: 'QUO', quoteNext: 1001, invPrefix: 'INV', invNext: 1001, vatOn: false, vatNo: '', vatRate: 15 };
+  K.docCfg = function () { var c = {}; try { c = JSON.parse(localStorage.getItem(CFG_KEY) || '{}') || {}; } catch (e) {} return Object.assign({}, CFG0, c); };
+  K.docSave = function (c) { try { localStorage.setItem(CFG_KEY, JSON.stringify(c)); } catch (e) {} applyCfg(); };
+  function applyCfg() { var c = K.docCfg(); ['bank', 'accName', 'accNo', 'branch', 'accType', 'swift'].forEach(function (k) { if (c[k]) BIZ[k] = c[k]; }); }
+  applyCfg();
+  var NUM = { Ref: ['refPrefix', 'refNext'], Quote: ['quotePrefix', 'quoteNext'], Invoice: ['invPrefix', 'invNext'] };
+  function fmtNo(prefix, n) { prefix = String(prefix || '').trim(); return (prefix ? prefix + ' ' : '') + n; }
+  K.fmtNo = fmtNo;
+  // the number the next one will get, without using it up (for previews)
+  K.peekNo = function (kind) { var c = K.docCfg(), k = NUM[kind]; return fmtNo(c[k[0]], c[k[1]]); };
+  // use up the next number (a booking, quotation or invoice was made)
+  K.takeNo = function (kind) { var c = K.docCfg(), k = NUM[kind], no = fmtNo(c[k[0]], c[k[1]]); c[k[1]] = (+c[k[1]] || 0) + 1; K.docSave(c); return no; };
+  // a previewed number was kept: move the counter on if it was the next one
+  K.commitNo = function (kind, no) { if (no === K.peekNo(kind)) K.takeNo(kind); };
+  K.vatOn = function () { return !!K.docCfg().vatOn; };
+  // what the document is called: a quotation until it is paid, then an invoice (a tax invoice when Kyleu is VAT registered)
+  function kindName(inv) { return inv.kind === 'Quote' ? 'Quotation' : K.vatOn() ? 'Tax invoice' : 'Invoice'; }
+  K.kindName = kindName;
+  // how long a quotation holds the stand: until the deposit date; if the guest said they paid, one more day while Kyleu checks
+  // o: { due (yyyy-mm-dd), paid, claimed, today (yyyy-mm-dd) }  ->  { state: 'paid' | 'held' | 'soft' | 'released', until }
+  K.quoteHold = function (o) {
+    if (o.paid > 0) return { state: 'paid' };
+    var d = D(o.due); d.setDate(d.getDate() + 1); var soft = new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+    if (o.today <= o.due) return { state: 'held', until: o.due };
+    if (o.claimed && o.today <= soft) return { state: 'soft', until: soft };
+    return { state: 'released', until: o.due };
+  };
   function notes() {
-    return ['Arrival and departure times are flexible: we arrange them with you before your stay.',
-      'Please note our Terms & Conditions, on our website (kyleu.co.za/policies.html).',
-      'Camping at Kyleu Bush Camp is ENTIRELY AT YOUR OWN RISK: wild animals roam freely.',
-      'There is no electricity anywhere in the bush camp (fenced and unfenced).',
-      'Cancellations are not refunded; what you paid is kept as a credit for another stay.',
-      'Dinokeng Game Reserve fees are paid to the reserve, not to Kyleu.'];
+    return ['Please note our Terms & Conditions, on our website (kyleu.co.za/policies.html).',
+      'Camping at Kyleu Bush Camp is AT YOUR OWN RISK, especially in the unfenced section, where wild animals roam freely.',
+      'There is no electricity anywhere in the bush camp (fenced and unfenced).'];
   }
 
   // where the invoice stands: what is due, by when
   function state(inv) {
     var bal = Math.max(0, Math.round(inv.total - (inv.paid || 0)));
     if (inv.cancelled) return { k: 'cancel', t: 'This booking is cancelled', bal: bal };
-    if (inv.kind === 'Quote') return { k: 'quote', t: 'Quote' + (inv.validTo ? ', valid until ' + nice(inv.validTo) : '') + '. Your stand is only held once the deposit is paid.', bal: bal };
+    if (inv.kind === 'Quote') return { k: 'quote', t: 'Quotation' + (inv.validTo ? ', valid until ' + nice(inv.validTo) : ''), bal: bal, now: inv.payFull ? bal : inv.deposit };
     if (bal <= 0) return { k: 'paid', t: 'Paid in full. Thank you!', bal: 0 };
     if (!inv.paid && !inv.payFull) return { k: 'due', t: 'Deposit of ' + money(inv.deposit) + ' due by ' + nice(inv.depositDue), bal: bal, now: inv.deposit };
     if (!inv.paid) return { k: 'due', t: 'Full amount of ' + money(bal) + ' due by ' + nice(inv.depositDue), bal: bal, now: bal };
@@ -64,7 +95,8 @@
       .filter(function (r) { return r[1] !== undefined && r[1] !== ''; });
   }
   function totals(inv, st) {
-    var r = [['Total', money(inv.total), 'total']];
+    var r = [['Total', money(inv.total), 'total']], c = K.docCfg();
+    if (c.vatOn) r.push(['Includes VAT at ' + (+c.vatRate || 15) + '%', money(inv.total * (+c.vatRate || 15) / (100 + (+c.vatRate || 15))), ''])
     if (st.k === 'quote' || (!inv.paid && !inv.payFull && st.k === 'due')) r.push(['Deposit ' + (inv.depPct || 50) + '%', money(inv.deposit), '']);
     if (st.k !== 'quote') r.push(['Total payment received', (inv.paid ? '-' : '') + money(inv.paid || 0), '']);
     if (st.k !== 'quote' && st.k !== 'cancel') r.push([st.bal ? 'Balance due' : 'Balance', money(st.bal), 'due']);
@@ -74,7 +106,10 @@
   var THANKS = 'Kyleu management thanks you in advance for respecting the rules and abiding by them. We hope you have an enjoyable stay!';
   K.invoiceState = state;
   K.bankRows = bankRows;
-  K.invoiceName = function (inv) { return 'Kyleu ' + inv.kind.toLowerCase() + ' ' + inv.no + '.pdf'; };
+  K.invoiceName = function (inv) { return 'Kyleu ' + kindName(inv).toLowerCase() + ' ' + inv.no + '.pdf'; };
+  function vatLine() { var c = K.docCfg(); return c.vatOn && c.vatNo ? 'VAT no. ' + c.vatNo : ''; }
+  var PAIDTIP = 'Once payment has been made, upload your proof of payment directly to your booking: press I have paid on your booking page (the link is in your booking email), or upload it at kyleu.co.za/pop.html.';
+  var DGR_TXT = 'Guests staying at this DGR CP campsite qualify for Conservation Fee Discount Vouchers: R85 instead of R100 per adult per night. We send you one voucher code per vehicle before your stay. Dinokeng Game Reserve fees are paid to the reserve, not to Kyleu.';
   K.invoiceNo = function (ref, kind, n) { return (kind === 'Quote' ? 'Q-' : 'INV-') + String(ref).replace(/^KY/i, '') + '-' + (n || 1); };
 
   /* ---------- on screen ---------- */
@@ -82,23 +117,22 @@
     var st = state(inv), g = inv.guest || {}, rows = schedule(inv), hasQ = inv.lines.some(function (l) { return l.q; });
     return '<article class="inv inv-' + st.k + '">' +
       '<header class="inv-hero" style="background-image:url(\'' + BASE + 'assets/img/photos/camp-panorama.jpg\')"><div class="inv-brand"><img src="' + BASE + 'assets/img/logo-small.png" alt="Kyleu Bush Camp logo"><div><b>' + esc(BIZ.name) + '</b><small>' + esc(BIZ.tag) + '</small></div></div>' +
-      '<div class="inv-title"><span class="inv-kind">' + esc(inv.kind) + '</span><b>' + esc(inv.no) + '</b><small>' + esc(nice(inv.date)) + '</small></div></header>' +
-      '<div class="inv-biz"><span>' + esc(BIZ.addr) + '<br>' + esc(BIZ.postal) + '</span><span>Reg. ' + esc(BIZ.reg) + '<br>' + esc(BIZ.phone) + ' · ' + esc(BIZ.email) + ' · ' + esc(BIZ.web) + '</span></div>' +
-      '<div class="inv-status">' + esc(st.t) + '</div>' +
+      '<div class="inv-title"><span class="inv-kind">' + esc(kindName(inv)) + '</span><b>' + esc(inv.no) + '</b><small>' + esc(nice(inv.date)) + '</small>' + (inv.kind === 'Quote' && inv.validTo ? '<small class="inv-valid">Valid until ' + esc(nice(inv.validTo)) + '</small>' : '') + '</div></header>' +
+      (st.k === 'paid' || st.k === 'cancel' ? '<div class="inv-status">' + esc(st.t) + '</div>' : '') +
       '<div class="inv-parties"><div><h4>' + (inv.kind === 'Quote' ? 'Prepared for' : 'Billed to') + '</h4><b>' + esc(g.name) + '</b>' + (g.email ? '<span>' + esc(g.email) + '</span>' : '') + (g.phone ? '<span>' + esc(g.phone) + '</span>' : '') + '</div>' +
       '<div><h4>Your stay</h4><dl>' + stayRows(inv).map(function (r) { return '<dt>' + r[0] + '</dt><dd>' + esc(r[1]) + '</dd>'; }).join('') + '</dl></div></div>' +
       '<table class="inv-lines' + (hasQ ? ' with-q' : '') + '"><thead><tr>' + (hasQ ? '<th class="q">Qty</th>' : '') + '<th>Description</th>' + (hasQ ? '<th class="u">Unit price</th>' : '') + '<th>Total</th></tr></thead><tbody>' +
       inv.lines.map(function (l) { return '<tr>' + (hasQ ? '<td class="q">' + (l.q || '') + '</td>' : '') + '<td>' + esc(l.t) + '</td>' + (hasQ ? '<td class="u">' + (l.u != null && !l.free ? money(l.u) : '') + '</td>' : '') + '<td>' + (l.free ? 'Free' : (l.amt < 0 ? '&minus;' : '') + money(Math.abs(l.amt))) + '</td></tr>'; }).join('') + '</tbody>' +
       '<tfoot>' + totals(inv, st).map(function (r) { return '<tr class="inv-' + r[2] + '"><td colspan="' + (hasQ ? 3 : 1) + '">' + r[0] + '</td><td>' + r[1].replace(/^-/, '&minus;') + '</td></tr>'; }).join('') + '</tfoot></table>' +
       (st.k === 'due' || st.k === 'quote' ? '<div class="inv-pay"><div><h4>When to pay</h4>' + (rows.length ? '<ul>' + rows.map(function (r) { return '<li><span>' + esc(r[0]) + '<small>' + esc(r[2]) + '</small></span><b>' + esc(r[1]) + '</b></li>'; }).join('') + '</ul>' : '') +
-        (st.k === 'due' ? '<p class="inv-paidtip">Paid? Press <b>I have paid</b> using the link to your booking (in your booking email), or upload your proof of payment at kyleu.co.za/pop.html.</p>' : '') + '</div>' +
+        '<p class="inv-paidtip">' + esc(PAIDTIP) + '</p></div>' +
         '<div class="inv-bank"><h4>Our bank details</h4><dl>' + bankRows().map(function (r) { return '<dt>' + r[0] + '</dt><dd>' + esc(r[1]) + '</dd>'; }).join('') + '</dl><p class="inv-refbox">Use reference <b>' + esc(inv.ref) + '</b></p></div></div>' : '') +
       (inv.note ? '<p class="inv-note inv-own">' + esc(inv.note) + '</p>' : '') +
-      '<div class="inv-notes"><h4>Please note</h4><ul>' + notes().map(function (n) { return '<li>' + esc(n).replace('ENTIRELY AT YOUR OWN RISK', '<b>ENTIRELY AT YOUR OWN RISK</b>') + '</li>'; }).join('') + '</ul></div>' +
+      '<div class="inv-notes"><h4>Please note</h4><ul>' + notes().map(function (n) { return '<li>' + esc(n).replace('AT YOUR OWN RISK', '<b>AT YOUR OWN RISK</b>') + '</li>'; }).join('') + '</ul></div>' +
       '<p class="inv-thanks">' + esc(THANKS) + '</p>' +
       '<p class="inv-sign">Kind regards,<br><b>' + esc(BIZ.signer) + '</b> · ' + esc(BIZ.phone) + ' · ' + esc(BIZ.email) + '</p>' +
-      '<div class="inv-dgr"><img src="' + BASE + 'assets/img/dgr-certified-partner.png" alt="DGR Certified Partner logo"><p><b>Kyleu is a proud DGR CP member.</b> Guests staying at this DGR CP campsite qualify for Conservation Fee Discount Vouchers: R85 instead of R100 per adult per night. We send you one voucher code per vehicle before your stay.</p></div>' +
-      '<footer class="inv-foot">' + esc(BIZ.name) + ' · Reg. ' + esc(BIZ.reg) + ' · ' + esc(BIZ.addr) + ' · ' + esc(BIZ.phone) + ' · ' + esc(BIZ.email) + ' · ' + esc(BIZ.web) + '</footer></article>';
+      '<div class="inv-dgr"><img src="' + BASE + 'assets/img/dgr-certified-partner.png" alt="DGR Certified Partner logo"><p><b>Kyleu is a proud DGR CP member.</b> ' + esc(DGR_TXT) + '</p></div>' +
+      '<footer class="inv-foot">' + esc(BIZ.name) + ' · Reg. ' + esc(BIZ.reg) + (vatLine() ? ' · ' + esc(vatLine()) : '') + ' · ' + esc(BIZ.addr) + ' · ' + esc(BIZ.phone) + ' · ' + esc(BIZ.email) + ' · ' + esc(BIZ.web) + '</footer></article>';
   };
 
   /* ---------- PDF ---------- */
@@ -114,10 +148,16 @@
       }; im.onerror = no; im.src = src;
     });
   }
+  function toPng(src, w) {
+    return new Promise(function (ok, no) {
+      var im = new Image(); im.onload = function () { var c = document.createElement('canvas'), sc = Math.min(1, w / im.width); c.width = Math.round(im.width * sc); c.height = Math.round(im.height * sc); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); ok(c.toDataURL('image/png')); };
+      im.onerror = no; im.src = src;
+    });
+  }
   K.invoiceAssets = function () {
     if (IMG.p) return IMG.p;
     IMG.p = Promise.all([
-      toData(BASE + 'assets/img/logo-small.png', 220).then(function (d) { IMG.kyleu = d; }),
+      toPng(BASE + 'assets/img/logo-small.png', 240).then(function (d) { IMG.kyleu = d; }),
       toData(BASE + 'assets/img/dgr-certified-partner.png', 400).then(function (d) { IMG.dgr = d; }),
       toData(BASE + 'assets/img/photos/camp-panorama.jpg', 900, 210 / 30).then(function (d) { IMG.photo = d; })
     ]).catch(function () {});
@@ -137,15 +177,16 @@
     if (IMG.photo) { try { doc.addImage(IMG.photo, 'JPEG', 0, 0, 210, H); } catch (e) {} } else { fill(C.bark); doc.rect(0, 0, 210, H, 'F'); }
     try { doc.setGState(new doc.GState({ opacity: .5 })); fill([20, 12, 6]); doc.rect(0, 0, 210, H, 'F'); doc.setGState(new doc.GState({ opacity: 1 })); } catch (e) {}
     fill(C.sun); doc.rect(0, H, 210, 1.6, 'F');
-    if (IMG.kyleu) { fill(C.white); doc.circle(L + 12, 15, 11, 'F'); try { doc.addImage(IMG.kyleu, 'JPEG', L + 2.5, 7.3, 19, 15.3); } catch (e) {} }
-    font(17, true, C.white); text(BIZ.name, L + 28, 13.5); font(9, false, C.white); text(BIZ.tag, L + 28, 19); font(8, false, C.white); text('Reg. ' + BIZ.reg, L + 28, 24);
-    font(23, true, C.white); text(inv.kind.toUpperCase(), R, 13.5, { align: 'right' });
-    font(10, true, C.white); text(inv.no, R, 20, { align: 'right' }); font(8.5, false, C.white); text(nice(inv.date), R, 25, { align: 'right' });
-    y = H + 6.5;
-    font(7.8, false, C.soft); text(BIZ.addr, L, y); text(BIZ.phone + ' · ' + BIZ.email + ' · ' + BIZ.web, R, y, { align: 'right' }); y += 3.8; text(BIZ.postal, L, y); y += 3.5;
-    // status band
-    fill(st.k === 'paid' ? C.okbg : st.k === 'due' ? C.due : C.sand); doc.roundedRect(L, y, W, 9.5, 2, 2, 'F');
-    font(10.5, true, st.k === 'paid' ? C.ok : st.k === 'cancel' ? C.bad : C.ember); text(st.t, L + 4, y + 6.3); y += 14.5;
+    if (IMG.kyleu) {
+      try { doc.setGState(new doc.GState({ opacity: .35 })); fill([10, 6, 3]); doc.ellipse(L + 12, 16.4, 11.6, 9.4, 'F'); doc.setGState(new doc.GState({ opacity: 1 })); } catch (e) {}
+      try { doc.addImage(IMG.kyleu, 'PNG', L, 5.4, 24, 19.3); } catch (e) {}
+    }
+    font(17, true, C.white); text(BIZ.name, L + 29, 13.5); font(9, false, C.white); text(BIZ.tag, L + 29, 19);
+    font(23, true, C.white); text(kindName(inv).toUpperCase(), R, 12.5, { align: 'right' });
+    font(10, true, C.white); text(inv.no, R, 19, { align: 'right' }); font(8.5, false, C.white); text(nice(inv.date) + (inv.kind === 'Quote' && inv.validTo ? ' · valid until ' + nice(inv.validTo) : ''), R, 24, { align: 'right' });
+    y = H + 8;
+    // a status band only once it is paid or cancelled (what is due, and by when, is at the bottom)
+    if (st.k === 'paid' || st.k === 'cancel') { fill(st.k === 'paid' ? C.okbg : C.sand); doc.roundedRect(L, y, W, 9.5, 2, 2, 'F'); font(10.5, true, st.k === 'paid' ? C.ok : C.bad); text(st.t, L + 4, y + 6.3); y += 14.5; }
     // who and what
     var top = y;
     font(7.5, true, C.soft); text(inv.kind === 'Quote' ? 'PREPARED FOR' : 'BILLED TO', L, y); y += 5.5;
@@ -170,11 +211,11 @@
     y += 3;
     // when to pay + bank details
     if (st.k === 'due' || st.k === 'quote') {
-      var bh = 43; need(bh + 4); var bx = y;
+      var bh = 50; need(bh + 4); var bx = y;
       fill(C.sand); doc.roundedRect(L, bx, 88, bh, 2, 2, 'F'); doc.roundedRect(106, bx, 90, bh, 2, 2, 'F');
       font(7.5, true, C.soft); text('WHEN TO PAY', L + 4, bx + 6.5); text('OUR BANK DETAILS', 110, bx + 6.5);
       var ry = bx + 13; schedule(inv).forEach(function (r) { font(9.5, true); text(r[0], L + 4, ry); text(r[1], L + 84, ry, { align: 'right' }); font(8, false, C.soft); text(r[2], L + 4, ry + 4.2); ry += 10; });
-      if (st.k === 'due') { font(7.6, false, C.soft); text(doc.splitTextToSize(clean('Paid? Press "I have paid" using the link to your booking (in your booking email), or upload your proof of payment at kyleu.co.za/pop.html.'), 80), L + 4, bx + 32.5); }
+      font(7.4, false, C.soft); text(doc.splitTextToSize(clean(PAIDTIP), 80), L + 4, bx + 34);
       ry = bx + 11.5; bankRows().forEach(function (r) { font(8.3, false, C.soft); text(r[0], 110, ry); font(8.8, true); text(r[1], 138, ry); ry += 4; });
       fill(C.sun); doc.roundedRect(110, bx + bh - 8.5, 82, 5.5, 1, 1, 'F'); font(8.5, true, C.white); text('Use reference ' + inv.ref, 151, bx + bh - 4.6, { align: 'center' });
       y = bx + bh + 5;
@@ -189,10 +230,10 @@
     need(14);
     if (IMG.dgr) try { doc.addImage(IMG.dgr, 'JPEG', L, y, 29, 10.9); } catch (e) {}
     font(8.6, true); text('Kyleu is a proud DGR CP member.', L + 40, y + 3.4);
-    font(8, false, C.soft); text(doc.splitTextToSize('Guests staying at this DGR CP campsite qualify for Conservation Fee Discount Vouchers: R85 instead of R100 per adult per night. We send you one voucher code per vehicle before your stay.', W - 40).map(clean), L + 40, y + 7.4);
+    font(8, false, C.soft); text(doc.splitTextToSize(DGR_TXT, W - 40).map(clean), L + 40, y + 7.4);
     // footer on every page
     var n = doc.getNumberOfPages();
-    for (var i = 1; i <= n; i++) { doc.setPage(i); doc.setDrawColor(C.line[0], C.line[1], C.line[2]); doc.line(L, 285, R, 285); font(7, false, C.soft); text(BIZ.name + ' · Reg. ' + BIZ.reg + ' · ' + BIZ.phone + ' · ' + BIZ.email + ' · ' + BIZ.web + (n > 1 ? ' · page ' + i + ' of ' + n : ''), 105, 290, { align: 'center' }); }
+    for (var i = 1; i <= n; i++) { doc.setPage(i); doc.setDrawColor(C.line[0], C.line[1], C.line[2]); doc.line(L, 285, R, 285); font(7, false, C.soft); text(BIZ.name + ' · Reg. ' + BIZ.reg + (vatLine() ? ' · ' + vatLine() : '') + ' · ' + BIZ.addr, 105, 289, { align: 'center' }); text(BIZ.phone + ' · ' + BIZ.email + ' · ' + BIZ.web + (n > 1 ? ' · page ' + i + ' of ' + n : ''), 105, 292.6, { align: 'center' }); }
   };
   K.invoicePDF = function (inv) {
     var J = window.jspdf && window.jspdf.jsPDF; if (!J) return null;

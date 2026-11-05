@@ -7,7 +7,8 @@
 .inv-hero::before { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(20,12,6,.72), rgba(20,12,6,.42)); }
 .inv-hero > * { position: relative; }
 .inv-brand { display: flex; align-items: center; gap: 14px; }
-.inv-brand img { width: 74px; height: 74px; object-fit: contain; background: #fff; border-radius: 50%; padding: 6px; box-sizing: border-box; }
+.inv-brand img { width: 84px; height: 68px; object-fit: contain; filter: drop-shadow(0 4px 10px rgba(0,0,0,.45)); }
+.inv-valid { display: block; margin-top: 2px; font-weight: 800; color: #ffd9a8 !important; }
 .inv-brand b { display: block; font-family: 'Fraunces', Georgia, serif; font-size: 1.45rem; line-height: 1.1; color: #fff; }
 .inv-brand small { color: rgba(255,255,255,.88); font-size: .84rem; }
 .inv-title { text-align: right; }
