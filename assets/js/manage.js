@@ -195,7 +195,7 @@
     note: { id: 'note', ic: 'i-mail', t: 'A message for the Kyleu team' }
   };
   var SECS = [];
-  function secsFor(v) { return (finalMode(v) ? ['cars', 'eta', 'shop', 'guests', 'details', 'note'] : ['guests', 'details']).map(function (k) { return ALL[k]; }); }
+  function secsFor(v) { return (finalMode(v) ? ['cars', 'eta', 'shop', 'guests', 'details', 'note'] : ['guests', 'shop', 'details']).map(function (k) { return ALL[k]; }); }
   function carsText(v) {
     if (!v.vehicles) return 'Not sure yet how many vehicles';
     var named = v.cars.slice(0, v.vehicles).reduce(function (a, c) { return a + (c.driver ? 1 : 0) + c.guests.length; }, 0), regs = v.cars.slice(0, v.vehicles).filter(function (c) { return c.reg; }).length;
@@ -277,7 +277,7 @@
     }
     pane.innerHTML = '<p class="bw-of">Step 2 of 4</p><h2>' + (fin ? 'Finalise your booking' : 'Amend your booking') + '</h2>' +
       (fin ? '<p class="bw-lead">Your booking is <b>paid in full</b>. Thank you! Now tell us your <b>vehicles and who is in each one</b>, roughly <b>when you arrive</b>, and anything you want waiting from the <b>camp shop</b>. Press <b>Change</b> next to each part; nothing is saved until the last step.' + (base.finalised ? ' <b>You finalised it on ' + esc(nice(base.finalised.at.slice(0, 10))) + '</b>; you can still change anything.' : '') + '</p>'
-        : '<p class="bw-lead">Your booking is <b>not paid in full yet</b>. Here you can tell us you have paid (<b>I have paid</b>), change the <b>number of guests</b> or your <b>contact details</b>. Once it is paid in full, this same page lets you <b>finalise</b> it: vehicles, passengers, arrival time and camp shop.</p>') +
+        : '<p class="bw-lead">Your booking is <b>not paid in full yet</b>. Here you can tell us you have paid (<b>I have paid</b>), change the <b>number of guests</b>, add to your <b>camp shop order</b> or change your <b>contact details</b>. Once it is paid in full, this same page lets you <b>finalise</b> it: vehicles, passengers and arrival time, and you can still add camp shop items.</p>') +
       bookingCard(base) +
       '<div class="mg-secs">' + SECS.map(function (s) {
         var on = openSec === s.id, ch = changed(s.id);

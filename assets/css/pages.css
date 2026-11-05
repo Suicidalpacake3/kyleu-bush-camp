@@ -1052,3 +1052,10 @@ body.header-hidden .searchbar-wrap, body.header-hidden .subnav { top: 0; }
 .area-filter button.full { opacity: .7; }
 .area-filter button.full .bw-free { color: var(--bad); }
 @media (max-width: 900px) { .area-filter { grid-template-columns: 1fr 1fr; } }
+
+/* booking: camp shop on the "Check your booking" step */
+.bk-shop { margin: 18px 0 8px; padding: 16px; border: 1.5px dashed var(--line); border-radius: 16px; background: #fff; }
+.bk-shop h3 { margin: 0 0 4px; font-size: 1.15rem; }
+.bk-shop h3 .opt { font-family: var(--font-body); font-size: .88rem; font-weight: 600; color: var(--ink-soft); }
+.bk-shop [data-extras]:empty { display: none; }
+.bk-shop [data-extras] { margin: 10px 0 8px; }

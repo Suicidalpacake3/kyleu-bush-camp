@@ -370,7 +370,7 @@
     var mini = $('[data-mini]', modal);
     if (mini) mini.innerHTML = '<b>' + K.esc(b.stand.name) + '</b><span>' + nice(b.ci) + ' to ' + nice(b.co) + ' · ' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + '</span><span>' + gTxt + ' · <b>Total ' + K.money(tot) + '</b></span>';
     var cs = $('[data-check-sum]', modal);
-    if (cs) cs.innerHTML = '<dl><div><dt>Stand</dt><dd>' + K.esc(b.stand.name) + ' <small>' + b.stand.areaInfo.short + '</small></dd></div><div><dt>Arrive</dt><dd>' + nice(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }) + '</dd></div><div><dt>Depart</dt><dd>' + nice(b.co, { weekday: 'long', day: 'numeric', month: 'long' }) + ' <small>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + '</small></dd></div><div><dt>Guests</dt><dd>' + gTxt + '</dd></div><div class="tot"><dt>Total</dt><dd>' + K.money(tot) + '</dd></div></dl><p>' + dueTxt + '</p><button type="button" class="link-btn" data-edit-stay>Change something</button>';
+    if (cs) cs.innerHTML = '<dl><div><dt>Stand</dt><dd>' + K.esc(b.stand.name) + ' <small>' + b.stand.areaInfo.short + '</small></dd></div><div><dt>Arrive</dt><dd>' + nice(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }) + '</dd></div><div><dt>Depart</dt><dd>' + nice(b.co, { weekday: 'long', day: 'numeric', month: 'long' }) + ' <small>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + '</small></dd></div><div><dt>Guests</dt><dd>' + gTxt + '</dd></div>' + (q.exLines.length ? '<div><dt>Extras</dt><dd>' + q.exLines.map(function (l) { return '<small>' + K.esc(l.t) + ' · ' + K.money(card ? l.c : l.v) + '</small>'; }).join('') + '</dd></div>' : '') + '<div class="tot"><dt>Total</dt><dd>' + K.money(tot) + '</dd></div></dl><p>' + dueTxt + '</p><button type="button" class="link-btn" data-edit-stay>Change something</button>';
     var eb = cs && $('[data-edit-stay]', cs); if (eb) eb.onclick = function () { closeCheckout(); };
     var invSmall = $('.pay-opt[data-pay="invoice"] small', modal); if (invSmall && !onlinePay()) invSmall.textContent = dueTxt;
     // pay option amounts
@@ -383,7 +383,7 @@
     return q;
   }
   function renderExtras() {
-    var box = $('[data-extras]', modal); if (!box) return;   // extras and the camp shop are chosen when the guest finalises the booking
+    var box = $('[data-extras]', modal); if (!box) return;   // camp shop and porta potty, on the "Check your booking" step, so it is all on one invoice
     box.innerHTML = EXTRAS.filter(function (x) { return !x.only || x.only === booking.stand.area; }).map(function (x) {
       var ctl = x.unit === 'toggle' ? '<label class="check" style="margin:0"><input type="checkbox" data-x="' + x.id + '"> Add</label>'
         : '<div class="sb-guests"><button type="button" data-xm="' + x.id + '" aria-label="Fewer">−</button><output data-xo="' + x.id + '">0</output><button type="button" data-xp="' + x.id + '" aria-label="More">+</button></div>';
@@ -445,7 +445,8 @@
       saved.push({ ref: ref, created: iso(now) + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'), stand: booking.stand.id, ci: iso(booking.ci), co: iso(booking.co),
         adults: booking.g.adults, pens: booking.g.pens, kids: booking.g.kids, extras: {}, first: f('first'), last: f('last'), email: f('email'), phone: f('phone'), eta: '', notes: f('notes'), key: bkey,
         vehicles: cv.count, vehTbc: !cv.count, cars: cv.cars,
-        shop: SHOP.filter(function (it) { return shopQty[it.label]; }).map(function (it) { return { label: it.label, qty: shopQty[it.label], each: it.each }; }),
+        shop: SHOP.filter(function (it) { return shopQty[it.label]; }).map(function (it) { return { label: it.label, qty: shopQty[it.label], each: it.each }; })
+          .concat(extras.pp && booking.stand.area === 'self-sufficient' ? [(function () { var n = nightsOf(booking.ci, booking.co).length; return { label: 'Porta potty hire, cleaning included (' + n + ' night' + (n === 1 ? '' : 's') + ')', qty: 1, each: n * P.num('Self-sufficient', 'Porta potty hire per night', 100) }; })()] : []),
         pay: pay, paid: paid, eft: q.total, card: q.cardTotal, invoice: inv });
       localStorage.setItem('kyleu-web-bookings', JSON.stringify(saved.slice(-50))); TAKEN = null;
     } catch (e) {}
@@ -470,7 +471,7 @@
       (pay === 'invoice' ? '<li><b>1</b><span>Pay the ' + (q.payFull ? 'full amount of ' + K.money(q.total) : q.depPct + '% deposit of ' + K.money(q.deposit)) + ' by EFT ' + (q.payFull ? (q.fullDue <= today() ? 'as soon as you can' : 'by ' + nice(q.fullDue, { day: 'numeric', month: 'long' })) : 'within ' + depDays() + ' days') + ', using reference <b>' + ref + '</b>. Then press <b>I have paid</b>, here or later with <a href="' + blink + '">the link to your booking</a>. We check the bank and confirm.</span></li>' : '') +
       (!q.payFull && pay !== 'full' ? '<li><b>' + (pay === 'invoice' ? 2 : 1) + '</b><span>Balance of ' + K.money(isCard ? q.cardTotal - q.cardDeposit : q.total - q.deposit) + ' is due by ' + nice(q.balanceDue, { day: 'numeric', month: 'long' }) + '. We\'ll send a reminder.</span></li>' : '') +
       '<li><b>✓</b><span>Pay your Dinokeng conservation &amp; self-drive fees online or at the gate. Kyleu is a proud DGR CP member, so before your stay we send you a <b>Conservation Fee Discount Voucher</b> code for each vehicle (R85 instead of R100 per adult per night). <a href="dinokeng.html#fees">Dinokeng fees</a></span></li>' +
-      '<li><b>✓</b><span>Once your booking is <b>paid in full</b>, we email you a link to <b>finalise</b> it: your vehicles and who is in each one, roughly when you arrive, and anything you want waiting from the camp shop.</span></li>' +
+      '<li><b>✓</b><span>Once your booking is <b>paid in full</b>, we email you a link to <b>finalise</b> it: your vehicles and who is in each one, and roughly when you arrive. Want more from the camp shop later? Add it with the link to your booking.</span></li>' +
       '<li><b>✓</b><span>Enter at Dinokeng <b>Tau Gate</b>, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km. <a href="contact.html">Directions</a></span></li></ol>' +
       '<div class="cta-actions"><button class="btn" type="button" data-ics><svg><use href="#i-cal"/></svg>Add to calendar</button><a class="btn btn-green" target="_blank" rel="noopener" href="https://wa.me/27604584478?text=' + encodeURIComponent('Hi Kyleu! My booking reference is ' + ref + ' (' + booking.stand.name + ', ' + iso(booking.ci) + ' to ' + iso(booking.co) + ').') + '"><svg><use href="#i-wa"/></svg>WhatsApp us your reference</a></div>' +
       '<details class="inv-fold"><summary>See your invoice</summary><div class="inv-wrap">' + K.invoiceHTML(inv) + '</div></details>' +
