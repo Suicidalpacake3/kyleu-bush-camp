@@ -256,13 +256,13 @@
       '<div class="sheet-section"><h3>Highlights</h3><ul class="hl-list">' + hl + '</ul></div>' +
       '<div class="sheet-section"><h3>What\'s at the stand</h3><ul class="hl-list">' + base + '</ul></div>' +
       (st.map ? '<div class="sheet-section"><h3>Where it is</h3><div class="mini-map">' + K.campMapMini(STANDS, st.id) + '</div><p class="muted" style="font-size:.82rem;margin:8px 0 0"><a href="#map" data-close-sheet>Open the full camp map</a></p></div>' : '') +
-      '<div class="sheet-section"><h3>Pick your dates</h3><div class="cal"></div><div class="cal-note"><span><i style="background:#fff;border:1px solid #ddd"></i>Available</span><span><i style="background:#f3e4e1"></i>Booked</span><span><i style="background:var(--sun);border-radius:50%;width:6px;height:6px"></i>Weekend rate</span></div></div>' +
+      '<div class="sheet-section"><h3>Pick your dates</h3><div class="cal dp-inline"></div><div class="cal-note"><span><i class="k-free"></i>Available</span><span><i class="k-bk"></i>Booked</span><span><i class="k-we"></i>Weekend rate</span></div></div>' +
       '<div class="sheet-section"><h3>Price</h3><div class="breakdown" data-bd></div><p class="muted" style="font-size:.8rem;margin:8px 0 0">Dinokeng conservation &amp; self-drive fees are paid separately to the reserve. <a href="dinokeng.html#fees">See the Dinokeng page</a></p></div>' +
       '</div>';
     $$('.sg-thumbs button', sheet).forEach(function (b) { b.onclick = function () { $('.sg-main img', sheet).src = ph[+b.dataset.i]; $$('.sg-thumbs button', sheet).forEach(function (x) { x.classList.toggle('on', x === b); }); }; });
     $('.sg-main', sheet).onclick = function () { var i = $$('.sg-thumbs button', sheet).findIndex(function (b) { return b.classList.contains('on'); }); K.lightbox(ph.map(function (p) { return { src: p, cap: st.name }; }), Math.max(0, i)); };
     $$('[data-close-sheet]', sheet).forEach(function (a) { a.onclick = function (e) { e.preventDefault(); closeSheet(); setView('map'); $('#results').scrollIntoView({ behavior: 'smooth' }); }; });
-    renderCal(); updateSheetPrice();
+    calHover = null; calBusy = false; renderCal(); calWire(); updateSheetPrice();
     sheet.classList.add('open'); backdrop.classList.add('open'); document.body.classList.add('lock'); sheet.setAttribute('aria-hidden', 'false');
     $('.sheet-scroll', sheet).scrollTop = 0;
     history.replaceState(null, '', location.pathname + location.search + '#stand=' + st.id);
@@ -270,33 +270,58 @@
   }
   function closeSheet() { sheet.classList.remove('open'); backdrop.classList.remove('open'); if (!$('.modal.open')) document.body.classList.remove('lock'); sheet.setAttribute('aria-hidden', 'true'); history.replaceState(null, '', location.pathname + location.search); }
 
+  // the stand's own calendar: the same look and taps as the booking calendar (assets/js/datepicker.js),
+  // plus this stand's booked nights and weekend-rate nights
+  var calHover = null, calBusy = false;
   function renderCal() {
-    var box = $('.cal', sheet); var m = calMonth, first = new Date(m.getFullYear(), m.getMonth(), 1), start = (first.getDay() + 6) % 7, dim = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate();
-    var h = '<div class="cal-head"><button type="button" data-m="-1" aria-label="Previous month"><svg><use href="#i-arrow-l"/></svg></button><b>' + first.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' }) + '</b><button type="button" data-m="1" aria-label="Next month"><svg><use href="#i-arrow"/></svg></button></div><div class="cal-grid">';
-    ['M', 'T', 'W', 'T', 'F', 'S', 'S'].forEach(function (d) { h += '<span class="dow">' + d + '</span>'; });
-    for (var i = 0; i < start; i++) h += '<span></span>';
+    var box = $('.cal', sheet); var m = calMonth, first = new Date(m.getFullYear(), m.getMonth(), 1), lead = (first.getDay() + 6) % 7, dim = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate(), t0 = today();
+    var end = sel.co || (sel.ci && calHover && calHover > sel.ci ? calHover : null), preview = !sel.co && !!end, bad = preview && !isFree(current, sel.ci, end), idx = 0;
+    var hint = !sel.ci ? 'Tap the day you arrive.' : !sel.co ? 'Now tap the day you go home. Tap ' + nice(sel.ci, { day: 'numeric', month: 'short' }) + ' again to start over.' : (function () { var n = nightsOf(sel.ci, sel.co).length; return n + ' night' + (n > 1 ? 's' : '') + ': ' + nice(sel.ci) + ' to ' + nice(sel.co) + '.'; })();
+    var h = '<p class="dp-hint" aria-live="polite">' + hint + '</p>' +
+      '<div class="dp-nav"><button type="button" class="dp-prev" data-m="-1" aria-label="Previous month"' + (m.getFullYear() === t0.getFullYear() && m.getMonth() === t0.getMonth() ? ' disabled' : '') + '><svg><use href="#i-arrow-l"/></svg></button><b class="dp-month">' + first.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' }) + '</b><button type="button" class="dp-next" data-m="1" aria-label="Next month"><svg><use href="#i-arrow"/></svg></button></div>' +
+      '<div class="dp-wk" aria-hidden="true"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div><div class="dp-grid' + (preview ? ' previewing' : '') + (bad ? ' dp-bad' : '') + '">';
+    for (var i = 0; i < lead; i++) h += '<span class="dp-c dp-blank"></span>';
     for (var d = 1; d <= dim; d++) {
-      var dt = new Date(m.getFullYear(), m.getMonth(), d), past = dt < today(), bk = bookedOn(current, dt), cls = [];
-      if (bk) cls.push('bk'); if (isWeekendNight(dt)) cls.push('we');
-      if (sel.ci && +dt === +sel.ci) cls.push('sel'); if (sel.co && +dt === +sel.co) cls.push('sel');
-      if (sel.ci && sel.co && dt > sel.ci && dt < sel.co) cls.push('mid');
-      h += '<button type="button" data-d="' + iso(dt) + '" class="' + cls.join(' ') + '"' + (past ? ' disabled' : '') + ' aria-label="' + nice(dt, { weekday: 'long', day: 'numeric', month: 'long' }) + (bk ? ', booked' : '') + '">' + d + '</button>';
+      var dt = new Date(m.getFullYear(), m.getMonth(), d), past = dt < t0, bk = !past && bookedOn(current, dt), cls = ['dp-c'];
+      var isStart = sel.ci && +dt === +sel.ci, isEnd = end && +dt === +end, inR = sel.ci && end && dt > sel.ci && dt < end;
+      if (past) cls.push('past'); if (bk) cls.push('bk'); if (!past && isWeekendNight(dt)) cls.push('we');
+      if (isStart) cls.push('start'); if (isStart && end) cls.push('has-band');
+      if (isEnd) cls.push(preview ? 'hend' : 'end');
+      if (inR) { cls.push(preview ? 'hin' : 'in'); idx++; }
+      var n = isEnd ? nightsOf(sel.ci, end).length : 0;
+      h += '<span class="' + cls.join(' ') + '"' + (inR ? ' style="--i:' + idx + '"' : '') + '><button type="button" class="dp-d" data-d="' + iso(dt) + '"' + (past ? ' disabled' : '') +
+        ' aria-label="' + nice(dt, { weekday: 'long', day: 'numeric', month: 'long' }) + (bk ? ', booked' : '') + (isStart ? ', arrival' : '') + (isEnd && !preview ? ', departure' : '') + '"' + (isStart || (isEnd && !preview) ? ' aria-pressed="true"' : '') + '>' + d + '</button>' +
+        (n ? '<small class="dp-nn">' + (bad ? 'Booked in between' : n + ' night' + (n > 1 ? 's' : '')) + '</small>' : '') + '</span>';
     }
-    box.innerHTML = h + '</div>';
+    box.innerHTML = h + '</div><div class="dp-foot"><button type="button" class="dp-clear" data-cal-clear' + (sel.ci ? '' : ' disabled') + '>Clear dates</button></div>';
     $$('[data-m]', box).forEach(function (b) { b.onclick = function () { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + (+b.dataset.m), 1); renderCal(); }; });
-    $$('[data-d]', box).forEach(function (b) {
-      b.onclick = function () {
-        var dt = parse(b.dataset.d);
-        if (!sel.ci || (sel.ci && sel.co) || dt <= sel.ci) {
-          if (bookedOn(current, dt)) { K.toast('That night is already booked'); return; }
-          sel.ci = dt; sel.co = null;
-        } else {
-          if (!isFree(current, sel.ci, dt)) { K.toast('Some nights in that range are booked. Try other dates'); return; }
-          sel.co = dt;
-        }
-        renderCal(); updateSheetPrice();
-      };
+    $('[data-cal-clear]', box).onclick = function () { sel.ci = null; sel.co = null; calHover = null; renderCal(); updateSheetPrice(); };
+  }
+  function calPick(dt) {
+    if (calBusy) return;
+    var startHere = function () { if (bookedOn(current, dt)) { K.toast('That night is already booked'); return false; } return true; };
+    if (sel.ci && +dt === +sel.ci) { sel.ci = null; sel.co = null; }                       // tap the arrival again: start over
+    else if (!sel.ci || dt < sel.ci) { if (!startHere()) return; var keep = sel.co && isFree(current, dt, sel.co); sel.ci = dt; if (!keep) sel.co = null; }   // an earlier day moves the arrival
+    else {
+      if (!isFree(current, sel.ci, dt)) { K.toast('Some nights in between are booked. Try other dates'); return; }
+      sel.co = dt; calHover = null; renderCal(); updateSheetPrice();
+      var box = $('.cal', sheet); calBusy = true; box.classList.add('dp-lock');                // lock in: the band sweeps, the circles pop
+      var n = nightsOf(sel.ci, sel.co).length, hn = $('.dp-hint', box); if (hn) hn.textContent = 'Locked in: ' + n + ' night' + (n > 1 ? 's' : '') + ', ' + nice(sel.ci) + ' to ' + nice(sel.co) + '.';
+      setTimeout(function () { box.classList.remove('dp-lock'); calBusy = false; var bb = $('.book-box', sheet); if (bb) { bb.classList.remove('pop'); void bb.offsetWidth; bb.classList.add('pop'); } }, 950);
+      return;
+    }
+    calHover = null; renderCal(); updateSheetPrice();
+    var f = $('.cal [data-d="' + iso(dt) + '"]', sheet); if (f && !f.disabled) f.focus();
+  }
+  function calWire() {
+    var box = $('.cal', sheet); if (!box || box._wired) return; box._wired = true;
+    box.addEventListener('click', function (e) { var b = e.target.closest('.dp-d'); if (b && !b.disabled) calPick(parse(b.dataset.d)); });
+    box.addEventListener('mouseover', function (e) {
+      if (!sel.ci || sel.co || calBusy) return;
+      var b = e.target.closest('.dp-d'), d = b && !b.disabled ? parse(b.dataset.d) : null;
+      if ((d && +d) !== (calHover && +calHover)) { calHover = d; renderCal(); }
     });
+    box.addEventListener('mouseleave', function () { if (calHover) { calHover = null; renderCal(); } });
   }
 
   function updateSheetPrice() {

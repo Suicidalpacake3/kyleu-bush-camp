@@ -1137,3 +1137,20 @@ body.header-hidden .searchbar-wrap, body.header-hidden .subnav { top: 0; }
   .dp, .dp-back { transition: none; }
   .dp-lock .dp-c::before, .dp-lock .dp-d, .bw-date.pop { animation: none !important; }
 }
+
+/* ---------- the stand's own calendar: same look as the booking calendar ---------- */
+.cal.dp-inline { padding: 12px 12px 8px; }
+.dp-inline .dp-hint { margin: 0 0 4px; min-height: 0; font-size: .92rem; }
+.dp-inline.dp-lock .dp-hint { color: var(--ok); font-weight: 800; }
+.dp-inline .dp-foot { margin-top: 2px; padding-top: 6px; }
+.dp-c.we .dp-d::after { content: ""; position: absolute; left: 50%; bottom: 5px; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: var(--sun); }
+.dp-c.we.start .dp-d::after, .dp-c.we.end .dp-d::after { background: #fff; }
+.dp-c.bk:not(.end):not(.hend) .dp-d { color: var(--bad); text-decoration: line-through; background: repeating-linear-gradient(45deg, #f3e4e1, #f3e4e1 4px, #fbf1ef 4px, #fbf1ef 8px); cursor: not-allowed; }
+.dp-grid.dp-bad .dp-c::before { background: rgba(176,58,46,.12); }
+.dp-grid.dp-bad .dp-c.hend .dp-d { box-shadow: inset 0 0 0 2.5px var(--bad); }
+.dp-grid.dp-bad .dp-nn { color: var(--bad); }
+.cal-note i.k-free { background: #fff; border: 1px solid #ddd; border-radius: 50%; }
+.cal-note i.k-bk { background: repeating-linear-gradient(45deg, #f3e4e1, #f3e4e1 3px, #fbf1ef 3px, #fbf1ef 6px); border-radius: 50%; }
+.cal-note i.k-we { background: var(--sun); border-radius: 50%; width: 6px; height: 6px; vertical-align: 1px; }
+.book-box.pop { animation: bw-pop .55s var(--ease) both; }
+@media (max-width: 400px) { .dp-inline .dp-d { width: 38px; height: 38px; } .dp-inline .dp-c::before { height: 38px; } .dp-inline .dp-c { height: 50px; } }
