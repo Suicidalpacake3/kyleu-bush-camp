@@ -524,6 +524,8 @@
   /* ---------- search bar ---------- */
   function syncSearch() {
     $('#sb-in').value = state.ci ? iso(state.ci) : ''; $('#sb-out').value = state.co ? iso(state.co) : '';
+    var dfmt = { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' };
+    $$('[data-dp-text]').forEach(function (el) { var d = el.dataset.dpText === 'in' ? state.ci : state.co; el.textContent = d ? nice(d, dfmt) : 'Choose a date'; el.parentNode.classList.toggle('set', !!d); });
     $('#sb-in').min = iso(today()); $('#sb-out').min = iso(addDays(state.ci || today(), 1));
     $('[data-g=adults]').textContent = state.adults; $('[data-g=pens]').textContent = state.pens; $('[data-g=kids]').textContent = state.kids;
     wizSummary();
@@ -534,14 +536,12 @@
   var PICK = 3;   // the stand step (the camp area is a filter on it)
   function nextFriday(plus) { var t = today(), d = addDays(t, (5 - t.getDay() + 7) % 7); if (t.getDay() === 6) d = addDays(t, 6); return addDays(d, plus || 0); }
   function peopleText() { var a = state.adults + state.pens, k = state.kids; return a + ' adult' + (a === 1 ? '' : 's') + (state.pens ? ' (' + state.pens + ' pensioner' + (state.pens === 1 ? '' : 's') + ')' : '') + (k ? ' and ' + k + ' child' + (k === 1 ? '' : 'ren') : ''); }
-  function openLeave() {
-    var o = $('#sb-out'), f = o.closest('.bw-date'); if (!f) return;
-    f.classList.remove('attn'); void f.offsetWidth; f.classList.add('attn');
-    try { o.focus({ preventScroll: true }); } catch (e) { o.focus(); }
-    try { o.showPicker(); } catch (e) {}
-  }
+  var picker = null;
+  function openLeave() { if (picker) picker.open('out'); }
+  // the dates just went in: the two date boxes give a small pop
+  function popDates() { $$('.bw-date').forEach(function (f, i) { f.classList.remove('pop'); void f.offsetWidth; f.style.setProperty('--pd', (i * 0.09) + 's'); f.classList.add('pop'); }); }
   function datesOk() {
-    if (!state.ci || !state.co) { var f = $(state.ci ? '[data-bw-field="out"]' : '[data-bw-field="in"]'); f.classList.remove('attn'); void f.offsetWidth; f.classList.add('attn'); return false; }
+    if (!state.ci || !state.co) { var f = $(state.ci ? '[data-bw-field="out"]' : '[data-bw-field="in"]'); f.classList.remove('attn'); void f.offsetWidth; f.classList.add('attn'); if (picker) picker.open(state.ci ? 'out' : 'in'); return false; }
     if (P && !checkWeekendRule()) { ruleNote.classList.remove('shake'); void ruleNote.offsetWidth; ruleNote.classList.add('shake'); return false; }
     return true;
   }
@@ -608,8 +608,14 @@
     });
 
     // search controls
-    $('#sb-in').addEventListener('change', function () { var d = parse(this.value); if (!d) return; state.ci = d; if (!state.co || state.co <= d) state.co = addDays(d, d.getDay() === 5 ? 2 : 1); syncSearch(); render(); openLeave(); });
-    $('#sb-out').addEventListener('change', function () { var d = parse(this.value); if (!d || (state.ci && d <= state.ci)) { syncSearch(); return; } state.co = d; if (!state.ci) state.ci = addDays(d, -1); syncSearch(); render(); });
+    // the calendar (assets/js/datepicker.js): arrival, then departure, on one calendar
+    if (K.datePicker) {
+      picker = K.datePicker({ min: today(),
+        get: function () { return { ci: state.ci, co: state.co }; },
+        onChange: function (ci, co) { state.ci = ci; state.co = co; syncSearch(); render(); },
+        onDone: function (ci, co, locked) { if (locked) popDates(); } });
+      $$('[data-dp-open]').forEach(function (b) { b.addEventListener('click', function () { picker.open(b.dataset.dpOpen); }); });
+    }
     $$('[data-pane="2"] [data-gstep]').forEach(function (b) {
       b.addEventListener('click', function () {
         var k = b.dataset.gstep, d = +b.dataset.d; state[k] = Math.max(0, Math.min(20, state[k] + d));
@@ -620,7 +626,7 @@
     $$('.area-filter [data-area-f]').forEach(function (b) { b.addEventListener('click', function () { state.area = b.dataset.areaF; syncSearch(); render(); wizSummary(); }); });
     $$('[data-quick]').forEach(function (b) {
       var f = nextFriday(+b.dataset.quick); b.textContent = nice(f, { weekday: 'short', day: 'numeric', month: 'short' }) + ' to ' + nice(addDays(f, 2), { weekday: 'short', day: 'numeric', month: 'short' });
-      b.addEventListener('click', function () { state.ci = f; state.co = addDays(f, 2); syncSearch(); render(); });
+      b.addEventListener('click', function () { state.ci = f; state.co = addDays(f, 2); syncSearch(); render(); popDates(); });
     });
     $$('[data-bw-go]').forEach(function (b) { b.addEventListener('click', function () { var n = +b.dataset.bwGo; if (n <= reached) wGo(n, true); }); });
     $$('[data-bw-next]').forEach(function (b) { b.addEventListener('click', function () { var n = +b.dataset.bwNext; if (n === 2 && !datesOk()) return; wGo(n, true); }); });

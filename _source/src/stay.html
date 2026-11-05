@@ -1,5 +1,5 @@
 <!--META
-{"title":"Book a Campsite | Stands, Availability & Prices | Kyleu Bush Camp","desc":"See every campsite at Kyleu Bush Camp in Dinokeng: photos, size, facilities and live price for your dates. Fenced, unfenced and self-sufficient stands from R100 pp. Book online.","path":"stay.html","ogimg":"camp-panorama.jpg","nav":"stay","headerclass":"","footbg":"","extra_js":"<script src=\"assets/js/campmap-data.js\" defer></script><script src=\"assets/js/campmap.js\" defer></script><link rel=\"stylesheet\" href=\"assets/css/invoice.css\"><script src=\"assets/js/invoice.js\" defer></script><script src=\"assets/js/bookparts.js\" defer></script><script src=\"assets/js/booking.js\" defer></script>"}
+{"title":"Book a Campsite | Stands, Availability & Prices | Kyleu Bush Camp","desc":"See every campsite at Kyleu Bush Camp in Dinokeng: photos, size, facilities and live price for your dates. Fenced, unfenced and self-sufficient stands from R100 pp. Book online.","path":"stay.html","ogimg":"camp-panorama.jpg","nav":"stay","headerclass":"","footbg":"","extra_js":"<script src=\"assets/js/campmap-data.js\" defer></script><script src=\"assets/js/campmap.js\" defer></script><link rel=\"stylesheet\" href=\"assets/css/invoice.css\"><script src=\"assets/js/invoice.js\" defer></script><script src=\"assets/js/bookparts.js\" defer></script><script src=\"assets/js/datepicker.js\" defer></script><script src=\"assets/js/booking.js\" defer></script>"}
 -->
 <section class="page-hero" style="padding-bottom:110px">
   <div class="bg" data-parallax="0.15" style="background-image:url('assets/img/photos/camp-panorama.jpg')"></div>
@@ -26,15 +26,17 @@
     <div class="bw-pane" data-pane="1">
       <p class="bw-of">Step 1 of 6</p>
       <h2>When are you coming?</h2>
-      <p class="bw-lead">First choose your <b>arrival</b> date. The calendar for your <b>departure</b> date opens straight after.</p>
+      <p class="bw-lead">Tap below to open the calendar. Choose the day you <b>arrive</b>, then the day you <b>go home</b>.</p>
       <div class="bw-dates">
         <div class="bw-date" data-bw-field="in">
-          <label for="sb-in"><span class="bw-dn">A</span><span><b>Arrival</b><small>The day you arrive at camp</small></span></label>
-          <input id="sb-in" type="date">
+          <div class="bw-date-l"><span class="bw-dn">A</span><span><b>Arrival</b><small>The day you arrive at camp</small></span></div>
+          <button type="button" class="bw-date-btn" data-dp-open="in" aria-label="Arrival date: open the calendar"><svg><use href="#i-cal"/></svg><span data-dp-text="in">Choose a date</span></button>
+          <input id="sb-in" type="hidden">
         </div>
         <div class="bw-date" data-bw-field="out">
-          <label for="sb-out"><span class="bw-dn">B</span><span><b>Departure</b><small>The day you pack up and go home</small></span></label>
-          <input id="sb-out" type="date">
+          <div class="bw-date-l"><span class="bw-dn">B</span><span><b>Departure</b><small>The day you pack up and go home</small></span></div>
+          <button type="button" class="bw-date-btn" data-dp-open="out" aria-label="Departure date: open the calendar"><svg><use href="#i-cal"/></svg><span data-dp-text="out">Choose a date</span></button>
+          <input id="sb-out" type="hidden">
         </div>
       </div>
       <div class="bw-quick"><span>Or choose a weekend:</span><button type="button" class="pill" data-quick="0"></button><button type="button" class="pill" data-quick="7"></button></div>
