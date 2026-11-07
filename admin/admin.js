@@ -85,6 +85,13 @@
   function payFullOf(b) { return diff(b.created.slice(0, 10), b.ci) <= num('Booking rules', 'Balance due days before arrival', 7) + num('Booking rules', 'Deposit due within days of invoice', 5); }
   function balanceDue(b) { return add(b.ci, -num('Booking rules', 'Balance due days before arrival', 7)); }
   function guestName(b) { return b.guest.first + ' ' + b.guest.last; }
+  function bHit(b, q, extra) {
+    if (!q) return true;
+    var h = (b.ref + ' ' + guestName(b) + ' ' + (b.guest.email || '') + ' ' + (b.guest.phone || '') + ' ' + (extra || '')).toLowerCase();
+    if (h.indexOf(q) >= 0) return true;
+    var qs = q.replace(/[\s\-()]/g, '').replace(/^\+?27(?=\d{9}$)/, '0'); if (!qs) return false;
+    return h.replace(/[\s\-()]/g, '').indexOf(qs) >= 0;
+  }
   function people(b) { return b.adults + b.pens + b.kids; }
   function methodLabel(m) { return m === 'card' ? 'Card' : m === 'cash' ? 'Cash' : m === 'credit' ? 'Credit' : 'EFT'; }
   function stateOf(b) {
@@ -130,7 +137,7 @@
     var s = { stays: 0, nights: 0, spent: 0, last: '', next: '', now: false, pens: false, gd: false, refs: [] };
     clientBookings(c).forEach(function (b) {
       s.refs.push(b.ref); if (!live(b)) return;
-      s.stays++; s.nights += diff(b.ci, b.co); s.spent += paid(b); if (b.ci <= TODAY && TODAY < b.co) s.now = true; if (b.pens) s.pens = true; if (b.extras && b.extras.gd) s.gd = true;
+      s.stays++; s.nights += diff(b.ci, b.co); s.spent += paid(b); if (b.status === 'in') s.now = true; if (b.pens) s.pens = true; if (b.extras && b.extras.gd) s.gd = true;
       if (b.co <= TODAY && b.ci > s.last) s.last = b.ci; if (b.ci >= TODAY && (!s.next || b.ci < s.next)) s.next = b.ci;
     });
     return s;
@@ -486,9 +493,9 @@
   }
   function modal(title, body, ok, onOk, opts) {
     opts = opts || {};
-    var m = $('#modal');
+    var m = $('#modal'); if (m.hidden) pushLayer();
     m.innerHTML = '<div class="m-back" data-close></div><form class="m-card' + (opts.wide ? ' wide' : '') + (opts.xl ? ' xl' : '') + '" novalidate><header><h3>' + title + '</h3><button type="button" class="icon-btn" data-close aria-label="Close">' + ic('x') + '</button></header><div class="m-body">' + body + '</div>' +
-      (ok ? '<footer><button type="button" class="btn ghost" data-close>Cancel</button><button class="btn ' + (opts.danger ? 'danger' : '') + '" type="submit">' + ok + '</button></footer>' : '') + '</form>';
+      (ok ? '<footer><button type="button" class="btn ghost" data-close>' + (opts.cancelLabel || 'Cancel') + '</button><button class="btn ' + (opts.danger ? 'danger' : '') + '" type="submit">' + ok + '</button></footer>' : '') + '</form>';
     m.hidden = false; document.body.classList.add('lock');
     var f = $('form', m);
     f.addEventListener('submit', function (e) { e.preventDefault(); if (onOk && onOk(f) === false) return; closeModal(); });
@@ -497,72 +504,123 @@
     var first = $('input:not([type=hidden]),select,textarea', f); if (first && !opts.noFocus) setTimeout(function () { first.focus(); }, 30);
     return f;
   }
-  function closeModal() { var m = $('#modal'); m.hidden = true; m.innerHTML = ''; if ($('#drawer').hidden) document.body.classList.remove('lock'); }
+  function closeModal(fromBack) { var m = $('#modal'); if (!m.hidden && fromBack !== true) popLayer(); m.hidden = true; m.innerHTML = ''; if ($('#drawer').hidden) document.body.classList.remove('lock'); }
   function fval(f, n) { var el = f.elements[n]; return el ? (el.type === 'checkbox' ? el.checked : el.value.trim()) : ''; }
 
   var drawerRef = null;
   function openBooking(ref) {
     var b = byRef(ref); if (!b) { toast('Booking ' + esc(ref) + ' not found'); return; }
+    if (!drawerRef) pushLayer();
+    if (drawerRef !== ref) PTAB = 'overview';
     drawerRef = ref; if (b.isNew || (b.guestEdit && !b.guestEdit.seen)) { b.isNew = false; if (b.guestEdit) b.guestEdit.seen = true; save(); }
     var d = $('#drawer'); d.hidden = false; document.body.classList.add('lock');
     d.innerHTML = '<div class="d-back" data-dclose></div><aside class="d-panel" role="dialog" aria-label="Booking ' + esc(ref) + '">' + bookingHTML(b) + '</aside>';
     requestAnimationFrame(function () { d.classList.add('on'); });
     $$('[data-dclose]', d).forEach(function (x) { x.addEventListener('click', closeDrawer); });
   }
-  function closeDrawer() { var d = $('#drawer'); d.classList.remove('on'); drawerRef = null; setTimeout(function () { d.hidden = true; d.innerHTML = ''; if ($('#modal').hidden) document.body.classList.remove('lock'); }, 220); }
+  // Back (phone or browser) closes the open pop-up or booking instead of changing the page behind it
+  var skipPop = false;
+  function pushLayer() { try { history.pushState({ layer: ((history.state && history.state.layer) || 0) + 1 }, ''); } catch (e) {} }
+  function popLayer() { if (history.state && history.state.layer) { skipPop = true; history.back(); } }
+  window.addEventListener('popstate', function () {
+    if (skipPop) { skipPop = false; return; }
+    if (!$('#modal').hidden) { closeModal(true); return; }
+    if (drawerRef) closeDrawer(true);
+  });
+  function closeDrawer(fromBack) { if (fromBack !== true) popLayer(); var d = $('#drawer'); d.classList.remove('on'); drawerRef = null; if (/^#?\/?(dashboard)?$/.test(location.hash.replace('#/', '#'))) setTimeout(render, 230); setTimeout(function () { d.hidden = true; d.innerHTML = ''; if ($('#modal').hidden) document.body.classList.remove('lock'); }, 220); }
   function refresh() { render(); if (drawerRef) { var p = $('#drawer .d-panel'); if (p) { var sc = p.scrollTop; p.innerHTML = bookingHTML(byRef(drawerRef)); p.scrollTop = sc; $$('[data-dclose]', p).forEach(function (x) { x.addEventListener('click', closeDrawer); }); } } }
 
+  // nice date and time for notes and logs: "Today, 07:21", "Yesterday, 18:02", "4 Nov, 07:21"
+  function atNice(s) { if (!s) return ''; var d = String(s).slice(0, 10), t = String(s).slice(11, 16); return (d === TODAY ? 'Today' : d === add(TODAY, -1) ? 'Yesterday' : fd(d)) + (t ? ', ' + t : ''); }
+  /* ---------- the booking screen ----------
+     Top: who, what, money at a glance and the one thing to do next. Below: tabs, so nothing is a long scroll. */
+  var PTAB = 'overview';
   function bookingHTML(b) {
-    var st = standById(b.stand), s = stateOf(b), pd = paid(b), bal = balance(b), wa = '27' + b.guest.phone.replace(/\D/g, '').replace(/^0/, '');
-    var q = quote(b.stand, b.ci, b.co, b, b.extras);
-    var acts = [];
-    if (b.status === 'pending') acts.push('<button class="btn" data-act="pay" data-ref="' + b.ref + '">' + ic('check') + 'EFT received</button>');
-    else if (bal > 0 && b.status !== 'cancelled') acts.push('<button class="btn" data-act="pay" data-ref="' + b.ref + '">' + ic('card') + 'Record payment</button>');
-    var cs0 = b.status === 'cancelled' ? [] : ensureCars(b), dueN = cs0.filter(function (c) { return c.st === 'due'; }).length, inN = cs0.filter(function (c) { return c.st === 'in'; }).length;
-    if ((b.status === 'confirmed' || b.status === 'in') && b.ci <= TODAY && b.co >= TODAY && dueN) acts.push('<button class="btn green" data-act="checkin" data-ref="' + b.ref + '">' + ic('in') + 'Check in' + (cs0.length > 1 ? ' a vehicle' : '') + '</button>');
-    if (inN) acts.push('<button class="btn green" data-act="checkout" data-ref="' + b.ref + '">' + ic('out') + 'Check out' + (cs0.length > 1 ? ' a vehicle' : '') + '</button>');
-    acts.push('<button class="btn ghost" data-act="remind" data-ref="' + b.ref + '">' + ic('send') + 'Send a message</button>');
-    if (b.status !== 'cancelled') acts.push('<button class="btn ghost" data-act="send-doc" data-ref="' + b.ref + '|invoice">' + ic('note') + (paid(b) > 0 ? 'Send invoice' : 'Send quotation') + '</button>');
-    acts.push('<button class="btn ghost" data-act="edit" data-ref="' + b.ref + '">' + ic('edit') + 'Edit booking</button>');
-    if (b.status !== 'cancelled' && b.status !== 'out') acts.push('<button class="btn ghost danger-t" data-act="cancel" data-ref="' + b.ref + '">' + ic('x') + 'Cancel booking</button>');
-    return '<header class="d-head"><div><span class="muted small">Booking</span><h2>' + esc(b.ref) + '</h2>' + pill(s) + (b.pop && b.status === 'pending' ? ' <span class="pill info">' + ic('note') + 'Check bank</span>' : '') + '</div><button class="icon-btn" data-dclose aria-label="Close">' + ic('x') + '</button></header>' +
-      '<div class="d-body">' +
-      '<div class="d-actions">' + acts.join('') + '</div>' +
-      (b.changeReq && !b.changeReq.done ? (function (r) { return '<div class="callout warn cflex req">' + ic('cal') + '<div><b>' + esc(b.guest.first) + ' asked to change this booking</b> on the website (' + esc(r.at) + ').' +
+    var st = standById(b.stand), s = stateOf(b), pd = paid(b), bal = balance(b), wa = '27' + String(b.guest.phone || '').replace(/\D/g, '').replace(/^0/, '');
+    var q = quote(b.stand, b.ci, b.co, b, b.extras), cancelled = b.status === 'cancelled';
+    var cs0 = cancelled ? [] : ensureCars(b), dueN = cs0.filter(function (c) { return c.st === 'due'; }).length, inN = cs0.filter(function (c) { return c.st === 'in'; }).length;
+    // the main thing to do next, as big buttons
+    var main = [];
+    if (b.status === 'pending') main.push('<button class="btn" data-act="pay" data-ref="' + b.ref + '">' + ic('check') + 'EFT received</button>');
+    else if (bal > 0 && !cancelled) main.push('<button class="btn" data-act="pay" data-ref="' + b.ref + '">' + ic('card') + 'Record payment</button>');
+    if ((b.status === 'confirmed' || b.status === 'in') && b.ci <= TODAY && b.co >= TODAY && dueN) main.push('<button class="btn green" data-act="checkin" data-ref="' + b.ref + '">' + ic('in') + 'Check in' + (cs0.length > 1 ? ' a vehicle' : '') + '</button>');
+    if (inN) main.push('<button class="btn green" data-act="checkout" data-ref="' + b.ref + '">' + ic('out') + 'Check out' + (cs0.length > 1 ? ' a vehicle' : '') + '</button>');
+    main.push('<button class="btn ghost" data-act="remind" data-ref="' + b.ref + '">' + ic('send') + 'Send a message</button>');
+    var more = [];
+    if (!cancelled) more.push('<button type="button" data-act="send-doc" data-ref="' + b.ref + '|invoice">' + ic('note') + (pd > 0 ? 'Send the invoice' : 'Send the quotation') + '</button>');
+    if (!cancelled) more.push('<button type="button" data-act="edit" data-ref="' + b.ref + '">' + ic('edit') + 'Edit booking</button>');
+    more.push('<button type="button" data-act="link-copy" data-ref="' + b.ref + '">' + ic('note') + 'Copy the guest\'s booking link</button>');
+    if (!cancelled && b.status !== 'out') more.push('<button type="button" class="danger-t" data-act="cancel" data-ref="' + b.ref + '">' + ic('x') + 'Cancel booking</button>');
+    var people = [b.adults ? b.adults + ' adult' + (b.adults > 1 ? 's' : '') : '', b.pens ? b.pens + ' pensioner' + (b.pens > 1 ? 's' : '') : '', b.kids ? b.kids + ' child' + (b.kids > 1 ? 'ren' : '') : ''].filter(Boolean).join(', ');
+    var pct = b.total > 0 ? Math.min(100, Math.round(pd / b.total * 100)) : 0, sb = staysBefore(b);
+    // what is holding the stand (unpaid quotations)
+    var balLate = b.status === 'confirmed' && bal > 0 && balanceDue(b) < TODAY;
+    var holdTxt = b.status === 'confirmed' && bal > 0 ? (balLate ? '<b>Balance of ' + money(bal) + ' was due ' + fd(balanceDue(b)) + '</b> (' + rel(balanceDue(b)) + '). Remind ' + esc(b.guest.first) + ' or record the payment.' : 'Balance of <b>' + money(bal) + '</b> due by <b>' + fd(balanceDue(b), { weekday: 'short', day: 'numeric', month: 'short' }) + '</b> (' + rel(balanceDue(b)) + ').')
+      : b.status !== 'pending' ? '' : b.softHold ? '<b>Soft hold until ' + (b.softHold === TODAY ? 'tonight' : fd(b.softHold)) + '.</b> Confirm the payment, or the stand is released automatically.'
+      : 'Quotation valid until <b>' + fd(depositDue(b), { weekday: 'short', day: 'numeric', month: 'short' }) + '</b> (' + rel(depositDue(b)) + '). ' + (payFullOf(b) ? 'The full amount' : 'A deposit of') + ' <b>' + money(deposit(b)) + '</b> secures the stand.';
+    var nCars = cs0.length, nNotes = (b.notes || []).length + DB.threads.filter(function (t) { return t.ref === b.ref || t.email === b.guest.email; }).length;
+    var TABS = [['overview', 'Overview'], ['vehicles', 'Vehicles' + (nCars ? ' (' + nCars + ')' : '')], ['money', 'Money'], ['notes', 'Messages & notes' + (nNotes ? ' (' + nNotes + ')' : '')]];
+    if (cancelled && PTAB === 'vehicles') PTAB = 'overview';
+    var head = '<div class="dh-bar"><span class="dh-ref"><span class="muted">Booking</span> <b>' + esc(b.ref) + '</b><button type="button" class="icon-btn sm" data-copy="' + esc(b.ref) + '" aria-label="Copy the booking reference" title="Copy reference">' + ic('note') + '</button></span>' +
+        '<span class="dh-pills">' + pill(s) + (b.pop && b.status === 'pending' ? ' <span class="pill info">' + ic('note') + 'Proof in</span>' : '') + '</span><button class="icon-btn" data-dclose aria-label="Close">' + ic('x') + '</button></div>' +
+      '<header class="d-head"><h2 class="dh-name">' + esc(guestName(b)) + (sb ? ' <span class="pill ok ret">' + ic('return') + nth(sb + 1) + ' stay</span>' : ' <span class="pill info">First stay</span>') + '</h2>' +
+      '<p class="dh-sum"><span>' + ic('tent') + '<b>' + esc(st.name) + '</b> · ' + AREA_SHORT[st.area] + '</span><span>' + ic('cal') + fd(b.ci, { weekday: 'short', day: 'numeric', month: 'short' }) + ' to ' + fd(b.co, { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' + diff(b.ci, b.co) + ' night' + (diff(b.ci, b.co) === 1 ? '' : 's') + ' <span class="muted">(' + rel(b.ci) + ')</span></span><span>' + ic('users') + people + '</span></p>' +
+      (cancelled ? '' : '<div class="dh-money"><div><small>Total</small><b>' + money(b.total) + '</b></div><div><small>Paid</small><b class="ok-t">' + money(pd) + '</b></div><div><small>Still to pay</small><b class="' + (bal ? 'warn-t' : 'ok-t') + '">' + money(bal) + '</b></div><div class="dh-bar-p" role="img" aria-label="' + pct + '% paid"><i style="width:' + pct + '%"></i></div></div>') +
+      (holdTxt ? '<p class="dh-hold' + (b.softHold || balLate ? ' bad' : b.status === 'confirmed' ? ' calm' : '') + '">' + ic('clock') + '<span>' + holdTxt + '</span></p>' : '') +
+      '<div class="d-actions">' + main.join('') + '<details class="d-more"><summary class="btn ghost">' + ic('more') + 'More</summary><div class="d-menu">' + more.join('') + '</div></details></div></header>' +
+      '<nav class="d-tabs" role="tablist" aria-label="Booking details">' + TABS.filter(function (t) { return !(cancelled && t[0] === 'vehicles'); }).map(function (t) { return '<button type="button" role="tab" aria-selected="' + (PTAB === t[0]) + '" class="' + (PTAB === t[0] ? 'on' : '') + '" data-ptab="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</nav>';
+    // things that need doing now, on every tab
+    var alerts =
+      (b.changeReq && !b.changeReq.done ? (function (r) { return '<div class="callout warn cflex req">' + ic('cal') + '<div><b>' + esc(b.guest.first) + ' asked to change this booking</b> on the website (' + esc(atNice(r.at)) + ').' +
         (r.ci !== b.ci || r.co !== b.co ? '<br>Dates: ' + fd(b.ci) + ' to ' + fd(b.co) + ' <b>→ ' + fd(r.ci) + ' to ' + fd(r.co) + '</b>' : '') +
         (r.adults !== b.adults || r.pens !== b.pens || r.kids !== b.kids ? '<br>Guests: ' + peopleTxt(b) + ' <b>→ ' + peopleTxt(r) + '</b>' : '') + (r.msg ? '<br>"' + esc(r.msg) + '"' : '') +
-        (paid(b) > 0 ? '<br><b>' + esc(b.guest.first) + ' has already paid ' + money(paid(b)) + '.</b> Talk to them about the difference, then make the change with Edit booking.' : '') +
+        (pd > 0 ? '<br><b>' + esc(b.guest.first) + ' has already paid ' + money(pd) + '.</b> Talk to them about the difference, then make the change with Edit booking.' : '') +
         '<div class="row-btns"><button type="button" class="btn sm" data-act="edit" data-ref="' + b.ref + '">' + ic('edit') + 'Edit booking</button><button type="button" class="btn ghost sm" data-act="req-done" data-ref="' + b.ref + '">' + ic('check') + 'Dealt with</button></div></div></div>'; })(b.changeReq) : '') +
       (b.paidClaim ? '<div class="callout info cflex claim">' + ic('bank') + '<div><b>' + esc(b.guest.first) + ' says they paid ' + money(b.paidClaim.amt) + '</b> (' + esc(String(b.paidClaim.what || 'payment').toLowerCase()) + ') on ' + fd(b.paidClaim.date) + (b.paidClaim.note ? ': "' + esc(b.paidClaim.note) + '"' : '') + '. Check the bank, then confirm it.<div class="row-btns"><button type="button" class="btn sm" data-act="pay" data-ref="' + b.ref + '">' + ic('check') + 'Confirm payment</button><button type="button" class="btn ghost sm" data-act="claim-no" data-ref="' + b.ref + '">Not in the bank yet</button></div></div></div>' : '') +
-      (extraDue(b) ? '<div class="callout bad cflex">' + ic('alert') + '<div><b>' + money(balance(b)) + ' outstanding.</b> ' + esc(b.extraDue.why || 'The total went up after paying in full') + ' (' + esc(b.extraDue.at) + '). Send ' + esc(b.guest.first) + ' the new invoice for just this amount.<div class="row-btns"><button type="button" class="btn sm" data-act="send-doc" data-ref="' + b.ref + '|extra">' + ic('send') + 'Send new invoice</button></div></div></div>' : '') +
-      (b.guestEdit && b.guestEdit.at >= add(TODAY, -14) ? '<p class="callout info cflex">' + ic('edit') + '<span><b>Changed by ' + esc(b.guest.first) + ' on the website</b> ' + esc(b.guestEdit.at) + ': ' + esc(b.guestEdit.what.join('; ')) + '.</span></p>' : '') +
-      (function () { var cl = clientById(b.cid), sb = staysBefore(b); return '<section class="d-sec"><h4 class="h4-row">Guest' + (cl ? '<button type="button" class="link-btn" data-client="' + cl.id + '">Client card' + ic('chev-r') + '</button>' : '') + '</h4><div class="guest-line"><span class="avatar">' + esc((b.guest.first[0] || '?') + ((b.guest.last.split(' ').pop() || '?')[0] || '')) + '</span><div><b>' + esc(guestName(b)) + '</b> ' + (sb ? '<span class="pill ok ret">' + ic('return') + 'Returning · ' + nth(sb + 1) + ' stay</span>' : '<span class="pill info">First stay</span>') + '<div class="muted small">' + esc(b.guest.email || 'No email') + '</div></div></div>' + (cl && cl.notes ? '<p class="cl-note">' + ic('note') + '<span>' + esc(cl.notes) + '</span></p>' : ''); })() +
-      '<div class="chips"><a class="chip" href="tel:' + esc(b.guest.phone.replace(/\s/g, '')) + '">' + ic('phone') + esc(b.guest.phone) + '</a><a class="chip" target="_blank" rel="noopener" href="https://wa.me/' + wa + '">' + ic('wa') + 'WhatsApp</a><a class="chip" href="mailto:' + esc(b.guest.email) + '">' + ic('mail') + 'Email</a></div></section>' +
-      linkSec(b) +
-      '<section class="d-sec"><h4>Stay</h4><dl class="kv">' +
-      '<dt>Stand</dt><dd><b>' + esc(st.name) + '</b> · ' + AREA_SHORT[st.area] + '</dd>' +
-      '<dt>Arrive</dt><dd>' + fd(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }) + ' <span class="muted">(' + rel(b.ci) + ')</span></dd>' +
-      '<dt>Depart</dt><dd>' + fd(b.co, { weekday: 'long', day: 'numeric', month: 'long' }) + '</dd>' +
-      '<dt>Nights</dt><dd>' + diff(b.ci, b.co) + '</dd>' +
-      '<dt>Guests</dt><dd>' + (b.adults ? b.adults + ' adult' + (b.adults > 1 ? 's' : '') : '') + (b.pens ? (b.adults ? ', ' : '') + b.pens + ' pensioner' + (b.pens > 1 ? 's' : '') : '') + (b.kids ? ', ' + b.kids + ' child' + (b.kids > 1 ? 'ren' : '') + ' under 12' : '') + '</dd>' +
-      '<dt>Vehicles</dt><dd>' + (b.vehTbc ? '<span class="warn-t">Not sure yet</span>' : b.vehicles + ' vehicle' + (b.vehicles > 1 ? 's' : '')) + (b.setup ? ' · ' + esc(b.setup) : '') + '</dd>' +
-      (b.eta ? '<dt>Arrival time</dt><dd>Around ' + esc(b.eta) + '</dd>' : '') +
-      '<dt>Booked</dt><dd>' + fd(b.created.slice(0, 10), { day: 'numeric', month: 'short', year: 'numeric' }) + ' via ' + esc(b.source) + '</dd></dl></section>' + carsHTML(b) +
-      '<section class="d-sec"><h4>Money</h4><div class="lines">' + q.lines.concat((b.charges || []).map(function (c) { return { t: c.desc, e: c.e, c: c.c }; })).map(function (l) { return '<div class="ln"><span>' + esc(l.t) + '</span><span>' + (b.method === 'card' ? money(l.c) : money(l.e)) + '</span></div>'; }).join('') +
-      '<div class="ln sub"><span>Card price</span><span>' + (b.method === 'card' ? money(b.card) : '<s>' + money(b.card) + '</s>') + '</span></div>' +
-      '<div class="ln sub"><span>EFT price (no card fee)</span><span>' + (b.method === 'card' ? '<s>' + money(b.eft) + '</s>' : money(b.eft)) + '</span></div>' +
-      '<div class="ln tot"><span>Total · paying by ' + methodLabel(b.method) + '</span><span>' + money(b.total) + '</span></div>' +
-      '<div class="ln"><span>Paid</span><span class="ok-t">' + money(pd) + '</span></div>' +
-      (b.status === 'cancelled' ? '' : '<div class="ln tot"><span>Balance</span><span class="' + (bal ? 'warn-t' : 'ok-t') + '">' + money(bal) + '</span></div>') + '</div>' +
-      (b.status === 'pending' ? '<p class="note">' + ic('clock') + '<span>Deposit of <b>' + money(deposit(b)) + '</b> is due by <b>' + fd(depositDue(b)) + '</b> (' + rel(depositDue(b)) + '). Reference <b>' + esc(b.ref) + '</b>.</span></p>' : '') +
-      (b.status === 'confirmed' && bal ? '<p class="note">' + ic('clock') + '<span>Balance of <b>' + money(bal) + '</b> is due by <b>' + fd(balanceDue(b)) + '</b> (' + rel(balanceDue(b)) + ').</span></p>' : '') +
-      ((b.pops || []).length ? '<h5>Proof of payment</h5>' + popChips(b) : '') +
-      '<h5>Payments</h5>' + ((b.payments || []).length ? '<ul class="timeline">' + b.payments.map(function (p) { return '<li><span class="dot ' + (p.amt < 0 ? 'bad' : 'pm-' + p.m) + '"></span><div><b>' + money(p.amt) + '</b> ' + esc(p.type) + ' · ' + methodLabel(p.m) + '<div class="muted small">' + fd(p.d, { day: 'numeric', month: 'short', year: 'numeric' }) + ' · ' + esc(p.ref || '') + '</div></div></li>'; }).join('') + '</ul>' : '<p class="muted small">No payments yet.</p>') + '</section>' +
-      invSec(b) + dgrHTML(b) +
-      (function () { var ts = DB.threads.filter(function (t) { return t.ref === b.ref || t.email === b.guest.email; }); return '<section class="d-sec"><h4>Emails</h4>' + (ts.length ? '<div class="list">' + ts.map(function (t) { return '<button type="button" class="brow" data-thread-go="' + t.id + '"><span class="brow-g"><b>' + esc(t.subject) + '</b><small>' + t.msgs.length + ' email' + (t.msgs.length > 1 ? 's' : '') + ' · last ' + when(lastMsg(t).at) + '</small></span>' + ic('chev-r') + '</button>'; }).join('') + '</div>' : '<p class="muted small">No emails yet.</p>') + '</section>'; })() +
-      '<section class="d-sec"><h4>Notes</h4>' + (b.notes.length ? '<ul class="notes">' + b.notes.map(function (n, i) { return '<li><p>' + esc(n.text) + '</p><span class="muted small">' + esc(n.by) + ' · ' + esc(n.at) + (n.edited ? ' · edited by ' + esc(n.edited.by) + ' ' + esc(n.edited.at) : '') + '</span><span class="note-acts"><button type="button" class="icon-btn sm" data-note-edit="' + b.ref + '|' + i + '" aria-label="Edit note" title="Edit note">' + ic('edit') + '</button><button type="button" class="icon-btn sm" data-note-del="' + b.ref + '|' + i + '" aria-label="Delete note" title="Delete note">' + ic('x') + '</button></span></li>'; }).join('') + '</ul>' : '<p class="muted small">No notes yet.</p>') +
-      '<form class="note-form" data-note="' + b.ref + '"><input name="t" placeholder="Add a note for the team" aria-label="Add a note"><button class="btn ghost" type="submit">Add</button></form></section>' +
-      '</div>';
+      (extraDue(b) ? '<div class="callout bad cflex">' + ic('alert') + '<div><b>' + money(bal) + ' outstanding.</b> ' + esc(b.extraDue.why || 'The total went up after paying in full') + ' (' + esc(atNice(b.extraDue.at)) + '). Send ' + esc(b.guest.first) + ' the new invoice for just this amount.<div class="row-btns"><button type="button" class="btn sm" data-act="send-doc" data-ref="' + b.ref + '|extra">' + ic('send') + 'Send new invoice</button></div></div></div>' : '') +
+      (b.guestEdit && b.guestEdit.at >= add(TODAY, -14) ? '<p class="callout info cflex">' + ic('edit') + '<span><b>Changed by ' + esc(b.guest.first) + ' on the website</b> ' + esc(atNice(b.guestEdit.at)) + ': ' + esc(b.guestEdit.what.join('; ')) + '.</span></p>' : '') +
+      (b.released ? '<p class="callout cflex">' + ic('info') + '<span><b>Released automatically</b> on ' + esc(atNice(b.released.at)) + ': the quotation (valid until ' + fd(b.released.due) + ') was not paid.</span></p>' : '');
+    var body = '';
+    if (PTAB === 'overview') {
+      var cl = clientById(b.cid);
+      body = '<section class="d-sec"><h4 class="h4-row">Guest' + (cl ? '<button type="button" class="link-btn" data-client="' + cl.id + '">Client card' + ic('chev-r') + '</button>' : '') + '</h4>' +
+        '<div class="d-contact"><a class="chip" href="tel:' + esc(String(b.guest.phone || '').replace(/\s/g, '')) + '">' + ic('phone') + esc(b.guest.phone || 'No mobile') + '</a><a class="chip" target="_blank" rel="noopener" href="https://wa.me/' + wa + '">' + ic('wa') + 'WhatsApp</a><a class="chip" href="mailto:' + esc(b.guest.email) + '" title="' + esc(b.guest.email) + '">' + ic('mail') + '<span class="ell">' + esc(b.guest.email || 'No email') + '</span></a></div>' +
+        (cl && cl.notes ? '<p class="cl-note">' + ic('note') + '<span>' + esc(cl.notes) + '</span></p>' : '') + '</section>' +
+        '<section class="d-sec"><h4>Stay</h4><dl class="kv kv2">' +
+        '<dt>Stand</dt><dd><b>' + esc(st.name) + '</b> · ' + AREA_SHORT[st.area] + '</dd>' +
+        '<dt>Arrive</dt><dd>' + fd(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }) + '</dd>' +
+        '<dt>Depart</dt><dd>' + fd(b.co, { weekday: 'long', day: 'numeric', month: 'long' }) + '</dd>' +
+        '<dt>Guests</dt><dd>' + people + (b.kids ? ' <span class="muted">(children under 12)</span>' : '') + '</dd>' +
+        '<dt>Vehicles</dt><dd>' + (b.vehTbc ? '<span class="warn-t">Not sure yet</span>' : b.vehicles + ' vehicle' + (b.vehicles > 1 ? 's' : '')) + (b.setup ? ' · ' + esc(b.setup) : '') + '</dd>' +
+        '<dt>Arrival time</dt><dd>' + (b.eta ? 'Around ' + esc(b.eta) : '<span class="muted">Not given yet</span>') + '</dd>' +
+        '<dt>Booked</dt><dd>' + fd(b.created.slice(0, 10), { day: 'numeric', month: 'short', year: 'numeric' }) + ' via ' + esc(b.source) + '</dd></dl></section>' +
+        linkSec(b) +
+        ((b.notes || []).length ? '<section class="d-sec"><h4 class="h4-row">Latest note<button type="button" class="link-btn" data-ptab="notes">All notes' + ic('chev-r') + '</button></h4>' + noteItem(b, b.notes.length - 1, b.notes[b.notes.length - 1]) + '</section>' : '');
+    } else if (PTAB === 'vehicles') {
+      body = carsHTML(b) + dgrHTML(b);
+    } else if (PTAB === 'money') {
+      var sd0 = b.method === 'card' ? null : stayDetail(b), qs = q.lines.slice();
+      if (sd0 && Math.round(sd0.reduce(function (a, x) { return a + x.amt; }, 0)) === Math.round(q.lines[0].e)) qs = sd0.map(function (x) { return { t: x.t, e: x.amt, c: x.amt, free: x.free }; }).concat(q.lines.slice(1));
+      var lines = qs.concat((b.charges || []).map(function (c) { return { t: c.desc, e: c.e, c: c.c }; })), sameCard = Math.round(b.card) === Math.round(b.eft);
+      body = '<section class="d-sec"><h4>Price</h4><div class="lines">' + lines.map(function (l) { return '<div class="ln"><span>' + esc(l.t) + '</span><span>' + (l.free ? 'Free' : b.method === 'card' ? money(l.c) : money(l.e)) + '</span></div>'; }).join('') +
+        (sameCard ? '' : '<div class="ln sub"><span>Card price</span><span>' + (b.method === 'card' ? money(b.card) : '<s>' + money(b.card) + '</s>') + '</span></div><div class="ln sub"><span>EFT price (no card fee)</span><span>' + (b.method === 'card' ? '<s>' + money(b.eft) + '</s>' : money(b.eft)) + '</span></div>') +
+        '<div class="ln tot"><span>Total' + (sameCard ? '' : ' · paying by ' + methodLabel(b.method)) + '</span><span>' + money(b.total) + '</span></div>' +
+        '<div class="ln"><span>Paid</span><span class="ok-t">' + money(pd) + '</span></div>' +
+        (cancelled ? '' : '<div class="ln tot"><span>Still to pay</span><span class="' + (bal ? 'warn-t' : 'ok-t') + '">' + money(bal) + '</span></div>') + '</div>' +
+        (pd > b.total && b.total > 0 ? '<p class="note bad-t">' + ic('alert') + '<span><b>' + money(pd - b.total) + ' more was paid than the total.</b> Keep it as credit or refund it, or remove a payment that was entered by mistake.</span></p>' : '') + '</section>' +
+        '<section class="d-sec"><h4>Payments</h4>' + ((b.pops || []).length ? '<h5>Proof of payment</h5>' + popChips(b) : '') +
+        ((b.payments || []).length ? '<ul class="timeline">' + b.payments.map(function (p, i) { return '<li><span class="dot ' + (p.amt < 0 ? 'bad' : 'pm-' + p.m) + '"></span><div><b>' + money(p.amt) + '</b> ' + esc(p.type) + ' · ' + methodLabel(p.m) + '<div class="muted small">' + fd(p.d, { day: 'numeric', month: 'short', year: 'numeric' }) + (p.ref ? ' · ' + esc(p.ref) : '') + '</div></div>' + (can('payments') && b.status !== 'cancelled' ? '<button type="button" class="icon-btn sm" data-act="pay-del" data-ref="' + b.ref + '|' + i + '" aria-label="Remove this payment" title="Remove this payment (entered by mistake)">' + ic('x') + '</button>' : '') + '</li>'; }).join('') + '</ul>' : '<p class="muted small">No payments yet.</p>') + '</section>' +
+        invSec(b);
+    } else {
+      var ts = DB.threads.filter(function (t) { return t.ref === b.ref || t.email === b.guest.email; });
+      body = '<section class="d-sec"><h4>Notes</h4><form class="note-form" data-note="' + b.ref + '"><input name="t" placeholder="Add a note for the team" aria-label="Add a note"><button class="btn ghost" type="submit">Add</button></form>' +
+        ((b.notes || []).length ? '<ul class="notes">' + b.notes.map(function (n, i) { return [i, n]; }).sort(function (x, y) { return String(y[1].at) < String(x[1].at) ? -1 : 1; }).map(function (x) { return noteItem(b, x[0], x[1]); }).join('') + '</ul>' : '<p class="muted small">No notes yet.</p>') + '</section>' +
+        '<section class="d-sec"><h4>Emails</h4>' + (ts.length ? '<div class="list">' + ts.map(function (t) { return '<button type="button" class="brow" data-thread-go="' + t.id + '"><span class="brow-g"><b>' + esc(t.subject) + '</b><small>' + t.msgs.length + ' email' + (t.msgs.length > 1 ? 's' : '') + ' · last ' + when(lastMsg(t).at) + '</small></span>' + ic('chev-r') + '</button>'; }).join('') + '</div>' : '<p class="muted small">No emails yet.</p>') + '</section>';
+    }
+    return head + '<div class="d-body">' + alerts + body + '</div>';
+  }
+  function noteItem(b, i, n) {
+    return '<li class="note-li"><p>' + esc(n.text) + '</p><span class="muted small">' + esc(n.by) + ' · ' + esc(atNice(n.at)) + (n.edited ? ' · edited by ' + esc(n.edited.by) + ' ' + esc(atNice(n.edited.at)) : '') + '</span><span class="note-acts"><button type="button" class="icon-btn sm" data-note-edit="' + b.ref + '|' + i + '" aria-label="Edit note" title="Edit note">' + ic('edit') + '</button><button type="button" class="icon-btn sm" data-note-del="' + b.ref + '|' + i + '" aria-label="Delete note" title="Delete note">' + ic('x') + '</button></span></li>';
   }
 
   /* ---------- actions ---------- */
@@ -635,7 +693,7 @@
     modal('Cancel ' + esc(b.ref) + '?', '<p>' + esc(guestName(b)) + ' · ' + esc(standById(b.stand).name) + ' · arriving ' + fdw(b.ci) + ' (' + rel(b.ci) + ').</p>' +
       '<div class="callout"><b>Cancellation policy</b><br>No refunds. What the guest has paid is kept as a credit to use on another date that suits Kyleu and the guest. Offer to move the booking first.</div>' +
       '<div class="lines"><div class="ln"><span>Paid so far</span><span>' + money(pd) + '</span></div><div class="ln tot"><span>Credit for ' + esc(b.guest.first) + '</span><span data-credit-amt>' + money(pd) + '</span></div></div>' +
-      (pd > 0 ? '<label class="check"><input type="checkbox" name="refund"><span>Refund the money instead (a management decision)</span></label>' : '') +
+      (pd > 0 && can('payments') ? '<label class="check"><input type="checkbox" name="refund"><span>Refund the money instead (a management decision)</span></label>' : pd > 0 ? '<p class="muted small">' + ic('info') + ' A refund instead of credit is a management decision: ask an owner or manager.</p>' : '') +
       '<label class="fld"><span>Reason</span><input name="why" placeholder="e.g. Guest emailed, family emergency"></label>',
       'Cancel booking', function (f) {
         var refund = pd > 0 && fval(f, 'refund');
@@ -645,7 +703,7 @@
         b.notes.push({ at: nowStamp(), by: ME.name, text: 'Cancelled. ' + (fval(f, 'why') || '') + (pd > 0 ? (refund ? ' Refunded ' + money(pd) + '.' : ' ' + money(pd) + ' kept as credit for another stay.') : '') });
         log('Booking ' + b.ref + ' cancelled', b.ref); save(); refresh();
         toast('Booking cancelled. ' + (pd > 0 && !refund ? money(pd) + ' kept as credit for ' + esc(b.guest.first) + '.' : 'The stand is free again.'));
-      }, { danger: true, onOpen: function (f) { var c = f.elements.refund; if (c) c.addEventListener('change', function () { $('[data-credit-amt]', f).textContent = c.checked ? money(0) : money(pd); }); } });
+      }, { danger: true, cancelLabel: 'Keep the booking', onOpen: function (f) { var c = f.elements.refund; if (c) c.addEventListener('change', function () { $('[data-credit-amt]', f).textContent = c.checked ? money(0) : money(pd); }); } });
   }
   function creditsFor(email) { email = (email || '').toLowerCase(); return email ? DB.credits.filter(function (c) { return c.email === email && c.amt - c.used > 0; }) : []; }
   function creditLeft(email) { return creditsFor(email).reduce(function (a, c) { return a + c.amt - c.used; }, 0); }
@@ -755,6 +813,7 @@
       '<div class="grid3"><label class="fld"><span>Adults</span><input type="number" min="0" max="12" name="adults" value="2"></label><label class="fld"><span>Pensioners</span><input type="number" min="0" max="12" name="pens" value="0"></label><label class="fld"><span>Kids under 12</span><input type="number" min="0" max="12" name="kids" value="0"></label></div>' +
       '<div class="grid2"><label class="fld"><span>Booked via</span><select name="source"><option>Phone</option><option>WhatsApp</option><option>Email</option><option>Walk-in</option></select></label><label class="fld"><span>Game drive (people)</span><input type="number" min="0" max="10" name="gd" value="0"></label></div>' +
       '<label class="fld"><span>Vehicles coming (one booking can cover the whole group)</span><input type="number" min="1" max="20" name="veh" value="1"></label>' +
+      '<label class="fld"><span>Note for the team (optional)</span><input name="note" placeholder="e.g. Celebrating a birthday, arriving late on Friday"></label>' +
       '<span class="fld-l">How will they pay?</span><div class="seg"><label><input type="radio" name="m" value="eft" checked><span>EFT</span></label><label><input type="radio" name="m" value="card"><span>Card</span></label><label><input type="radio" name="m" value="cash"><span>Cash</span></label></div>' +
       '<div class="quote-box" data-q></div><div data-credit-box></div>',
       'Create booking', function (f) {
@@ -766,11 +825,13 @@
         if (z <= a) { toast('Departure must be after arrival'); return false; }
         if (overlaps(sid, a, z)) { toast('That stand is not free for those nights'); return false; }
         if (!g.adults && !g.pens) { toast('Add at least one adult'); return false; }
+        if (g.adults + g.pens + g.kids > standById(sid).guests) { toast(standById(sid).name + ' takes up to ' + standById(sid).guests + ' guests. Choose a bigger stand or a second stand.'); return false; }
         var ex = { gd: +fval(f, 'gd') || 0 }, q = quote(sid, a, z, g, ex), linked = false;
         if (!cl) { cl = findClient(ng.email, ng.phone); linked = !!cl; if (!cl) cl = newClient(ng); }
         var b = { ref: K.takeNo('Ref'), created: nowStamp(), source: fval(f, 'source'), cid: cl.id, guest: { first: cl.first, last: cl.last, email: cl.email, phone: cl.phone, consent: cl.consent }, stand: sid, ci: a, co: z, adults: g.adults, pens: g.pens, kids: g.kids, vehicles: Math.max(1, Math.min(20, +fval(f, 'veh') || 1)), setup: '', extras: ex, method: m, eft: q.eft, card: q.card, total: m === 'card' ? q.card : q.eft, payments: [], status: 'pending', notes: [], pop: false };
         if (m !== 'eft') b.status = 'confirmed';
         if (fval(f, 'usecredit')) { var need = b.total; creditsFor(b.guest.email).forEach(function (c) { var take = Math.min(need, c.amt - c.used); if (take <= 0) return; c.used += take; need -= take; b.payments.push({ d: TODAY, amt: take, m: 'credit', type: 'Credit', ref: 'Credit from ' + c.from }); }); if (paid(b) >= deposit(b)) b.status = 'confirmed'; }
+        if (fval(f, 'note')) b.notes.push({ at: nowStamp(), by: ME.name, text: fval(f, 'note') });
         ensureCars(b); DB.bookings.push(b); DB.bookings.sort(function (x, y) { return x.ci < y.ci ? -1 : 1; });
         log('New ' + b.source.toLowerCase() + ' booking ' + b.ref + ' for ' + guestName(b), b.ref); save(); render(); openBooking(b.ref);
         toast('Booking ' + b.ref + ' created' + (linked ? ' for returning client ' + esc(clientName(cl)) : ''));
@@ -779,13 +840,21 @@
         var u = function () {
           var g = { adults: +fval(f, 'adults') || 0, pens: +fval(f, 'pens') || 0, kids: +fval(f, 'kids') || 0 }, sid = fval(f, 'stand'), a = fval(f, 'ci'), z = fval(f, 'co'), m = $('[name=m]:checked', f).value, box = $('[data-q]', f);
           if (z <= a) { box.innerHTML = '<span class="bad-t">Departure must be after arrival.</span>'; return; }
+          // mark every stand free or booked for these dates; start on a free one
+          var sel = f.elements.stand, nFree = 0;
+          $$('option', sel).forEach(function (o) { var s0 = standById(o.value), fr = !overlaps(o.value, a, z); if (fr) nFree++; o.textContent = s0.name + ' (' + s0.guests + ' guests) · ' + (fr ? 'free' : 'booked'); });
+          if (!f._picked && overlaps(sel.value, a, z)) { var fo = $$('option', sel).filter(function (o) { return !overlaps(o.value, a, z); })[0]; if (fo) { sel.value = fo.value; sid = fo.value; } }
           var q = quote(sid, a, z, g, { gd: +fval(f, 'gd') || 0 }), free = !overlaps(sid, a, z), st = standById(sid);
+          var nts = []; for (var dd = a; dd < z; dd = add(dd, 1)) nts.push(D(dd).getDay());
+          var halfWeekend = (nts.indexOf(5) >= 0) !== (nts.indexOf(6) >= 0), full = diff(TODAY, a) <= num('Booking rules', 'Balance due days before arrival', 7) + num('Booking rules', 'Deposit due within days of invoice', 5);
           box.innerHTML = (free ? '<span class="pill ok"><i></i>Stand free</span>' : '<span class="pill bad"><i></i>Stand not free</span>') + (g.adults + g.pens + g.kids > st.guests ? ' <span class="pill warn"><i></i>Over ' + st.guests + ' guests</span>' : '') +
             '<div class="qb-row"><span>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + '</span><span class="price-pair">' + (!hasFee() ? '<b>' + money(q.eft) + '</b>' : m === 'card' ? '<b>' + money(q.card) + '</b> <small>card price</small>' : '<s>' + money(q.card) + '</s> <b>' + money(q.eft) + '</b> <small>' + methodLabel(m) + '</small>') + '</span></div>' +
-            '<div class="muted small">Deposit ' + depPct() + '%: ' + money(Math.round((m === 'card' ? q.card : q.eft) * depPct() / 100)) + '</div>';
+            '<div class="muted small">' + (full ? 'Arrives within 12 days, so the full amount secures the stand' : 'Deposit ' + depPct() + '%: ' + money(Math.round((m === 'card' ? q.card : q.eft) * depPct() / 100))) + ' · ' + nFree + ' of ' + STANDS.length + ' stands free for these dates</div>' +
+            (halfWeekend ? '<div class="small warn-t">' + ic('info') + ' Only one weekend night: weekends are normally booked as a whole (Friday and Saturday). Fine if you agreed it with the guest.</div>' : '');
           var pc = clientById(fval(f, 'cid')), cl = creditLeft(pc ? pc.email : fval(f, 'email')), cb = $('[data-credit-box]', f), was = f.elements.usecredit ? f.elements.usecredit.checked : true;
           cb.innerHTML = cl ? '<label class="check credit-use"><input type="checkbox" name="usecredit"' + (was ? ' checked' : '') + '><span>Use <b>' + money(cl) + '</b> credit from a cancelled booking</span></label>' : '';
         };
+        f._picked = !!pre.stand; f.elements.stand.addEventListener('change', function () { f._picked = true; });
         $$('input,select', f).forEach(function (x) { if (x.name === 'clq') return; x.addEventListener('input', u); x.addEventListener('change', u); });
         clientPicker(f, pre, u); u();
       } });
@@ -888,6 +957,7 @@
     modal('Check in ' + esc(carLabel(c, i)), '<p class="muted small">' + esc(guestName(b)) + ' · ' + esc(b.ref) + ' · ' + esc(standById(b.stand).name) + (cs.length > 1 ? ' · vehicle ' + (i + 1) + ' of ' + cs.length : '') + '</p>' + carForm(c) + indBox(key, !!c.ind) +
       (bal > 0 ? '<p class="callout warn">' + ic('alert') + ' <b>' + money(bal) + '</b> is still owing on this booking. Collect it at reception.</p>' : ''),
       'Check in', function (f) {
+        if (f.elements.reg && !String(fval(f, 'reg')).trim()) { toast('Add the registration number first: it goes on the gate list'); f.elements.reg.focus(); return false; }
         if (!fval(f, 'ind')) { toast('Get the indemnity forms signed before checking in'); return false; }
         readCar(f, c); c.ind = c.ind || { at: nowStamp(), by: ME.name }; c.st = 'in'; c.inAt = nowStamp();
         if (b.status !== 'in' && bal > 0) b.notes.push({ at: nowStamp(), by: ME.name, text: 'Checked in with ' + money(bal) + ' still owing. Collect at reception.' });
@@ -950,7 +1020,7 @@
     var cs = ensureCars(b), n = cs.length, sent = cs.filter(function (c) { return c.dgrSent; }).length;
     return '<section class="d-sec dgr"><h4 class="h4-row">Dinokeng discount vouchers (DGR CP)<span class="pill ' + (sent === n ? 'ok' : sent ? 'warn' : 'muted') + '">' + sent + ' of ' + n + ' sent</span></h4>' +
       (b.vehTbc ? '<p class="callout warn cflex">' + ic('info') + '<span>' + esc(b.guest.first) + ' is not sure yet how many vehicles are coming. Make the codes once they tell you.</span></p>' : '') +
-      '<ol class="dgr-steps"><li><b>Make the codes</b> on the Dinokeng site: one code per vehicle (copy the client\'s email and the number of vehicles below).</li><li><b>Paste</b> each vehicle\'s code in its box.</li><li><b>Send the codes to the client yourself</b>, by WhatsApp or email. Dinokeng does not send them.</li></ol>' +
+      '<details class="dgr-how"><summary>How the vouchers work</summary><ol class="dgr-steps"><li><b>Make the codes</b> on the Dinokeng site: one code per vehicle (copy the client\'s email and the number of vehicles below).</li><li><b>Paste</b> each vehicle\'s code in its box.</li><li><b>Send the codes to the client yourself</b>, by WhatsApp or email. Dinokeng does not send them.</li></ol></details>' +
       '<div class="dgr-copy"><button type="button" class="chip" data-copy="' + esc(b.guest.email) + '">' + ic('mail') + esc(b.guest.email || 'No email yet') + '<small>Copy</small></button><button type="button" class="chip" data-copy="' + n + '">' + ic('car') + n + ' vehicle' + (n === 1 ? '' : 's') + '<small>Copy</small></button><a class="btn ghost sm" href="' + esc(dgrLink()) + '" target="_blank" rel="noopener">' + ic('ext') + 'Open Dinokeng site to make codes</a></div>' +
       '<div class="dgr-cars">' + cs.map(function (c, i) {
         var k = b.ref + '|' + c.id;
@@ -1008,7 +1078,7 @@
     if (MDPOSTS === null) loadMd();
     var ps = allPosts(), shown = ps.filter(function (p) { return !p.draft && !p.hidden; }), ago = shown.length ? diff(shown[0].date, TODAY) : null, fresh = ago !== null && ago <= 7;
     return '<div class="page-h"><div><h1>Camp news</h1><p class="muted">Posts for the Camp news page on the website, newest first.</p></div><div class="ph-act"><a class="btn ghost" href="../news.html" target="_blank" rel="noopener">' + ic('ext') + 'View news page</a><button class="btn" data-act="news-new">' + ic('plus') + 'New post</button></div></div>' +
-      '<div class="news-status ' + (fresh ? 'fresh' : 'quiet') + '">' + ic(fresh ? 'check' : 'clock') + '<div>' + (MDPOSTS === null ? 'Loading posts…' : ago === null ? '<b>No posts yet.</b> The news page shows a "nothing new this week" note until the first one.' : fresh ? '<b>Fresh news is on the website.</b> The latest post went up ' + (ago === 0 ? 'today' : ago === 1 ? 'yesterday' : ago + ' days ago') + '.' : '<b>Last post ' + ago + ' days ago.</b> Until the next one, the news page shows "Nothing new at camp this week" with a grazing bushbuck. A short note about sightings, the weather or camp news is plenty.') + '</div></div>' +
+      '<div class="news-status ' + (fresh ? 'fresh' : 'quiet') + '">' + ic(fresh ? 'check' : 'clock') + '<div>' + (MDPOSTS === null ? 'Loading posts…' : ago === null ? '<b>No posts yet.</b> The news page shows a "nothing new this week" note until the first one.' : fresh ? '<b>Fresh news is on the website.</b> The latest post went up ' + (ago === 0 ? 'today' : ago === 1 ? 'yesterday' : ago + ' days ago') + '.' : '<b>Last post ' + ago + ' days ago.</b> The news page still shows your recent posts, but a fresh one keeps it alive. A short note about sightings, the weather or camp news is plenty.') + '</div></div>' +
       '<div class="card flush"><table class="tbl"><thead><tr><th>Post</th><th>Date</th><th>Tags</th><th>Status</th></tr></thead><tbody>' +
       (ps.length ? ps.map(function (p) { return '<tr data-post="' + esc(p.key) + '" tabindex="0"><td data-l="Post"><span class="post-row">' + (p.image ? '<img src="' + esc(imgSrc(p.image)) + '" alt="">' : '<span class="post-noimg">' + ic('image') + '</span>') + '<span><b>' + esc(p.title) + '</b><small>' + esc(p.summary || '') + '</small></span></span></td><td data-l="Date" data-s="' + esc(p.date) + '">' + fd(p.date, { day: 'numeric', month: 'short', year: 'numeric' }) + '</td><td data-l="Tags">' + ((p.tags || []).map(function (t) { return '<span class="tag">' + esc(t) + '</span>'; }).join('') || '<span class="muted">None</span>') + '</td><td data-l="Status">' + pill(postState(p)) + '</td></tr>'; }).join('') : '<tr><td colspan="4" class="empty">No posts yet.</td></tr>') + '</tbody></table></div>' +
       '<p class="demo-note">' + ic('info') + 'Demo: posts you publish here show on the website\'s news page in this browser. In the live version they are saved on the server (or in WordPress), so every visitor sees them.</p>';
@@ -1246,7 +1316,7 @@
       if (extraDue(b)) attention.push({ i: 'alert', tone: 'bad', t: '<b>' + esc(guestName(b)) + '</b> owes ' + money(balance(b)) + ' more: ' + esc(b.extraDue.why || 'the total went up after paying in full').toLowerCase() + '. Send the new invoice.', ref: b.ref, o: 1 });
       if (live(b) && !b.vehTbc && b.status !== 'out' && b.co >= TODAY && namedIn(b) > people(b)) attention.push({ i: 'users', tone: 'warn', t: 'Vehicles list more people than the booking for <b>' + esc(guestName(b)) + '</b> (' + namedIn(b) + ' named, ' + people(b) + ' booked)', ref: b.ref, o: 5 });
       if (b.changeReq && !b.changeReq.done && live(b)) attention.push({ i: 'cal', tone: 'warn', t: '<b>' + esc(guestName(b)) + '</b> asked to change the dates or guests (' + fd(b.ci) + ')', ref: b.ref, o: 1 });
-      if (live(b) && b.status !== 'in' && b.status !== 'out' && b.ci >= TODAY && diff(TODAY, b.ci) <= 10 && paidUp(b) && !b.finalised) attention.push({ i: 'car', tone: 'warn', t: '<b>' + esc(guestName(b)) + '</b> has paid but not finalised the booking (' + fdw(b.ci) + '): send the finalise link or fill it in', ref: b.ref, o: 5 });
+      if (live(b) && b.status !== 'in' && b.status !== 'out' && b.ci >= TODAY && diff(TODAY, b.ci) <= 10 && paidUp(b) && !b.finalised) attention.push({ i: 'car', tone: 'warn', t: '<b>' + esc(guestName(b)) + '</b> has paid but not finalised the booking (' + fdw(b.ci) + '): ' + (diff(TODAY, b.ci) <= 7 ? 'their link is locked now, so add the vehicles and arrival time yourself (WhatsApp them) or at check-in' : 'send the finalise link or fill it in'), ref: b.ref, o: 5 });
       var ps = preShop(b); if (ps && live(b) && b.status !== 'out' && (b.ci === TODAY || b.ci === add(TODAY, 1))) attention.push({ i: 'cart', tone: 'info', t: 'Have ready for <b>' + esc(guestName(b)) + '</b> (' + (b.ci === TODAY ? 'today' : 'tomorrow') + '): ' + esc(ps.desc.replace(/^Shop order for arrival: /, '')), ref: b.ref, o: 3 });
       if (s.k === 'pop') attention.push({ i: 'note', tone: 'info', t: 'Proof of payment from <b>' + esc(guestName(b)) + '</b>: check the bank for ' + money(deposit(b)), ref: b.ref, o: 1 });
       if (s.k === 'overdue') attention.push({ i: 'alert', tone: 'bad', t: '<b>' + esc(guestName(b)) + '</b> has not paid the EFT deposit (due ' + fd(depositDue(b)) + '). Remind or release the stand.', ref: b.ref, o: 2 });
@@ -1256,12 +1326,14 @@
     if (newEnq.length) attention.push({ i: 'mail', tone: 'warn', t: newEnq.length + ' email' + (newEnq.length > 1 ? 's' : '') + ' waiting for a reply', go: 'enquiries', o: 4 });
     var lowP = shopItems().filter(lowStock); if (lowP.length && can('products')) attention.push({ i: 'box', tone: 'warn', t: 'Running low in the shop: ' + lowP.map(function (p) { return esc(p.label) + ' (' + p.stock + ')'; }).join(', '), go: 'products', o: 6 });
     var noTime = DB.bookings.filter(function (b) { return live(b) && b.extras && b.extras.gd && !b.drive && b.co >= TODAY && diff(TODAY, b.ci) <= 7; }); if (noTime.length) attention.push({ i: 'car', tone: 'warn', t: noTime.length + ' game drive' + (noTime.length > 1 ? 's' : '') + ' this week still need a time', go: 'drives', o: 5 });
-    DB.blocks.forEach(function (k) { if (k.to > TODAY && diff(TODAY, k.from) <= 7) attention.push({ i: 'tent', tone: 'muted', t: '<b>' + esc(standById(k.stand).name) + '</b> blocked ' + fd(k.from) + ' to ' + fd(k.to) + ': ' + esc(k.reason), go: 'stands', o: 5 }); });
     DB.bookings.forEach(function (b) {
       if (live(b) && b.status !== 'out' && b.ci >= TODAY && diff(TODAY, b.ci) <= 7 && codesTodo(b)) { var nc = ensureCars(b).length, nt = codesTodo(b); attention.push({ i: 'gift', tone: 'warn', t: 'Send Dinokeng codes to <b>' + esc(guestName(b)) + '</b> (' + fdw(b.ci) + ', ' + (nt === nc ? nc + ' vehicle' + (nc === 1 ? '' : 's') : nt + ' of ' + nc + ' vehicles still to send') + ')', ref: b.ref, o: 4 }); }
       if (b.status === 'in') (b.cars || []).forEach(function (c, i) { if (c.st === 'in' && !c.ind) attention.push({ i: 'alert', tone: 'bad', t: 'Indemnity not signed: <b>' + esc(carLabel(c, i)) + '</b> at ' + esc(standById(b.stand).name), ref: b.ref, o: 2 }); });
     });
     var nAge = can('news') ? newsAge() : null; if (nAge !== null && nAge > 14) attention.push({ i: 'note', tone: 'muted', t: nAge === 999 ? 'No camp news posted yet. A short post makes the news page feel alive.' : 'No camp news for ' + nAge + ' days. A short post keeps the news page fresh.', go: 'news', o: 7 });
+    DB.dismissed = DB.dismissed || {};
+    attention.forEach(function (a) { a.key = (a.ref || a.go) + '|' + a.i + '|' + a.t.replace(/<[^>]+>/g, '').slice(0, 60); });
+    attention = attention.filter(function (a) { return !DB.dismissed[a.key]; });
     attention.sort(function (a, b) { return a.o - b.o; });
     // soft holds go right at the top: the stand is released at midnight unless the payment is confirmed
     var softs = DB.bookings.filter(function (b) { return b.status === 'pending' && b.softHold; }).sort(function (a, b) { return a.softHold < b.softHold ? -1 : 1; });
@@ -1277,19 +1349,19 @@
     var ice = DB.bookings.filter(function (b) { return live(b) && b.extras && b.extras.ice && b.ci === TODAY; }).reduce(function (a, b) { return a + b.extras.ice; }, 0);
     return '<div class="hello"><div><h1>' + (h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening') + ', ' + esc(ME.name) + '</h1><p class="muted">' + fd(TODAY, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + ' · ' + nT + ' of ' + STANDS.length + ' stands occupied tonight</p></div><button class="btn" data-act="new">' + ic('plus') + 'New booking</button></div>' +
       '<div class="kpis">' + tile('Arriving today', arr.length, arr.filter(function (b) { return b.status === 'in'; }).length + ' checked in', 'today') + tile('Departing today', dep.length, dep.filter(function (b) { return b.status === 'out'; }).length + ' checked out', 'today') +
-      tile('In camp tonight', nT + '<small>/' + STANDS.length + '</small>', Math.round(nT / STANDS.length * 100) + '% occupied', 'calendar') + tile('Awaiting EFT', pend.length, money(pendAmt) + ' in deposits', 'eft', pend.length ? 'warn' : '') +
-      tile('Balances due in 7 days', money(balAmt), balSoon.length + ' booking' + (balSoon.length === 1 ? '' : 's'), 'eft') + (can('payments') ? tile('Received this month', money(recv), 'bookings and shop', 'payments', 'ok') : '') + '</div>' +
+      tile('In camp tonight', nT + '<small>/' + STANDS.length + '</small>', Math.round(nT / STANDS.length * 100) + '% occupied', 'calendar') + tile('Awaiting EFT', pend.length, money(pendAmt) + ' to come in', can('eft') ? 'eft' : 'bookings', pend.length ? 'warn' : '') +
+      tile('Balances due in 7 days', money(balAmt), balSoon.length + ' booking' + (balSoon.length === 1 ? '' : 's'), can('eft') ? 'eft' : 'bookings') + (can('payments') ? tile('Received this month', money(recv), 'bookings and shop', 'payments', 'ok') : '') + '</div>' +
       (function () {
         var inList = Object.keys(tonight).map(function (id) { return tonight[id]; });
-        var lists = { arr: arr, dep: dep, in: inList }, pg = pageOf(lists[DP.tab], DP.tab, 6), at = pageOf(attention, 'attn', 6), ac = pageOf(DB.log, 'act', 7);
+        var lists = { arr: arr, dep: dep, in: inList }, pg = pageOf(lists[DP.tab], DP.tab, 6), at = pageOf(attention, 'attn', 6), ac = pageOf(DB.log.slice().sort(function (a, b) { return String(b.at) > String(a.at) ? 1 : String(b.at) < String(a.at) ? -1 : 0; }), 'act', 7);
         var row = function (b) { var cs = ensureCars(b), n = cs.length, din = cs.filter(function (c) { return c.st === 'in'; }).length, ddue = cs.filter(function (c) { return c.st === 'due'; }).length, cnt = n > 1 ? ' <small>' + (DP.tab === 'arr' ? din : n - din) + '/' + n + '</small>' : '';
           return DP.tab === 'arr' ? rowB(b, !ddue ? '<span class="pill ok"><i></i>Checked in</span>' : '<span class="row-act" data-act="checkin" data-ref="' + b.ref + '">' + ic('in') + 'Check in' + cnt + '</span>') : DP.tab === 'dep' ? rowB(b, !din ? '<span class="pill muted"><i></i>Checked out</span>' : '<span class="row-act" data-act="checkout" data-ref="' + b.ref + '">' + ic('out') + 'Check out' + cnt + '</span>') : rowB(b); };
         return '<div class="cols"><section class="card" id="today"><header class="card-h"><h3>Today at camp</h3><div class="tabs" role="tablist">' + [['arr', 'Arriving', arr.length], ['dep', 'Departing', dep.length], ['in', 'In camp', nT]].map(function (x) { return '<button class="' + (DP.tab === x[0] ? 'on' : '') + '" data-dtab="' + x[0] + '">' + x[1] + ' <span>' + x[2] + '</span></button>'; }).join('') + '</div></header>' +
           (pg.items.length ? pg.items.map(row).join('') : '<p class="empty">' + ({ arr: 'No arrivals today.', dep: 'No departures today.', in: 'Nobody in camp tonight.' })[DP.tab] + '</p>') + pg.bar +
           '<footer class="card-f"><span>' + ic('car') + '<b>' + carsInCamp() + '</b> vehicles in camp</span><span>' + ic('fire') + '<b>' + woodBags + '</b> free firewood bags tonight</span><span>' + ic('car') + '<b>' + drives.length + '</b> game drive' + (drives.length === 1 ? '' : 's') + ' booked</span><span>' + ic('ice') + '<b>' + ice + '</b> bags of ice to hand out</span></footer></section>' +
-          '<section class="card"><header class="card-h"><h3>Needs attention</h3><span class="count">' + (attention.length + softs.length) + '</span></header>' + softHtml + (attention.length ? '<ul class="attn">' + at.items.map(function (a) { return '<li><button ' + (a.ref ? 'data-open="' + a.ref + '"' : 'data-go="' + a.go + '"') + '><span class="attn-i ' + a.tone + '">' + ic(a.i) + '</span><span>' + a.t + '</span>' + ic('chev-r', 'chev') + '</button></li>'; }).join('') + '</ul>' + at.bar : '<p class="empty">All clear. Enjoy the bush!</p>') + '</section></div>' +
+          '<section class="card"><header class="card-h"><h3>Needs attention</h3><span class="count">' + (attention.length + softs.length) + '</span></header>' + softHtml + (attention.length ? '<ul class="attn">' + at.items.map(function (a) { return '<li><button ' + (a.ref ? 'data-open="' + a.ref + '"' : 'data-go="' + a.go + '"') + '><span class="attn-i ' + a.tone + '">' + ic(a.i) + '</span><span>' + a.t + '</span>' + ic('chev-r', 'chev') + '</button><button type="button" class="attn-x" data-dismiss="' + esc(a.key) + '" aria-label="Done: hide this" title="Done: hide this">' + ic('check') + '</button></li>'; }).join('') + '</ul>' + at.bar : '<p class="empty">All clear. Enjoy the bush!</p>') + '</section></div>' +
           '<div class="cols"><section class="card"><header class="card-h"><h3>Stands booked, next 30 nights</h3><span class="muted small">Weekend nights in bold</span></header>' + colChart(occ, { max: STANDS.length, label: 'Stands booked per night', colA: C_CARD, band: 24 }) + '</section>' +
-          '<section class="card"><header class="card-h"><h3>Recent activity</h3><span class="count">' + DB.log.length + '</span></header><ul class="feed">' + ac.items.map(function (l) { return '<li' + (l.ref ? ' data-open="' + l.ref + '"' : '') + '><span>' + esc(l.text) + '</span><small>' + esc(l.by) + ' · ' + esc(l.at) + '</small></li>'; }).join('') + '</ul>' + ac.bar + '</section></div>';
+          '<section class="card"><header class="card-h"><h3>Recent activity</h3><span class="count">' + DB.log.length + '</span></header><ul class="feed">' + ac.items.map(function (l) { return '<li' + (l.ref ? ' data-open="' + l.ref + '"' : '') + '><span>' + esc(l.text) + '</span><small>' + esc(l.by) + ' · ' + esc(atNice(l.at)) + '</small></li>'; }).join('') + '</ul>' + ac.bar + '</section></div>';
       })();
   }
 
@@ -1301,23 +1373,23 @@
   function vBookings() {
     var groups = [['upcoming', 'Upcoming'], ['pending', 'Awaiting EFT'], ['baldue', 'Balance due'], ['in', 'In camp'], ['past', 'Past'], ['cancelled', 'Cancelled'], ['all', 'All']];
     var q = F.q.toLowerCase();
-    var base = DB.bookings.filter(function (b) { var st = standById(b.stand); return (!F.area || st.area === F.area) && (!F.stand || b.stand === F.stand) && (!F.src || b.source === F.src) && (!F.m || b.method === F.m) && (!F.from || b.ci >= F.from) && (!F.to || b.ci <= F.to) && (!q || (b.ref + ' ' + guestName(b) + ' ' + b.guest.email + ' ' + b.guest.phone + ' ' + st.name).toLowerCase().indexOf(q) >= 0); });
+    var base = DB.bookings.filter(function (b) { var st = standById(b.stand); return (!F.area || st.area === F.area) && (!F.stand || b.stand === F.stand) && (!F.src || b.source === F.src) && (!F.m || b.method === F.m) && (!F.from || b.ci >= F.from) && (!F.to || b.ci <= F.to) && bHit(b, q, st.name); });
     var counts = {}; groups.forEach(function (g) { counts[g[0]] = 0; }); base.forEach(function (b) { var k = bucket(b); groups.forEach(function (g) { if (k[g[0]]) counts[g[0]]++; }); });
     var list = base.filter(function (b) { return bucket(b)[F.st]; });
     var srcs = []; DB.bookings.forEach(function (b) { if (srcs.indexOf(b.source) < 0) srcs.push(b.source); }); srcs.sort();
     if (F.st === 'past' || F.st === 'cancelled' || F.st === 'all') list = list.slice().reverse();
     return '<div class="page-h"><div><h1>Bookings</h1><p class="muted">' + list.length + ' shown' + (hasFee() ? ' · card prices include the ' + cardFee() + '% card fee, EFT prices do not' : '') + '</p></div><div class="ph-act"><button class="btn ghost" data-act="csv-bookings">' + ic('download') + 'Export</button><button class="btn" data-act="new">' + ic('plus') + 'New booking</button></div></div>' +
       '<div class="filters"><label class="search">' + ic('search') + '<input type="search" placeholder="Search name, ref, phone or stand" value="' + esc(F.q) + '" data-f="q" aria-label="Search bookings"></label>' +
-      '</div><div class="filter-row">' + fsel('F:area', F.area, [['', 'All areas']].concat(Object.keys(AREA_SHORT).map(function (a) { return [a, AREA_SHORT[a]]; }))) +
+      '</div>' + (function () { var nAct = ['area', 'stand', 'src', 'm', 'from', 'to'].filter(function (k) { return F[k]; }).length; return '<details class="more-filters"' + (window.innerWidth > 760 || nAct ? ' open' : '') + '><summary>' + ic('list') + 'Filters' + (nAct ? ' (' + nAct + ')' : '') + '</summary>'; })() + '<div class="filter-row">' + fsel('F:area', F.area, [['', 'All areas']].concat(Object.keys(AREA_SHORT).map(function (a) { return [a, AREA_SHORT[a]]; }))) +
       fsel('F:stand', F.stand, [['', 'All stands']].concat(STANDS.filter(function (x) { return !F.area || x.area === F.area; }).map(function (x) { return [x.id, x.name]; }))) +
       fsel('F:src', F.src, [['', 'Booked via: any']].concat(srcs.map(function (x) { return [x, 'Booked via ' + x]; }))) + fsel('F:m', F.m, [['', 'Pays by: any'], ['card', 'Pays by card'], ['eft', 'Pays by EFT']]) +
-      '<label class="fdate"><span>Arriving from</span><input type="date" data-fk="F:from" value="' + F.from + '"' + (F.from ? ' class="on"' : '') + '></label><label class="fdate"><span>to</span><input type="date" data-fk="F:to" value="' + F.to + '"' + (F.to ? ' class="on"' : '') + '></label>' + fclear('F', ['area', 'stand', 'src', 'm', 'from', 'to']) + '</div>' +
+      '<label class="fdate"><span>Arriving from</span><input type="date" data-fk="F:from" value="' + F.from + '"' + (F.from ? ' class="on"' : '') + '></label><label class="fdate"><span>to</span><input type="date" data-fk="F:to" value="' + F.to + '"' + (F.to ? ' class="on"' : '') + '></label>' + fclear('F', ['area', 'stand', 'src', 'm', 'from', 'to']) + '</div></details>' +
       '<div class="chips scroll">' + groups.map(function (g) { return '<button class="chip' + (F.st === g[0] ? ' on' : '') + '" data-fst="' + g[0] + '">' + g[1] + ' <span>' + counts[g[0]] + '</span></button>'; }).join('') + '</div>' +
       '<div class="card flush"><table class="tbl"><thead><tr><th>Guest</th><th>Stand</th><th>Dates</th><th>Guests</th><th class="r">Total</th><th class="r">Balance</th><th>Status</th></tr></thead><tbody>' +
       (list.length ? list.map(function (b) {
         var st = standById(b.stand);
         return '<tr data-open="' + b.ref + '" tabindex="0"><td data-l="Guest"><b>' + esc(guestName(b)) + '</b>' + (b.isNew ? ' <span class="new">New</span>' : '') + (staysBefore(b) ? ' <span class="ret-dot" title="Returning client">' + ic('return') + '</span>' : '') + '<small>' + esc(b.ref) + ' · ' + esc(b.source) + '</small></td><td data-l="Stand">' + esc(st.name) + '<small>' + AREA_SHORT[st.area] + '</small></td>' +
-          '<td data-l="Dates" data-s="' + b.ci + '">' + fd(b.ci) + ' to ' + fd(b.co) + '<small>' + diff(b.ci, b.co) + ' nights · ' + rel(b.ci) + '</small></td><td data-l="Guests">' + people(b) + '</td>' +
+          '<td data-l="Dates" data-s="' + b.ci + '">' + fd(b.ci) + ' to ' + fd(b.co) + '<small>' + diff(b.ci, b.co) + ' night' + (diff(b.ci, b.co) === 1 ? '' : 's') + ' · ' + (b.ci > TODAY ? 'arrives ' + rel(b.ci) : b.ci === TODAY ? 'arrives today' : b.co > TODAY ? 'in camp' : 'left ' + rel(b.co)) + '</small></td><td data-l="Guests">' + people(b) + '</td>' +
           '<td data-l="Total" class="r">' + money(b.total) + '<small>' + methodLabel(b.method) + (b.method !== 'card' && hasFee() ? ' · card ' + money(b.card) : '') + '</small></td><td data-l="Balance" class="r">' + (balance(b) ? money(balance(b)) : '<span class="muted">0</span>') + '</td><td data-l="Status">' + pill(stateOf(b)) + '</td></tr>';
       }).join('') : '<tr><td colspan="7" class="empty">No bookings match.</td></tr>') + '</tbody></table></div>';
   }
@@ -1336,7 +1408,7 @@
     return '<div class="page-h"><div><h1>EFT payments</h1><p class="muted">' + (hasFee() ? 'Guests who chose EFT pay the normal price (no ' + cardFee() + '% card fee). ' : 'Guests pay by EFT. Proof of payment from the website lands here. ') + 'Match their payments here.</p></div></div>' +
       '<div class="card match"><label class="search big">' + ic('search') + '<input data-match placeholder="Paste the reference from the bank statement, e.g. KY26-4F2K" aria-label="Bank reference"></label><div data-match-out class="muted small">Tip: guests use their booking reference when they pay, so you can paste it straight from the bank app.</div></div>' +
       sec('Proof of payment received', 'The guest says they paid. Check the bank, then confirm.', pop, 'pop') +
-      sec('Waiting for the deposit', 'Invoice sent. The deposit secures the booking within ' + num('Booking rules', 'Deposit due within days of invoice', 5) + ' days.', wait, 'wait') +
+      sec('Waiting for payment', 'Quotation sent. It holds the stand for ' + num('Booking rules', 'Deposit due within days of invoice', 5) + ' days; after that the stand is released automatically.', wait, 'wait') +
       sec('Overdue', 'Past the deadline. Send a last reminder or release the stand for other guests.', over, 'over') +
       sec('EFT balances due soon', 'Balances are due ' + num('Booking rules', 'Balance due days before arrival', 7) + ' days before arrival.', bal, 'bal');
   }
@@ -1362,7 +1434,7 @@
       }).join('');
     }).join('');
     return '<div class="page-h"><div><h1>Calendar</h1><p class="muted">' + fd(s, { day: 'numeric', month: 'long' }) + ' to ' + fd(add(e, -1), { day: 'numeric', month: 'long', year: 'numeric' }) + ' · tap an empty night to book it</p></div><div class="ph-act">' + fsel('CAL:area', CAL.area, [['', 'All areas']].concat(Object.keys(AREA_SHORT).map(function (a) { return [a, AREA_SHORT[a]]; }))) + '<button class="icon-btn" data-cal="-7" aria-label="Previous week">' + ic('chev-l') + '</button><button class="btn ghost sm" data-cal="0">Today</button><button class="icon-btn" data-cal="7" aria-label="Next week">' + ic('chev-r') + '</button></div></div>' +
-      '<div class="legend"><span><i class="lg info"></i>Deposit paid</span><span><i class="lg ok"></i>Paid in full / in camp</span><span><i class="lg warn"></i>Awaiting EFT or balance due</span><span><i class="lg bad"></i>Overdue</span><span><i class="lg block"></i>Blocked</span></div>' +
+      '<div class="legend"><span><i class="lg info"></i>Deposit paid</span><span><i class="lg ok"></i>Paid in full / in camp</span><span><i class="lg warn"></i>Awaiting EFT or balance due</span><span><i class="lg bad"></i>Overdue</span><span><i class="lg block"></i>Blocked</span><span><i class="lg out"></i>Checked out</span></div><p class="cal-swipe muted small">' + ic('info') + ' Swipe sideways to see more days.</p>' +
       '<div class="card flush cal-wrap"><div class="cal" style="--days:' + days + '">' + head + rows + '</div></div>';
   }
 
@@ -1530,7 +1602,10 @@
       'Block', function (f) {
         var sid = fval(f, 'stand'), a = fval(f, 'from'), z = fval(f, 'to');
         if (z <= a) { toast('"Until" must be after "From"'); return false; }
-        if (overlaps(sid, a, z)) { toast('There is a booking in those dates. Move it first.'); return false; }
+        if (overlaps(sid, a, z)) {
+          var hit = DB.bookings.filter(function (x) { return live(x) && x.stand === sid && x.ci < z && a < x.co; })[0];
+          toast(hit ? guestName(hit) + ' (' + hit.ref + ') is booked on ' + standById(sid).name + ', ' + fd(hit.ci) + ' to ' + fd(hit.co) + '. Move that booking first with Edit booking.' : 'Those dates are already blocked.'); return false;
+        }
         DB.blocks.push({ id: 'b' + Date.now(), stand: sid, from: a, to: z, reason: fval(f, 'why') || 'Blocked' }); log(standById(sid).name + ' blocked ' + fd(a) + ' to ' + fd(z)); save(); render(); toast('Dates blocked. Guests can\'t book them on the website.');
       });
   }
@@ -1710,13 +1785,32 @@
     k.line('Total', money(b.total), true); k.line('Paid so far', money(paid(b)), true); k.line('Balance', money(balance(b)), true);
   }
   /* ---------- invoices and quotes: same look as on the website (assets/js/invoice.js) ---------- */
+  // the stay as the website shows it: weekend nights and weekday nights with their dates and rate, children free
+  function stayDetail(b) {
+    var st = standById(b.stand), ss = st.area === 'self-sufficient', sec = ss ? 'Self-sufficient' : 'Ablution stands';
+    var R = { wk: num(sec, 'Weekend per person per night', ss ? 180 : 245), wd: num(sec, 'Weekday per person per night', ss ? 100 : 160), pe: num(sec, 'Pensioner weekday per person per night', ss ? 100 : 115) };
+    var grp = { wk: [], wd: [] }, amt = { wk: 0, wd: 0 }, pens = false, paying = b.adults + b.pens, out = [];
+    for (var d = b.ci; d < b.co; d = add(d, 1)) {
+      var dow = D(d).getDay(), wk = isWeekendNight(d), k = wk ? 'wk' : 'wd', pr = wk ? R.wk : (dow >= 1 && dow <= 4 ? R.pe : R.wd);
+      if (b.pens && pr !== (wk ? R.wk : R.wd)) pens = true;
+      grp[k].push(d); amt[k] += b.adults * (wk ? R.wk : R.wd) + b.pens * pr;
+    }
+    ['wk', 'wd'].forEach(function (k) {
+      var ds = grp[k]; if (!ds.length || !paying) return;
+      var dl = ds.map(function (d, i) { return D(d).toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric' }) + (i === ds.length - 1 || D(d).getMonth() !== D(ds[i + 1]).getMonth() ? ' ' + D(d).toLocaleDateString('en-ZA', { month: 'short' }) : ''); });
+      out.push({ t: st.name + ' · ' + (k === 'wk' ? 'weekend' : 'weekday') + ' night' + (ds.length > 1 ? 's' : '') + ': ' + (dl.length > 1 ? dl.slice(0, -1).join(', ') + ' & ' + dl[dl.length - 1] : dl[0]) + ' · ' + paying + ' adult' + (paying === 1 ? '' : 's') + (k === 'wd' && pens ? ' (pensioner rate Mon-Thu)' : ' at ' + money(k === 'wk' ? R.wk : R.wd) + ' per person'), q: ds.length, u: Math.round(amt[k] / ds.length), amt: amt[k], tag: 'stay' });
+    });
+    if (b.kids) out.push({ t: 'Child' + (b.kids === 1 ? '' : 'ren') + ' under 12 (free)', q: b.kids, amt: 0, free: true, tag: 'stay' });
+    return out;
+  }
   function invLines(b) {
     var q = quote(b.stand, b.ci, b.co, b, b.extras), card = b.method === 'card', st = standById(b.stand);
     var L = q.lines.map(function (l, i) {
       var amt = card ? l.c : l.e, n = q.nights;
-      if (i === 0) return { t: st.name + ' (Guests: ' + people(b) + ') · ' + l.t.replace(/^\d+ nights? · /, ''), q: n, u: amt % n === 0 ? amt / n : undefined, amt: amt, tag: 'stay' };
+      if (i === 0) { var sd = card ? null : stayDetail(b); if (sd && Math.round(sd.reduce(function (a, x) { return a + x.amt; }, 0)) === Math.round(amt)) return sd; return { t: st.name + ' · ' + l.t, q: n, u: amt % n === 0 ? amt / n : undefined, amt: amt, tag: 'stay' }; }
       return { t: l.t, amt: amt, tag: 'extra' };
     });
+    L = [].concat.apply([], L);   // the stay can be several lines
     (b.charges || []).forEach(function (c) {
       var amt = card ? c.c : c.e;
       if (c.pre && c.items) {   // the shop order, one line per item when the prices add up
@@ -1769,7 +1863,7 @@
     var list = (b.invoices || []).slice().reverse();
     return '<section class="d-sec"><h4 class="h4-row">Invoices &amp; quotes<button type="button" class="link-btn" data-act="inv-new" data-ref="' + b.ref + '">' + ic('plus') + 'New invoice or quote</button></h4>' +
       (list.length ? '<div class="list">' + list.map(function (x) { return '<button type="button" class="brow" data-act="inv-view" data-ref="' + b.ref + '|' + esc(x.no) + '"><span class="brow-st">' + esc(x.no) + '</span><span class="brow-g"><b>' + esc(K.kindName(x)) + ' · ' + money(x.total) + '</b><small>' + fd(x.date) + ' · made by ' + esc(x.by || 'staff') + (x.sent ? ' · sent by ' + esc(x.sent.via) + ' ' + esc(x.sent.at) : ' · not sent yet') + '</small></span>' + ic('chev-r') + '</button>'; }).join('') + '</div>'
-        : '<p class="muted small">No invoice or quote yet. Website bookings get one by email straight away.</p>') +
+        : '<p class="muted small">Nothing sent yet. Use <b>More</b>, <b>Send the ' + (paid(b) > 0 ? 'invoice' : 'quotation') + '</b> to send one, or make one here.</p>') +
       '<div class="row-btns"><button type="button" class="btn ghost sm" data-act="inv-cur" data-ref="' + b.ref + '">' + ic('note') + (paid(b) > 0 ? 'Preview the current invoice' : 'Preview the current quotation') + '</button></div></section>';
   }
   function invView(b, inv, fresh) {
@@ -2085,7 +2179,7 @@
       (lines.length ? '<div class="sale-lines">' + lines.map(function (id) { var p = prodBy(id); return '<div class="sl"><div class="sl-n"><b>' + esc(p.label) + '</b><small>' + money(p.amount) + ' each</small></div><div class="qty"><button class="icon-btn sm" data-rem="' + id + '" aria-label="One less">' + ic('minus') + '</button><span>' + CART[id] + '</span><button class="icon-btn sm" data-add="' + id + '" aria-label="One more">' + ic('plus') + '</button></div><b class="sl-t">' + money(p.amount * CART[id]) + '</b></div>'; }).join('') + '</div>' : '<div class="sale-empty">' + ic('cart') + '<p>Tap a product to add it to the sale.</p></div>') +
       '<label class="fld"><span>Who is it for?</span><select data-who><option value="">Walk-in customer (pays now)</option>' + here.map(function (b) { var cs = ensureCars(b).filter(function (c) { return c.st === 'in'; }), nm = standById(b.stand).name + ' · ' + guestName(b); if (!cs.length) return '<option value="' + b.ref + '"' + (SHOP.who === b.ref ? ' selected' : '') + '>' + esc(nm) + '</option>'; return '<optgroup label="' + esc(nm) + '">' + cs.map(function (c) { var k = b.ref + '|' + c.id; return '<option value="' + k + '"' + (SHOP.who === k ? ' selected' : '') + '>' + esc(carLabel(c, b.cars.indexOf(c)) + (c.driver ? ' · ' + c.driver : '')) + '</option>'; }).join('') + '</optgroup>'; }).join('') + '</select></label>' +
       '<div class="sale-tot"><div><span>Cash or EFT</span><b>' + money(tot(false)) + '</b></div>' + (hasFee() ? '<div class="muted"><span>Card (+' + cardFee() + '%)</span><b>' + money(tot(true)) + '</b></div>' : '') + '</div>' +
-      '<div class="pay-btns"><button class="btn" data-sell="cash"' + dis + '>' + ic('cash') + 'Cash ' + money(tot(false)) + '</button><button class="btn blue" data-sell="card"' + dis + '>' + ic('card') + 'Card ' + money(tot(true)) + '</button>' + (who ? '<button class="btn ghost full" data-sell="bill"' + dis + '>' + ic('list') + (wb.car ? 'Add to ' + esc(wb.label) + '\'s tab' : 'Add to ' + esc(standById(who.stand).name) + '\'s bill') + '</button>' : '') + '</div>' +
+      '<div class="pay-btns"><button class="btn" data-sell="cash"' + dis + '>' + ic('cash') + 'Cash ' + money(tot(false)) + '</button><button class="btn blue" data-sell="card"' + dis + '>' + ic('card') + 'Card ' + money(tot(true)) + '</button>' + (who ? '<button class="btn ghost full" data-sell="bill"' + dis + '>' + ic('list') + (wb.car ? 'Add to ' + esc(guestName(who)) + '\'s tab (' + esc(wb.label) + ')' : 'Add to ' + esc(guestName(who)) + '\'s bill') + '</button>' : '') + '</div>' +
       (who && wb.car ? '<p class="muted small">Goes on this vehicle\'s tab. They settle it when the vehicle checks out.</p>' : who ? '<p class="muted small">"Add to bill" puts it on ' + esc(guestName(who)) + '\'s booking. They pay it with their balance.</p>' : '') + '</aside></div>' +
       (lines.length ? '<button class="cart-bar" data-act="to-sale">' + ic('cart') + '<span>' + lines.reduce(function (a, id) { return a + CART[id]; }, 0) + ' item' + (lines.reduce(function (a, id) { return a + CART[id]; }, 0) === 1 ? '' : 's') + ' · <b>' + money(tot(false)) + '</b></span><span>View sale</span></button>' : '') +
       '<div class="today-strip">' + ic('clock') + '<span>Today so far: <b>' + todays.length + ' sale' + (todays.length === 1 ? '' : 's') + '</b>, <b>' + money(todays.reduce(function (a, r) { return a + r.amt; }, 0)) + '</b></span><button class="btn ghost sm" data-shoptab="sales">See all sales</button></div>';
@@ -2103,7 +2197,7 @@
     });
     if (m === 'bill') { b.charges = b.charges || []; b.charges.push({ d: TODAY, desc: 'Shop: ' + lines.map(function (id) { return CART[id] + ' × ' + prodBy(id).label; }).join(', '), e: eftT, c: cardT, sid: sid, car: wb.car ? wb.car.id : '' }); b.eft += eftT; b.card += cardT; b.total = b.method === 'card' ? b.card : b.eft; }
     CART = {}; SHOP.who = ''; log('Shop sale ' + money(total) + ' (' + saleMethod(m) + ')' + (b ? ' for ' + guestName(b) : ''), b ? b.ref : ''); save(); render();
-    toast(m === 'bill' ? money(total) + ' added to ' + (wb.car ? esc(wb.label) + '\'s tab' : esc(guestName(b)) + '\'s bill') : 'Sale of ' + money(total) + ' recorded (' + saleMethod(m) + ')');
+    toast(m === 'bill' ? money(total) + ' added to ' + esc(guestName(b)) + (wb.car ? '\'s tab (' + esc(wb.label) + ', ' + esc(standById(b.stand).name) + ')' : '\'s bill') : 'Sale of ' + money(total) + ' recorded (' + saleMethod(m) + ')');
   }
   function salesHTML() {
     var rg = simpleRange(SHOP.range), sq = SHOP.sq.toLowerCase(), rs = receipts().filter(function (r) { return r.d >= rg[0] && r.d <= rg[1] && (!SHOP.sm || r.m === SHOP.sm) && (!sq || (r.summary + ' ' + r.stand + ' ' + r.guest + ' ' + r.by).toLowerCase().indexOf(sq) >= 0); });
@@ -2250,7 +2344,7 @@
     o = o || {}; if (!sec) return '';
     var it = sec.items.filter(function (i) { return i.label === label; })[0]; if (!it) return '<span class="muted">Not set</span>';
     var v = num(sec.title, it.label, it.amount), key = sec.title + '|' + it.label;
-    return '<label class="money-in' + (o.unit ? ' unit' : '') + '">' + (o.unit ? '' : 'R') + '<input data-rate="' + esc(key) + '" inputmode="decimal" value="' + v + '" aria-label="' + esc(o.aria || label) + '">' + (o.unit ? '<span>' + o.unit + '</span>' : '') + '</label>' + (o.unit ? '' : '<small class="card-of" data-cardof="' + esc(key) + '">Card ' + money(toCard(v)) + '</small>');
+    return '<label class="money-in' + (o.unit ? ' unit' : '') + '">' + (o.unit ? '' : 'R') + '<input data-rate="' + esc(key) + '" inputmode="decimal" value="' + v + '" aria-label="' + esc(o.aria || label) + '">' + (o.unit ? '<span>' + o.unit + '</span>' : '') + '</label>' + (o.unit ? '' : '<small class="card-of" data-cardof="' + esc(key) + '">' + (hasFee() ? 'Card ' + money(toCard(v)) : '') + '</small>');
   }
   function rateVal(sec, label, d) { if (!sec) return d; var i = $('[data-rate="' + (sec.title + '|' + label).replace(/"/g, '\\"') + '"]'); var v = i ? parseFloat(i.value) : NaN; return isNaN(v) ? num(sec.title, label, d) : v; }
   function exampleText() {
@@ -2397,7 +2491,7 @@
     var df = cur - prev, pc = df / Math.abs(prev) * 100;
     if (Math.abs(pc) < .5) return { t: 'No change', c: 'flat' };
     var good = lower ? df < 0 : df > 0, ar = df > 0 ? '▲ ' : '▼ ';
-    if (kind === 'pct') return { t: ar + Math.abs(Math.round(df)) + ' pts', c: good ? 'up' : 'down' };
+    if (kind === 'pct') return Math.round(df) === 0 ? { t: 'No change', c: 'flat' } : { t: ar + Math.abs(Math.round(df)) + ' pts', c: good ? 'up' : 'down' };
     var a = Math.abs(pc); return { t: ar + (a >= 100 ? Math.round(a) : a.toFixed(a < 10 ? 1 : 0)) + '%', c: good ? 'up' : 'down' };
   }
 
@@ -2501,7 +2595,7 @@
     return '<div class="rp-now rp-in" style="--d:' + rpD() + 'ms"><div class="rp-now-title">Right now</div>' +
       item('Stands in use tonight', tn + ' <small>of ' + STANDS.length + '</small>', Math.round(tn / Math.max(1, STANDS.length) * 100) + '% full', 'ok', 'calendar') +
       item('Arriving in the next 7 days', arr.length, arr.reduce(function (a, b) { return a + people(b); }, 0) + ' guests', '', 'bookings') +
-      item('Waiting for EFT', pend.length, money(pend.reduce(function (a, b) { return a + deposit(b); }, 0)) + ' in deposits', 'warn', 'eft') +
+      item('Waiting for EFT', pend.length, money(pend.reduce(function (a, b) { return a + deposit(b); }, 0)) + ' to come in', 'warn', 'eft') +
       item('Balances still owing', money(owe.reduce(function (a, b) { return a + balance(b); }, 0)), owe.length + ' bookings', 'bad', 'payments') + '</div>';
   }
   function rpHow() {
@@ -2727,7 +2821,7 @@
       '<div class="grid2"><label class="fld"><span>Card fee added to card prices</span><input value="' + cardFee() + '%" disabled></label><label class="fld"><span>Provider charges (for reports)</span><input data-provfee value="' + (DB.settings.providerFee || 2.95) + '" inputmode="decimal"></label></div><p class="muted small">Change the card fee on the Rates & fees page.</p></section>' +
       '<section class="card"><header class="card-h"><h3>EFT bank details</h3></header><p class="small">The bank details printed on quotations and invoices are under <button type="button" class="link-btn" data-set="docs">Quotes &amp; invoices</button>.</p></section></div>';
     if (SET === 'docs') body = docsPage();
-    if (SET === 'emails') body = '<div class="tpl-grid">' + Object.keys(TEMPLATES).map(function (k) { var t = TEMPLATES[k]; return '<section class="card"><header class="card-h"><h3>' + t.t + '</h3><span class="muted small">' + ({ confirm: 'Sent when a booking is made', eft: 'Sent 3 days after an unpaid EFT invoice', balance: 'Sent 10 days before arrival', arrival: 'Sent 3 days before arrival', thanks: 'Sent the day after departure' })[k] + '</span></header><p class="small"><b>' + esc(t.s) + '</b></p><pre class="tpl">' + esc(t.b({})) + '</pre></section>'; }).join('') + '</div><p class="demo-note">' + ic('info') + 'Words in {curly brackets} are filled in for each guest. In the live version these send automatically.</p>';
+    if (SET === 'emails') body = '<div class="tpl-grid">' + Object.keys(TEMPLATES).map(function (k) { var t = TEMPLATES[k]; return '<section class="card"><header class="card-h"><h3>' + t.t + '</h3><span class="muted small">' + ({ confirm: 'Sent when a booking is made', eft: 'Sent 3 days after an unpaid quotation', balance: 'Sent 10 days before arrival', arrival: 'Sent 3 days before arrival', thanks: 'Sent the day after departure' })[k] + '</span></header><p class="small"><b>' + esc(t.s) + '</b></p><pre class="tpl">' + esc(t.b({})) + '</pre></section>'; }).join('') + '</div><p class="demo-note">' + ic('info') + 'Words in {curly brackets} are filled in for each guest. In the live version these send automatically.</p>';
     if (SET === 'maps') body = '<p class="muted small me-intro">Move campsites, text and buildings, draw roads and footpaths, add new campsites, and change the game drive route and story of the "A day at Kyleu" scroll map. Press Save in the editor when you are done.</p><div class="me-wrap"><iframe class="me-frame" src="map-editor.html" title="Map editor"></iframe></div><div class="row-btns"><a class="btn ghost sm" href="map-editor.html" target="_blank" rel="noopener">' + ic('ext') + 'Open the editor full screen</a></div><p class="demo-note">' + ic('info') + 'Demo: Save updates the website maps in this browser. For the live site, press "Download map file" in the editor and replace assets/js/campmap-layout.js with it (or the live version saves it on the server).</p>';
     if (SET === 'sig') body = sigPage();
     if (SET === 'camp') body = '<div class="cols"><section class="card"><header class="card-h"><h3>Indemnity form</h3><button class="btn ghost sm" data-act="ind-print" data-ref="">' + ic('note') + 'Print a blank form</button></header><p class="muted small">Every adult signs it when their vehicle checks in, and staff tick it off per vehicle. The printed form has the booking and vehicle filled in.</p><label class="fld"><span>Wording</span><textarea data-indemnity rows="11">' + esc(indText()) + '</textarea></label><p class="hint">' + ic('alert') + ' This is example wording. Replace it with Kyleu\'s own indemnity, checked by a lawyer.</p></section>' +
@@ -2893,6 +2987,13 @@
     var rtb = t.closest('[data-ratetab]'); if (rtb) { var sb = $('[data-savebar]'); if (sb && !sb.hidden) { toast('Save or discard your changes first'); return; } RT.tab = rtb.dataset.ratetab; render(); return; }
     var hd = t.closest('[data-hol-del]'); if (hd) { var hdd = hd.dataset.holDel; if (DB.hol.add[hdd]) delete DB.hol.add[hdd]; else DB.hol.del[hdd] = 1; delete P.holidays[hdd]; log('Removed holiday ' + hdd); save(); render(); toast('Date removed'); return; }
     var se = t.closest('[data-set]'); if (se) { SET = se.dataset.set; render(); return; }
+    var dis = t.closest('[data-dismiss]'); if (dis) { DB.dismissed = DB.dismissed || {}; DB.dismissed[dis.dataset.dismiss] = TODAY; save(); render(); toast('Hidden. It comes back if anything changes.'); return; }
+    var ptb = t.closest('[data-ptab]'); if (ptb && drawerRef) {
+      PTAB = ptb.dataset.ptab; var pp = $('#drawer .d-panel'); refresh();
+      var tb = pp && $('.d-tabs', pp); if (pp && tb && pp.scrollTop > tb.offsetTop - 56) pp.scrollTop = tb.offsetTop - 56; return;
+    }
+    if (!t.closest('.d-more')) $$('.d-more[open]').forEach(function (d) { d.open = false; });
+    if (t.closest('.d-menu button')) { var dm = t.closest('.d-more'); if (dm) dm.open = false; }
     var ad = t.closest('[data-add]'); if (ad) { var ap = prodBy(ad.dataset.add); if (ap && ap.stock != null && (CART[ap.id] || 0) >= ap.stock) { toast('Only ' + ap.stock + ' in stock'); return; } CART[ad.dataset.add] = (CART[ad.dataset.add] || 0) + 1; render(); return; }
     var rm = t.closest('[data-rem]'); if (rm) { CART[rm.dataset.rem]--; if (CART[rm.dataset.rem] <= 0) delete CART[rm.dataset.rem]; render(); return; }
     var sl = t.closest('[data-sell]'); if (sl) { sell(sl.dataset.sell); return; }
@@ -2904,7 +3005,7 @@
     var a = t.closest('[data-act]'); if (!a) return;
     var act = a.dataset.act, ref = a.dataset.ref;
     if (act === 'menu') { document.body.classList.toggle('nav-open'); return; }
-    if (act === 'logout') { try { sessionStorage.removeItem(SESS); } catch (x) {} ME = null; location.hash = ''; login(); return; }
+    if (act === 'logout') { try { sessionStorage.removeItem(SESS); } catch (x) {} ME = null; F.q = ''; F.area = ''; F.stand = ''; F.src = ''; F.m = ''; F.from = ''; F.to = ''; location.hash = ''; login(); return; }
     if (act === 'new') return actNew();
     if (act === 'client-add') return actClient(null);
     if (act === 'news-new') return actPost(null);
@@ -2978,6 +3079,14 @@
     if (act === 'client-book') { closeModal(); return actNew({ cid: ref }); }
     if (act === 'client-mail') { var mc = clientById(ref); closeModal(); actNewMail(); var mf = $('#modal form'); if (mf && mc) mf.elements.to.value = mc.email; return; }
     if (act === 'pay') return actPay(ref);
+    if (act === 'pay-del') { var pdp = ref.split('|'), pb = byRef(pdp[0]), pi = +pdp[1], pp0 = pb && pb.payments[pi]; if (!pp0) return;
+      return modal('Remove this payment?', '<p><b>' + money(pp0.amt) + ' ' + esc(pp0.type) + '</b> (' + methodLabel(pp0.m) + ', ' + fd(pp0.d) + ') comes off ' + esc(guestName(pb)) + '\'s booking. Only do this for a payment entered by mistake. It is noted on the booking.</p><label class="fld"><span>Why (optional)</span><input name="why" placeholder="e.g. Typed R5 000 instead of R500"></label>', 'Remove payment', function (f) {
+        pb.payments.splice(pi, 1); var why = fval(f, 'why');
+        pb.notes.push({ at: nowStamp(), by: ME.name, text: 'Removed a payment of ' + money(pp0.amt) + ' (' + pp0.type + ', ' + fd(pp0.d) + ')' + (why ? ': ' + why : '') + '.' });
+        if (pb.status === 'confirmed' && paid(pb) === 0) pb.status = 'pending';
+        log('Payment of ' + money(pp0.amt) + ' removed from ' + pb.ref, pb.ref); save(); refresh(); toast('Payment removed');
+      }, { danger: true });
+    }
     if (act === 'remind') return actRemind(ref);
     if (act === 'cancel') return actCancel(ref);
     if (act === 'release') return actCancel(ref);
@@ -3020,7 +3129,7 @@
     var t = e.target;
     if (t.matches('[data-f=q]')) { F.q = t.value; var pos = t.selectionStart; render(); var i = $('[data-f=q]'); i.focus(); i.setSelectionRange(pos, pos); return; }
     if (t.matches('[data-gq]')) { GQ = t.value; var p2 = t.selectionStart; render(); var g = $('[data-gq]'); g.focus(); g.setSelectionRange(p2, p2); return; }
-    if (t.matches('[data-rate]')) { var sbar = $('[data-savebar]'); if (sbar) sbar.hidden = false; var ex = $('[data-example]'); if (ex) ex.innerHTML = exampleText(); var c = $('[data-cardof="' + t.dataset.rate.replace(/"/g, '\\"') + '"]'), v = parseFloat(t.value); if (c) c.textContent = v ? 'Card ' + money(toCard(v)) : ''; return; }
+    if (t.matches('[data-rate]')) { var sbar = $('[data-savebar]'); if (sbar) sbar.hidden = false; var ex = $('[data-example]'); if (ex) ex.innerHTML = exampleText(); var c = $('[data-cardof="' + t.dataset.rate.replace(/"/g, '\\"') + '"]'), v = parseFloat(t.value); if (c) c.textContent = v && hasFee() ? 'Card ' + money(toCard(v)) : ''; return; }
     if (t.matches('[data-q]')) { var qk = t.dataset.q, qp = qk.split(':'); FO(qp[0])[qp[1]] = t.value; resetPages(); var qpos = t.selectionStart; render(); var nq = $('[data-q="' + qk + '"]'); if (nq) { nq.focus(); nq.setSelectionRange(qpos, qpos); } return; }
     if (t.matches('[data-f=q],[data-gq],[data-inq],[data-payq],[data-shopq],[data-prodq]')) resetPages();
     if (t.matches('[data-inq],[data-payq],[data-shopq],[data-prodq]')) { var key = t.matches('[data-inq]') ? 'inq' : t.matches('[data-payq]') ? 'payq' : t.matches('[data-shopq]') ? 'shopq' : 'prodq'; if (key === 'inq') IN.q = t.value; if (key === 'payq') PAYF.q = t.value; if (key === 'shopq') SHOP.q = t.value; if (key === 'prodq') PROD.q = t.value; var ps = t.selectionStart; render(); var ni = $('[data-' + key + ']'); if (ni) { ni.focus(); ni.setSelectionRange(ps, ps); } return; }
@@ -3045,7 +3154,7 @@
     if (t.matches('[data-global]')) {
       var s = t.value.trim().toLowerCase(), box = $('[data-sugg]');
       if (s.length < 2) { box.hidden = true; return; }
-      var r = DB.bookings.filter(function (b) { return (b.ref + ' ' + guestName(b) + ' ' + b.guest.phone + ' ' + b.guest.email).toLowerCase().indexOf(s) >= 0; }).slice(-6).reverse();
+      var r = DB.bookings.filter(function (b) { return bHit(b, s); }).slice(-6).reverse();
       box.innerHTML = r.length ? r.map(function (b) { return '<button data-open="' + b.ref + '"><b>' + esc(guestName(b)) + '</b><small>' + esc(b.ref) + ' · ' + esc(standById(b.stand).name) + ' · ' + fd(b.ci) + '</small></button>'; }).join('') : '<p class="muted small">No bookings found</p>';
       box.hidden = false;
     }
@@ -3105,7 +3214,7 @@
     });
     document.addEventListener('focusout', function (e) { if (e.target.matches('[data-global]')) setTimeout(function () { var s = $('[data-sugg]'); if (s) s.hidden = true; }, 200); });
     var rsz; window.addEventListener('resize', function () { clearTimeout(rsz); rsz = setTimeout(function () { if ($('[data-rpc]')) rpDrawCharts(true); }, 120); });
-    window.addEventListener('hashchange', function () { document.body.classList.remove('nav-open'); if (ME) { render(); window.scrollTo(0, 0); } });
+    window.addEventListener('hashchange', function () { document.body.classList.remove('nav-open'); if (!$('#modal').hidden) closeModal(true); if (drawerRef) closeDrawer(true); if (ME) { render(); window.scrollTo(0, 0); } });
     // pick up website demo bookings made in another tab
     window.addEventListener('storage', function (e) { if (e.key === WEB && ME && importWeb()) { render(); toast('New booking from the website'); } if (e.key === POPK && ME && importPop()) { render(); toast('Proof of payment uploaded on the website'); } });
     Promise.all([K.prices(), K.stands()]).then(function (r) {

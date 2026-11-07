@@ -1191,3 +1191,84 @@ html:has(body.lock) { overflow: hidden; }
 @keyframes soft-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(178,58,42,.0); } 50% { box-shadow: 0 0 0 5px rgba(178,58,42,.15); } }
 @media (prefers-reduced-motion: reduce) { .soft-alert { animation: none; } }
 
+/* ---------- the booking screen ---------- */
+.d-panel { width: min(660px, 100%); }
+.dh-bar { position: sticky; top: 0; z-index: 4; display: flex; align-items: center; gap: 10px; padding: 10px 14px 10px 20px; background: var(--card); border-bottom: 1px solid var(--line); min-height: 56px; }
+.dh-ref { display: inline-flex; align-items: center; gap: 6px; font-size: .95rem; white-space: nowrap; }
+.dh-ref b { letter-spacing: .02em; }
+.dh-pills { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.d-head { position: static; display: block; padding: 16px 20px 14px; background: var(--card); border-bottom: 1px solid var(--line); }
+.dh-name { margin: 0 0 6px; font-family: var(--display); font-size: 1.6rem; line-height: 1.15; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.dh-name .pill { font-family: var(--font); font-size: .74rem; }
+.dh-sum { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 12px; color: var(--ink-2); font-size: .92rem; }
+.dh-sum > span { display: inline-flex; align-items: center; gap: 6px; }
+.dh-sum .ic { width: 16px; height: 16px; color: var(--sun-d); flex: none; }
+.dh-money { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 10px; padding: 12px 14px 10px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-sm); margin-bottom: 10px; }
+.dh-money small { display: block; font-size: .74rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.dh-money b { font-family: var(--display); font-size: 1.25rem; }
+.dh-bar-p { grid-column: 1 / -1; height: 6px; border-radius: 6px; background: var(--line); overflow: hidden; }
+.dh-bar-p i { display: block; height: 100%; background: var(--ok); border-radius: 6px; }
+.dh-hold { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 10px; padding: 9px 12px; border-radius: var(--r-sm); background: var(--warn-bg); color: #6b3c00; font-size: .9rem; }
+.dh-hold.bad { background: var(--bad-bg); color: #6d1d12; }
+.dh-hold .ic { width: 18px; height: 18px; flex: none; margin-top: 1px; }
+.d-head .d-actions { margin: 4px 0 0; }
+.d-more { position: relative; }
+.d-more > summary { list-style: none; }
+.d-more > summary::-webkit-details-marker { display: none; }
+.d-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 6; min-width: 250px; padding: 6px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r-sm); box-shadow: 0 16px 40px -16px rgba(42,27,18,.45); }
+.d-menu button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: 0; background: none; border-radius: 8px; text-align: left; font-weight: 700; }
+.d-menu button:hover { background: var(--line-2); }
+.d-menu button .ic { width: 18px; height: 18px; color: var(--ink-2); }
+.d-menu button.danger-t, .d-menu button.danger-t .ic { color: var(--bad); }
+.d-tabs { position: sticky; top: 56px; z-index: 3; display: flex; gap: 4px; padding: 8px 14px; background: var(--bg); border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.d-tabs::-webkit-scrollbar { display: none; }
+.d-tabs button { flex: none; padding: 9px 14px; border: 0; border-radius: 999px; background: none; font-weight: 800; font-size: .9rem; color: var(--ink-2); white-space: nowrap; }
+.d-tabs button:hover { background: var(--line-2); }
+.d-tabs button.on { background: var(--ink); color: #fff; }
+.d-body { padding: 14px 20px 40px; }
+.d-contact { display: flex; flex-wrap: wrap; gap: 8px; }
+.d-contact .chip { max-width: 100%; min-width: 0; }
+.d-contact .ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.kv.kv2 { grid-template-columns: 110px 1fr; }
+.note-li { position: relative; }
+.note-form { display: flex; gap: 8px; margin: 0 0 12px; }
+.note-form input { flex: 1; min-width: 0; }
+.timeline li { position: relative; }
+.timeline li > .icon-btn { margin-left: auto; align-self: center; }
+.note.bad-t { color: var(--bad); }
+@media (max-width: 640px) {
+  .dh-bar { padding: 8px 10px 8px 14px; min-height: 52px; }
+  .dh-ref .muted { display: none; }
+  .d-head { padding: 14px 14px 12px; }
+  .dh-name { font-size: 1.35rem; }
+  .dh-money { padding: 10px; }
+  .dh-money b { font-size: 1.05rem; }
+  .d-tabs { top: 52px; padding: 8px 10px; }
+  .d-body { padding: 12px 12px 40px; }
+  .d-head .d-actions .btn { flex: 1 1 auto; justify-content: center; }
+  .d-menu { left: 0; right: auto; min-width: 240px; }
+  .kv.kv2 { grid-template-columns: 92px 1fr; }
+}
+.dh-hold.calm { background: var(--info-bg); color: #164d78; }
+.dgr-how { margin: 0 0 10px; }
+.dgr-how summary { cursor: pointer; font-weight: 800; font-size: .88rem; color: var(--sun-d); }
+.dgr-how .dgr-steps { margin-top: 8px; }
+/* Needs attention: a Done button on every item */
+.attn li { display: flex; align-items: stretch; gap: 6px; }
+.attn li > button:first-child { flex: 1; min-width: 0; }
+.attn li > button.attn-x { flex: none; width: 40px; height: 40px; align-self: center; padding: 0; gap: 0; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--card); color: var(--muted); display: grid; place-items: center; }
+.attn li > button.attn-x:hover { color: var(--ok); border-color: var(--ok); background: var(--ok-bg); }
+.attn-x .ic { width: 18px; height: 18px; }
+.legend .lg.out { background: #e6ddd0; border: 1px solid #cdbfac; }
+.cal-swipe { display: none; margin: 4px 0 8px; }
+@media (max-width: 760px) { .cal-swipe { display: flex; gap: 6px; align-items: center; } .cal-swipe .ic { width: 15px; height: 15px; } }
+/* bookings: the extra filters fold away on phones */
+.more-filters > summary { display: none; }
+@media (max-width: 760px) {
+  .more-filters { margin: 0 0 10px; }
+  .more-filters > summary { display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); font-weight: 800; font-size: .9rem; cursor: pointer; list-style: none; }
+  .more-filters > summary::-webkit-details-marker { display: none; }
+  .more-filters > summary .ic { width: 16px; height: 16px; }
+  .more-filters[open] > summary { margin-bottom: 10px; }
+}
+
