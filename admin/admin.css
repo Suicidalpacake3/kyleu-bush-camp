@@ -1271,4 +1271,10 @@ html:has(body.lock) { overflow: hidden; }
   .more-filters > summary .ic { width: 16px; height: 16px; }
   .more-filters[open] > summary { margin-bottom: 10px; }
 }
+/* edit pop-ups: Delete at the bottom, with its own "are you sure" */
+.del-box { margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--line); }
+.del-box > p { margin: 0 0 8px; display: flex; gap: 6px; align-items: flex-start; }
+.del-box > p .ic { width: 15px; height: 15px; flex: none; margin-top: 2px; }
+.del-confirm { margin-top: 4px; padding: 12px 14px; border: 1.5px solid var(--bad); border-radius: var(--r-sm); background: var(--bad-bg); }
+.del-confirm p { margin: 0 0 10px; color: #6d1d12; }
 

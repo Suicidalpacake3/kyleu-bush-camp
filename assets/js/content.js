@@ -171,7 +171,7 @@
   function mergeLocal(posts) {
     var x = null; try { x = JSON.parse(localStorage.getItem('kyleu-web-news') || 'null'); } catch (e) {}
     if (!x) return posts;
-    var hide = x.hidden || {}, own = (x.posts || []).filter(function (p) { return !p.draft && p.title && !hide[p.slug]; }), mine = {};
+    var hide = Object.assign({}, x.hidden || {}, x.deleted || {}), own = (x.posts || []).filter(function (p) { return !p.draft && p.title && !hide[p.slug]; }), mine = {};
     own.forEach(function (p) { mine[p.slug] = 1; });
     var out = posts.filter(function (p) { return !hide[p.slug] && !mine[p.slug]; }).concat(own.map(function (p) { return { title: p.title, slug: p.slug, date: p.date, image: p.image || '', summary: p.summary || '', tags: p.tags || [], body: p.body || '' }; }));
     out.sort(function (a, b) { return a.date < b.date ? 1 : -1; });
@@ -239,7 +239,7 @@
       var x = null; try { x = JSON.parse(localStorage.getItem('kyleu-web-dgr') || 'null'); } catch (e) {}
       if (x) {
         var over = x.over || {};
-        list = list.map(function (it) { return Object.assign({}, it, over[it.slug] || {}); }).concat((x.items || []).map(function (it) { return Object.assign({ src: 'admin' }, it); }));
+        list = list.map(function (it) { return Object.assign({}, it, over[it.slug] || {}); }).filter(function (it) { return !it.deleted; }).concat((x.items || []).map(function (it) { return Object.assign({ src: 'admin' }, it); }));
       }
       return Promise.all(list.map(function (it) {
         var jobs = [];

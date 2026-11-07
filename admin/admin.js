@@ -1064,11 +1064,24 @@
   /* ---------- camp news: posts for the website's news page ---------- */
   var MDPOSTS = null, MDLOAD = false, NEWSK = 'kyleu-web-news';
   function loadMd() { if (MDLOAD) return; MDLOAD = true; if (!K.blogFile) { MDPOSTS = []; return; } K.blogFile().then(function (p) { MDPOSTS = p; }).catch(function () { MDPOSTS = []; }).then(function () { var v = route(); if (v === 'news' || v === 'dashboard') render(); }); }
-  function newsDB() { DB.news = DB.news || { posts: [], hidden: {} }; DB.news.hidden = DB.news.hidden || {}; return DB.news; }
+  function newsDB() { DB.news = DB.news || { posts: [], hidden: {} }; DB.news.hidden = DB.news.hidden || {}; DB.news.deleted = DB.news.deleted || {}; return DB.news; }
+  // Delete at the bottom of an edit pop-up: asks first, right there, so the pop-up stays open if you change your mind
+  function delBox(what) {
+    return '<div class="del-box" data-delbox><p class="muted small">' + ic('info') + '<span><b>Hide</b> takes it off the website but keeps it here, so you can show it again later. <b>Delete</b> removes it for good.</span></p>' +
+      '<button type="button" class="btn ghost sm danger-t" data-del-ask>' + ic('x') + 'Delete this ' + what + '</button>' +
+      '<div class="del-confirm" data-del-confirm hidden><p><b>Delete this ' + what + '?</b> It disappears from the website. This cannot be undone.</p><div class="row-btns"><button type="button" class="btn ghost sm" data-del-keep>Keep it</button><button type="button" class="btn sm danger" data-del-yes>' + ic('x') + 'Yes, delete it</button></div></div></div>';
+  }
+  function wireDel(f, onYes) {
+    var ask = $('[data-del-ask]', f), box = $('[data-del-confirm]', f); if (!ask) return;
+    ask.addEventListener('click', function () { ask.hidden = true; box.hidden = false; $('[data-del-keep]', box).focus(); });
+    $('[data-del-keep]', box).addEventListener('click', function () { box.hidden = true; ask.hidden = false; ask.focus(); });
+    $('[data-del-yes]', box).addEventListener('click', onYes);
+  }
+
   function pushNews() { try { localStorage.setItem(NEWSK, JSON.stringify(newsDB())); } catch (e) { toast('This browser is out of space. Try a smaller photo.'); } }
   function allPosts() {
     var N = newsDB(), mine = {}; N.posts.forEach(function (p) { mine[p.slug] = 1; });
-    var out = (MDPOSTS || []).filter(function (p) { return !mine[p.slug]; }).map(function (p) { return { key: 'f:' + p.slug, src: 'file', slug: p.slug, title: p.title, date: p.date, image: p.image, summary: p.summary, tags: p.tags, body: p.body, hidden: !!N.hidden[p.slug] }; });
+    var out = (MDPOSTS || []).filter(function (p) { return !mine[p.slug] && !N.deleted[p.slug]; }).map(function (p) { return { key: 'f:' + p.slug, src: 'file', slug: p.slug, title: p.title, date: p.date, image: p.image, summary: p.summary, tags: p.tags, body: p.body, hidden: !!N.hidden[p.slug] }; });
     N.posts.forEach(function (p) { out.push(Object.assign({}, p, { key: 'a:' + p.id, src: p.of ? 'edited' : 'admin', hidden: !!N.hidden[p.slug] })); });
     return out.sort(function (a, b) { return a.date < b.date ? 1 : -1; });
   }
@@ -1081,7 +1094,7 @@
       '<div class="news-status ' + (fresh ? 'fresh' : 'quiet') + '">' + ic(fresh ? 'check' : 'clock') + '<div>' + (MDPOSTS === null ? 'Loading posts…' : ago === null ? '<b>No posts yet.</b> The news page shows a "nothing new this week" note until the first one.' : fresh ? '<b>Fresh news is on the website.</b> The latest post went up ' + (ago === 0 ? 'today' : ago === 1 ? 'yesterday' : ago + ' days ago') + '.' : '<b>Last post ' + ago + ' days ago.</b> The news page still shows your recent posts, but a fresh one keeps it alive. A short note about sightings, the weather or camp news is plenty.') + '</div></div>' +
       '<div class="card flush"><table class="tbl"><thead><tr><th>Post</th><th>Date</th><th>Tags</th><th>Status</th></tr></thead><tbody>' +
       (ps.length ? ps.map(function (p) { return '<tr data-post="' + esc(p.key) + '" tabindex="0"><td data-l="Post"><span class="post-row">' + (p.image ? '<img src="' + esc(imgSrc(p.image)) + '" alt="">' : '<span class="post-noimg">' + ic('image') + '</span>') + '<span><b>' + esc(p.title) + '</b><small>' + esc(p.summary || '') + '</small></span></span></td><td data-l="Date" data-s="' + esc(p.date) + '">' + fd(p.date, { day: 'numeric', month: 'short', year: 'numeric' }) + '</td><td data-l="Tags">' + ((p.tags || []).map(function (t) { return '<span class="tag">' + esc(t) + '</span>'; }).join('') || '<span class="muted">None</span>') + '</td><td data-l="Status">' + pill(postState(p)) + '</td></tr>'; }).join('') : '<tr><td colspan="4" class="empty">No posts yet.</td></tr>') + '</tbody></table></div>' +
-      '<p class="demo-note">' + ic('info') + 'Demo: posts you publish here show on the website\'s news page in this browser. In the live version they are saved on the server (or in WordPress), so every visitor sees them.</p>';
+      '<p class="demo-note">' + ic('info') + 'Demo: posts you publish or delete here change the website\'s news page in this browser. In the live version they are saved on (or deleted from) the server, so every visitor sees the change.</p>';
   }
   /* =========================================================
      Dinokeng updates: the Bush Telegraph, the magazine, Dinokeng news
@@ -1096,7 +1109,7 @@
   function dgrLoad() { if (DGRLOAD) return; DGRLOAD = true; K.dgrFile().then(function (l) { DGRMD = l; }).catch(function () { DGRMD = []; }).then(function () { if (route() === 'dgrnews') render(); }); }
   function dgrAll() {
     var X = dgrDB();
-    return (DGRMD || []).map(function (it) { return Object.assign({}, it, X.over[it.slug] || {}, { key: 'f:' + it.slug }); })
+    return (DGRMD || []).filter(function (it) { return !(X.over[it.slug] || {}).deleted; }).map(function (it) { return Object.assign({}, it, X.over[it.slug] || {}, { key: 'f:' + it.slug }); })
       .concat(X.items.map(function (it) { return Object.assign({ src: 'admin' }, it, { key: 'a:' + it.id }); }))
       .sort(function (a, b) { return (!!b.pinned - !!a.pinned) || (a.date < b.date ? 1 : -1); });
   }
@@ -1125,7 +1138,7 @@
         return '<button type="button" class="brow dgr-row' + (x.hidden ? ' off' : '') + '" data-act="dgr-edit" data-ref="' + esc(x.key) + '"><span class="dgr-th">' + th + '</span><span class="brow-g"><b>' + esc(x.title) + '</b><small>' + esc(x.type) + (x.date ? ' · ' + fd(x.date) : '') + (x.file || x.fileKey ? ' · PDF' + (x.size ? ' ' + esc(x.size) : '') : '') + (x.link ? ' · link' : '') + '</small></span>' +
           (x.pinned ? '<span class="pill info">Shown first</span>' : '') + (x.hidden ? '<span class="pill muted">Hidden</span>' : '<span class="pill ok">Shown</span>') + ic('chev-r') + '</button>';
       }).join('') + '</div>' : '<p class="empty">Nothing yet. Press Add an update.</p>') + '</section>' +
-      '<p class="demo-note">' + ic('info') + 'How it looks on the website: a cover (made from the PDF\'s first page if you do not add one), the kind and date, your heading and a few sentences, and buttons to read or download it. Demo: changes and uploads stay in this browser. In the live version they are saved on the server, so every visitor sees them. Ask Dinokeng before posting newsletters that were only meant for partners.</p>';
+      '<p class="demo-note">' + ic('info') + 'How it looks on the website: a cover (made from the PDF\'s first page if you do not add one), the kind and date, your heading and a few sentences, and buttons to read or download it. Demo: changes, uploads and deletes stay in this browser. In the live version they are saved on (or deleted from) the server, so every visitor sees them. Ask Dinokeng before posting newsletters that were only meant for partners.</p>';
   }
   function actDgr(key) {
     var X = dgrDB(), it = key ? dgrGet(key) : null, isFile = it && it.src === 'file', d = it || { type: 'Bush Telegraph', title: '', date: TODAY, text: '', link: '', button: '', pinned: false, hidden: false };
@@ -1139,7 +1152,7 @@
       '<label class="fld"><span>Cover picture (optional: without one, the cover is made from the PDF\'s first page)</span><input type="file" name="cover" accept="image/*"></label>' +
       '<label class="check"><input type="checkbox" name="pinned"' + (d.pinned ? ' checked' : '') + '><span>Show it first (featured at the top)</span></label>' +
       '<label class="check"><input type="checkbox" name="shown"' + (d.hidden ? '' : ' checked') + '><span>Show it on the website</span></label>' +
-      (it && !isFile ? '<div class="m-acts left"><button type="button" class="btn ghost sm danger-t" data-dgr-del>' + ic('x') + 'Delete</button></div>' : ''),
+      (it ? delBox('update') : ''),
       it ? 'Save' : 'Add update', function (f) {
         var v = { type: fval(f, 'type'), title: fval(f, 'title'), date: fval(f, 'date'), text: f.elements.text.value.trim(), link: fval(f, 'link'), button: fval(f, 'button'), pinned: !!fval(f, 'pinned'), hidden: !fval(f, 'shown') };
         var pdf = f.elements.pdf.files[0], cov = f.elements.cover.files[0];
@@ -1158,8 +1171,13 @@
           log((it ? 'Updated' : 'Added') + ' Dinokeng update: ' + v.title); dgrPush(); render(); toast(it ? 'Saved' : 'Added. It shows on the Dinokeng page now.');
         }).catch(function () { toast('The file could not be saved in this browser.'); });
       }, { wide: true, noFocus: true, onOpen: function (f) {
-        var del = $('[data-dgr-del]', f);
-        if (del) del.addEventListener('click', function () { var x = X.items.filter(function (y) { return y.id === it.id; })[0]; X.items.splice(X.items.indexOf(x), 1); if (x.fileKey) K.files.del(x.fileKey); if (x.coverKey) K.files.del(x.coverKey); log('Deleted Dinokeng update: ' + x.title); dgrPush(); closeModal(); render(); toast('Deleted'); });
+        if (it) wireDel(f, function () {
+          // one added here is removed with its uploaded PDF and cover; one from dinokeng-updates.md is marked deleted so it never shows again
+          var up = isFile ? (X.over[it.slug] || {}) : X.items.filter(function (y) { return y.id === it.id; })[0] || {};
+          if (up.fileKey) K.files.del(up.fileKey); if (up.coverKey) K.files.del(up.coverKey);
+          if (isFile) X.over[it.slug] = { deleted: true }; else X.items.splice(X.items.indexOf(up), 1);
+          log('Deleted Dinokeng update: ' + it.title); dgrPush(); closeModal(); render(); toast('Deleted. It is gone from the Dinokeng page.');
+        });
       } });
   }
   /* =========================================================
@@ -1237,7 +1255,7 @@
       '<label class="fld"><span>The story</span><textarea name="body" rows="9" placeholder="Write it like a short message to your guests.">' + esc(d.body || '') + '</textarea></label>' +
       '<p class="hint">Tips: a line starting with ### is a sub-heading, a line starting with - is a bullet, and **words** are bold.</p>' +
       '<label class="check"><input type="checkbox" name="draft"' + (d.draft ? ' checked' : '') + '><span>Save as a draft (not on the website yet)</span></label>' +
-      '<div class="m-acts left"><button type="button" class="btn ghost sm" data-post-copy>' + ic('note') + 'Copy as blog.md text</button>' + (hideSlug ? '<button type="button" class="btn ghost sm" data-post-hide>' + (N.hidden[hideSlug] ? 'Show on the website again' : 'Hide from the website') + '</button>' : '') + (a && !a.of ? '<button type="button" class="btn ghost sm danger-t" data-post-del>' + ic('x') + 'Delete post</button>' : '') + '</div>',
+      '<div class="m-acts left"><button type="button" class="btn ghost sm" data-post-copy>' + ic('note') + 'Copy as blog.md text</button>' + (hideSlug ? '<button type="button" class="btn ghost sm" data-post-hide>' + (N.hidden[hideSlug] ? 'Show on the website again' : 'Hide from the website') + '</button>' : '') + '</div>' + (isNew ? '' : delBox('post')),
       isNew ? 'Publish' : 'Save', function (f) {
         var v = { title: fval(f, 'title'), date: fval(f, 'date') || TODAY, tags: fval(f, 'tags').split(',').map(function (t) { return t.trim(); }).filter(Boolean), summary: fval(f, 'summary'), body: fval(f, 'body'), image: img, draft: fval(f, 'draft') };
         if (!v.title) { toast('Give the post a title'); return false; }
@@ -1249,13 +1267,19 @@
         pushNews(); log((isNew ? 'Published' : 'Updated') + ' news post "' + v.title + '"' + (v.draft ? ' (draft)' : '')); save(); render();
         toast(v.draft ? 'Draft saved' : isNew ? 'Post published on the news page' : 'Post saved');
       }, { wide: true, onOpen: function (f) {
+        wireDel(f, function () {
+          // a post made here is removed; a post from blog.md (or an edited copy of one) is marked deleted so it never shows again
+          if (a) N.posts.splice(N.posts.indexOf(a), 1);
+          if (f0 || (a && a.of)) N.deleted[f0 ? f0.slug : a.of] = 1;
+          if (hideSlug) delete N.hidden[hideSlug];
+          pushNews(); log('Deleted news post "' + d.title + '"'); save(); closeModal(); render(); toast('Post deleted. It is gone from the news page.');
+        });
         var box = $('[data-post-img]', f);
         f.addEventListener('change', function (e) { if (!e.target.matches('[data-post-file]')) return; var file = e.target.files && e.target.files[0]; if (file) shrink(file, function (url) { img = url; box.innerHTML = postImgHTML(img); }); });
         f.addEventListener('click', function (e) {
           var t = e.target;
           if (t.closest('[data-post-noimg]')) { img = ''; box.innerHTML = postImgHTML(''); return; }
           if (t.closest('[data-post-copy]')) { copyText(postMd({ title: fval(f, 'title'), date: fval(f, 'date'), image: img, summary: fval(f, 'summary'), tags: fval(f, 'tags'), body: fval(f, 'body') }), 'Copied. Paste it at the top of content/blog.md'); return; }
-          if (t.closest('[data-post-del]')) { N.posts.splice(N.posts.indexOf(a), 1); pushNews(); log('Deleted news post "' + a.title + '"'); save(); closeModal(); render(); toast('Post deleted'); return; }
           if (t.closest('[data-post-hide]')) { if (N.hidden[hideSlug]) delete N.hidden[hideSlug]; else N.hidden[hideSlug] = 1; pushNews(); log((N.hidden[hideSlug] ? 'Hid' : 'Showed') + ' news post "' + d.title + '"'); save(); closeModal(); render(); toast(N.hidden[hideSlug] ? 'Hidden from the website' : 'Back on the website'); return; }
         });
       } });
