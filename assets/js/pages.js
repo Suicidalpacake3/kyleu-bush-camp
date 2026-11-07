@@ -89,19 +89,23 @@
         var fbUrl = S.get('Facebook', ''), fbOn = so.posts ? so.fbFeed !== false : !/^off|no/i.test(S.get('Facebook feed', 'on'));
         var post = function (x) {
           var u = x.url, ig = u.match(/instagram\.com\/(?:[\w.]+\/)?(p|reel|tv)\/([\w-]+)/i), host = u.replace(/^https?:\/\/(www\.)?/, '').split('/')[0];
-          if (ig) return '<figure class="soc-embed ig" data-reveal><iframe src="https://www.instagram.com/' + ig[1] + '/' + ig[2] + '/embed/captioned/" title="' + esc(x.title || 'Instagram post') + '" loading="lazy" allowtransparency="true" scrolling="no"></iframe><figcaption>' + esc(x.title) + (x.by ? ' · ' + esc(x.by) : '') + '</figcaption></figure>';
-          if (/facebook\.com\/.+\/(posts|videos|photos)|facebook\.com\/(permalink|photo|watch)|fb\.watch/i.test(u)) return '<figure class="soc-embed fb" data-reveal><iframe src="https://www.facebook.com/plugins/post.php?href=' + encodeURIComponent(u) + '&show_text=true&width=500" title="' + esc(x.title || 'Facebook post') + '" loading="lazy" scrolling="no" allow="encrypted-media"></iframe><figcaption>' + esc(x.title) + (x.by ? ' · ' + esc(x.by) : '') + '</figcaption></figure>';
+          if (ig) return '<figure class="soc-embed ig" data-reveal><iframe data-url="' + esc(u) + '" src="https://www.instagram.com/' + ig[1] + '/' + ig[2] + '/embed/captioned/" title="' + esc(x.title || 'Instagram post') + '" loading="lazy" allowtransparency="true" scrolling="no"></iframe><figcaption>' + esc(x.title) + (x.by ? ' · ' + esc(x.by) : '') + '</figcaption></figure>';
+          if (/facebook\.com\/.+\/(posts|videos|photos)|facebook\.com\/(permalink|photo|watch)|fb\.watch/i.test(u)) return '<figure class="soc-embed fb" data-reveal><iframe data-url="' + esc(u) + '" src="https://www.facebook.com/plugins/post.php?href=' + encodeURIComponent(u) + '&show_text=true&width=500" title="' + esc(x.title || 'Facebook post') + '" loading="lazy" scrolling="no" allow="encrypted-media"></iframe><figcaption>' + esc(x.title) + (x.by ? ' · ' + esc(x.by) : '') + '</figcaption></figure>';
           var kind = /instagram/i.test(host) ? 'ig' : /facebook|fb\./i.test(host) ? 'fb' : /youtu/i.test(host) ? 'yt' : 'blog';
           return '<a class="gstory" href="' + esc(u) + '" target="_blank" rel="noopener" data-reveal><span class="story-ic ' + kind + '"><svg><use href="#' + (kind === 'ig' ? 'i-ig' : kind === 'fb' ? 'i-fb' : 'i-news') + '"/></svg></span><span><b>' + esc(x.title) + '</b><small>' + esc(x.by || host) + '</small></span><span class="link-arrow">Read</span></a>';
         };
         var live = (igFeed ? '<div class="soc-live-ig"><h3><svg><use href="#i-ig"/></svg>Latest on Instagram</h3><div class="ig-grid" data-ig-grid><p class="muted">Loading photos…</p></div></div>' : '') +
-          (fbOn && fbUrl ? '<div class="soc-live-fb"><h3><svg><use href="#i-fb"/></svg>Latest on Facebook</h3><div class="fb-feed"><iframe src="https://www.facebook.com/plugins/page.php?href=' + encodeURIComponent(fbUrl) + '&tabs=timeline&width=500&height=620&small_header=true&adapt_container_width=true&hide_cover=false&show_facepile=false" title="Kyleu Bush Camp on Facebook" loading="lazy" scrolling="no" allow="encrypted-media"></iframe></div></div>' : '');
+          (fbOn && fbUrl ? '<div class="soc-live-fb"><h3><svg><use href="#i-fb"/></svg>On Facebook</h3><a class="fb-card" href="' + esc(fbUrl) + '" target="_blank" rel="noopener"><span class="fb-ic"><svg><use href="#i-fb"/></svg></span><span class="fb-txt"><b>Kyleu Bush Camp</b><small>Camp news, sightings and photos from our guests</small></span><span class="btn btn-sm">See our page</span></a></div>' : '');
         var embeds = posts.filter(function (x) { return /instagram\.com\/(?:[\w.]+\/)?(p|reel|tv)\/|facebook\.com\/.+\/(posts|videos|photos)|facebook\.com\/(permalink|photo|watch)|fb\.watch/i.test(x.url); }), links = posts.filter(function (x) { return embeds.indexOf(x) < 0; });
         el.innerHTML = (live ? '<div class="soc-live' + (igFeed && fbOn && fbUrl ? ' two' : '') + '">' + live + '</div>' : '') +
           (embeds.length ? '<div class="soc-embeds">' + embeds.map(post).join('') + '</div>' : '') +
           (links.length ? '<div class="stories">' + links.map(post).join('') + '</div>' : '') ||
           '<p class="muted">Guest stories will appear here.</p>';
         el.classList.remove('stories');
+        $$('.soc-embed iframe', el).forEach(function (fr) {
+          var done = false; fr.addEventListener('load', function () { done = true; });
+          setTimeout(function () { if (done) return; var fig = fr.closest('.soc-embed'), u = fr.getAttribute('data-url') || ''; if (fig) fig.outerHTML = '<a class="gstory" href="' + esc(u) + '" target="_blank" rel="noopener"><span class="story-ic ' + (/instagram/.test(u) ? 'ig' : 'fb') + '"><svg><use href="#' + (/instagram/.test(u) ? 'i-ig' : 'i-fb') + '"/></svg></span><span><b>' + esc(fr.title || 'See the post') + '</b><small>Open the post</small></span><span class="link-arrow">Open</span></a>'; }, 15000);
+        });
         // the live Instagram photos come through the feed Kyleu connected (Behold); each opens the post on Instagram
         var grid = $('[data-ig-grid]', el);
         if (grid) fetch('https://feeds.behold.so/' + encodeURIComponent(igFeed)).then(function (r) { if (!r.ok) throw r; return r.json(); }).then(function (d) {
