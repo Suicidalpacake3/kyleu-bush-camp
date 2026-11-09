@@ -544,7 +544,7 @@
       return { t: l.t, amt: amt, tag: l.shop ? 'shop' : 'extra' };
     }));
     var isQuote = !paid;
-    return { kind: isQuote ? 'Quote' : 'Invoice', no: K.takeNo ? K.takeNo(isQuote ? 'Quote' : 'Invoice') : K.invoiceNo(ref, 'Invoice', 1), date: iso(t), ref: ref, validTo: isQuote ? iso(q.payFull ? q.fullDue : due) : '',
+    return { id: K.docId ? K.docId() : '', kind: isQuote ? 'Quote' : 'Invoice', no: K.takeNo ? K.takeNo(isQuote ? 'Quote' : 'Invoice', ref) : K.invoiceNo(ref, 'Invoice', 1), date: iso(t), ref: ref, validTo: isQuote ? iso(q.payFull ? q.fullDue : due) : '',
       guest: { name: (fv('first') + ' ' + fv('last')).trim(), email: fv('email'), phone: fv('phone') },
       stay: { stand: booking.stand.name, ci: iso(booking.ci), co: iso(booking.co), nights: q.nights, guests: a + ' adult' + (a === 1 ? '' : 's') + (g.pens ? ' (' + g.pens + ' pensioner' + (g.pens === 1 ? '' : 's') + ')' : '') + (g.kids ? ', ' + g.kids + ' child' + (g.kids === 1 ? '' : 'ren') : ''), vehicles: cv.count || '' },
       lines: lines, total: isCard ? q.cardTotal : q.total, paid: paid, deposit: isCard ? q.cardDeposit : q.deposit, depPct: q.depPct, depositDue: iso(q.payFull ? q.fullDue : due), balanceDue: iso(q.balanceDue), payFull: q.payFull };

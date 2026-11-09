@@ -646,9 +646,9 @@
         var newInv = null, docs0 = b.invoices || [];
         if (!docs0.some(function (x) { return x.kind === 'Invoice'; })) {
           var lastQ = docs0.filter(function (x) { return x.kind === 'Quote'; }).pop();
-          newInv = invFor(b, 'Invoice', null, { by: ME.name, note: lastQ ? 'Replaces quotation ' + lastQ.no + '.' : '' });
+          newInv = invFor(b, 'Invoice', null, { by: ME.name, note: lastQ && lastQ.no !== nextInvNo(b, 'Invoice') ? 'Replaces quotation ' + lastQ.no + '.' : '' });
           b.invoices = docs0; b.invoices.push(newInv); K.commitNo('Invoice', newInv.no);
-          log((lastQ ? 'Quotation ' + lastQ.no + ' is now ' : 'Made ') + K.kindName(newInv).toLowerCase() + ' ' + newInv.no + ' for ' + guestName(b), b.ref);
+          log((lastQ ? 'Quotation ' + (lastQ.no === newInv.no ? '' : lastQ.no + ' ') + 'is now ' : 'Made ') + K.kindName(newInv).toLowerCase() + ' ' + newInv.no + ' for ' + guestName(b), b.ref);
         }
         if (b.paidClaim) { b.notes.push({ at: nowStamp(), by: ME.name, text: 'Payment the guest told us about is confirmed: ' + money(amt) + ' is in the bank.' }); b.paidClaim = null; if (b.status !== 'pending') b.pop = false; }
         log(money(amt) + ' ' + methodLabel(m) + ' payment recorded on ' + b.ref, b.ref); save(); refresh(); toast(money(amt) + ' recorded');
@@ -1847,7 +1847,7 @@
     if (Math.round(sum) !== Math.round(b.total)) L.push({ t: 'Discount or adjustment', amt: b.total - sum, tag: 'adj' });
     return L;
   }
-  function nextInvNo(b, kind) { return K.peekNo(kind); }
+  function nextInvNo(b, kind) { return K.peekNo(kind, b.ref); }
   // the document to send now: a quotation until a payment is in, then an invoice; the last one again if nothing changed
   function curDoc(b) {
     var list = b.invoices || [], last = list[list.length - 1], kind = paid(b) > 0 ? 'Invoice' : 'Quote';
@@ -1856,22 +1856,23 @@
   }
   function invFor(b, kind, lines, extra) {
     kind = kind || 'Invoice'; lines = lines || invLines(b);
-    return Object.assign({ kind: kind, no: nextInvNo(b, kind), date: TODAY, ref: b.ref, guest: { name: guestName(b), email: b.guest.email, phone: b.guest.phone },
+    return Object.assign({ id: K.docId(), kind: kind, no: nextInvNo(b, kind), date: TODAY, ref: b.ref, guest: { name: guestName(b), email: b.guest.email, phone: b.guest.phone },
       stay: { stand: standById(b.stand).name, ci: b.ci, co: b.co, nights: diff(b.ci, b.co), guests: guestsLine(b), vehicles: b.vehTbc ? 'Not sure yet' : ensureCars(b).length },
       lines: lines, total: lines.reduce(function (a, l) { return a + l.amt; }, 0), paid: paid(b), deposit: deposit(b), depPct: depPct(), depositDue: depositDue(b), balanceDue: balanceDue(b),
       payFull: payFullOf(b), cancelled: b.status === 'cancelled' }, extra || {});
   }
   function invDoc(inv) { return { name: K.invoiceName(inv), inv: inv, build: function (doc) { K.invoiceDraw(doc, inv); } }; }
-  function invByNo(b, no) { return (b.invoices || []).filter(function (x) { return x.no === no; })[0]; }
+  // documents are found by their own id (several can share the booking number); older ones by number
+  function invByNo(b, key) { var l = b.invoices || []; return l.filter(function (x) { return x.id === key; })[0] || l.filter(function (x) { return x.no === key; }).pop(); }
   function recordInv(b, inv, via, to) {
     b.invoices = b.invoices || [];
-    var x = invByNo(b, inv.no); if (!x) { x = JSON.parse(JSON.stringify(inv)); x.by = x.by || (ME ? ME.name : 'Staff'); b.invoices.push(x); K.commitNo(inv.kind, inv.no); }
+    var x = b.invoices.indexOf(inv) >= 0 ? inv : invByNo(b, K.docKey(inv)); if (!x || (inv.id && x.id !== inv.id)) { x = JSON.parse(JSON.stringify(inv)); x.by = x.by || (ME ? ME.name : 'Staff'); b.invoices.push(x); K.commitNo(inv.kind, inv.no); }
     x.sent = { at: nowStamp(), via: via, to: to || '', by: ME ? ME.name : '' };
   }
   // the website emails the invoice by itself; it shows in the inbox like any email
   function autoMail(b, inv, at, subject, body) {
     var t = DB.threads.filter(function (x) { return x.ref === b.ref && x.auto; })[0];   // all automatic invoice emails in one conversation
-    var att = [{ name: K.invoiceName(inv), type: 'application/pdf', size: 0, inv: inv.no, invRef: b.ref, at: at, via: 'Sent automatically' }];
+    var att = [{ name: K.invoiceName(inv), type: 'application/pdf', size: 0, inv: K.docKey(inv), invRef: b.ref, at: at, via: 'Sent automatically' }];
     if (!t) { t = { id: uid('t'), subject: subject, name: guestName(b), email: b.guest.email, phone: b.guest.phone, status: 'closed', unread: false, ref: b.ref, auto: true, msgs: [] }; DB.threads.push(t); }
     var sh = sigShared();
     t.msgs.push({ from: 'staff', by: 'Website (automatic)', at: at, body: (t.subject !== subject ? 'Subject: ' + subject + '\n\n' : '') + body + '\n\n--\nKyleu Bush Camp\n' + sh.phone + ' (call or WhatsApp) · info@kyleu.co.za · ' + sh.web + '\nProud DGR CP Member', att: att });
@@ -1886,19 +1887,19 @@
   function invSec(b) {
     var list = (b.invoices || []).slice().reverse();
     return '<section class="d-sec"><h4 class="h4-row">Invoices &amp; quotes<button type="button" class="link-btn" data-act="inv-new" data-ref="' + b.ref + '">' + ic('plus') + 'New invoice or quote</button></h4>' +
-      (list.length ? '<div class="list">' + list.map(function (x) { return '<button type="button" class="brow" data-act="inv-view" data-ref="' + b.ref + '|' + esc(x.no) + '"><span class="brow-st">' + esc(x.no) + '</span><span class="brow-g"><b>' + esc(K.kindName(x)) + ' · ' + money(x.total) + '</b><small>' + fd(x.date) + ' · made by ' + esc(x.by || 'staff') + (x.sent ? ' · sent by ' + esc(x.sent.via) + ' ' + esc(x.sent.at) : ' · not sent yet') + '</small></span>' + ic('chev-r') + '</button>'; }).join('') + '</div>'
+      (list.length ? '<div class="list">' + list.map(function (x) { return '<button type="button" class="brow" data-act="inv-view" data-ref="' + b.ref + '|' + esc(K.docKey(x)) + '"><span class="brow-st">' + esc(x.no) + '</span><span class="brow-g"><b>' + esc(K.kindName(x)) + ' · ' + money(x.total) + '</b><small>' + fd(x.date) + ' · made by ' + esc(x.by || 'staff') + (x.sent ? ' · sent by ' + esc(x.sent.via) + ' ' + esc(x.sent.at) : ' · not sent yet') + '</small></span>' + ic('chev-r') + '</button>'; }).join('') + '</div>'
         : '<p class="muted small">Nothing sent yet. Use <b>More</b>, <b>Send the ' + (paid(b) > 0 ? 'invoice' : 'quotation') + '</b> to send one, or make one here.</p>') +
       '<div class="row-btns"><button type="button" class="btn ghost sm" data-act="inv-cur" data-ref="' + b.ref + '">' + ic('note') + (paid(b) > 0 ? 'Preview the current invoice' : 'Preview the current quotation') + '</button></div></section>';
   }
   function invView(b, inv, fresh) {
     modal(esc(inv.kind) + ' ' + esc(inv.no), '<div class="inv-admin">' + K.invoiceHTML(inv) + '</div>' +
-      '<div class="row-btns inv-admin-acts"><button type="button" class="btn ghost" data-act="inv-dl" data-ref="' + b.ref + '|' + esc(inv.no) + '">' + ic('download') + 'Download PDF</button><button type="button" class="btn" data-act="inv-send" data-ref="' + b.ref + '|' + esc(inv.no) + '">' + ic('send') + (inv.sent ? 'Send again' : 'Send to ' + esc(b.guest.first)) + '</button></div>' +
+      '<div class="row-btns inv-admin-acts"><button type="button" class="btn ghost" data-act="inv-dl" data-ref="' + b.ref + '|' + esc(K.docKey(inv)) + '">' + ic('download') + 'Download PDF</button><button type="button" class="btn" data-act="inv-send" data-ref="' + b.ref + '|' + esc(K.docKey(inv)) + '">' + ic('send') + (inv.sent ? 'Send again' : 'Send to ' + esc(b.guest.first)) + '</button></div>' +
       (inv.sent ? '<p class="muted small">Sent by ' + esc(inv.sent.via) + ' on ' + esc(inv.sent.at) + (inv.sent.to ? ' to ' + esc(inv.sent.to) : '') + '.</p>' : fresh ? '<p class="muted small">Saved, not sent yet. Press Send to choose WhatsApp or email.</p>' : ''),
       null, null, { xl: true, noFocus: true });
   }
   // current invoice: not kept until it is sent
   var CUR_INV = {};
-  function invGet(b, no) { return invByNo(b, no) || CUR_INV[b.ref + '|' + no]; }
+  function invGet(b, key) { return invByNo(b, key) || CUR_INV[b.ref + '|' + key]; }
   function sendInvoice(b, inv) {
     sendBox({ b: b, title: 'Send ' + inv.kind.toLowerCase() + ' ' + inv.no, value: 'inv', choices: [['inv', inv.kind]], load: function () {
       return { subject: (inv.kind === 'Quote' ? 'Your Kyleu quote ' : 'Your Kyleu invoice ') + inv.no, text: inv.kind === 'Quote' ? 'Hi ' + b.guest.first + ',\n\nHere is your quote ' + inv.no + ' for ' + standById(b.stand).name + ', ' + fd(b.ci, LONGD) + ' to ' + fd(b.co, LONGD) + '. The total is ' + money(inv.total) + (inv.validTo ? ', valid until ' + fd(inv.validTo, LONGD) : '') + '.\n\nYour stand is held once the deposit is paid. Our banking details are on the quote.\n\nThe Kyleu team' : invMailBody(b, inv, 'staff'), docs: [invDoc(inv)] };
@@ -1943,7 +1944,7 @@
       } });
   }
   function docBooking(b, title) {
-    if (title === 'Invoice') { var cur = curDoc(b); CUR_INV[b.ref + '|' + cur.no] = cur; return invDoc(cur); }
+    if (title === 'Invoice') { var cur = curDoc(b); CUR_INV[b.ref + '|' + K.docKey(cur)] = cur; return invDoc(cur); }
     return { name: 'Kyleu ' + title.toLowerCase() + ' ' + b.ref + '.pdf', build: function (doc, k) {
       k.head(title, (title === 'Invoice' ? 'Invoice ' : 'Reference ') + b.ref + ' · ' + fd(TODAY, LONGD));
       k.pairs(stayRows(b)); k.h('Your stay'); moneyLines(b, k); k.y(k.y() + 3);
@@ -2821,12 +2822,15 @@
     var numRow = function (kind, title, sub, pk, nk) {
       return '<div class="doc-num"><div><b>' + title + '</b><small>' + sub + '</small></div><label class="fld"><span>Starts with</span><input data-doc="' + pk + '" value="' + esc(c[pk]) + '" maxlength="12" autocapitalize="characters"></label><label class="fld"><span>Next number</span><input data-doc="' + nk + '" value="' + esc(c[nk]) + '" inputmode="numeric"></label><p class="doc-next">Next one: <b data-doc-prev="' + kind + '">' + esc(K.peekNo(kind)) + '</b></p></div>';
     };
+    var sepRow = function (k, title, sub) {
+      return '<div class="doc-sep"><div><b>' + title + ' number</b><small>' + sub + '. ' + (c[k] ? 'Has its own running number.' : 'Uses the booking reference, so it never changes.') + '</small></div><label class="switch"><input type="checkbox" data-doc="' + k + '"' + (c[k] ? ' checked' : '') + '><span></span>Separate numbers</label></div>';
+    };
     var bankF = function (k, label) { return '<label class="fld"><span>' + label + '</span><input data-doc="' + k + '" value="' + esc(c[k] || B[k] || '') + '"></label>'; };
     return '<div class="cols"><section class="card"><header class="card-h"><h3>Numbers</h3></header>' +
-      '<p class="muted small">Every booking, quotation and invoice gets the next number. Change the start each year if you like (KY26 to KY27).</p>' +
+      '<p class="muted small">Every booking gets the next number. Change the start each year if you like (KY26 to KY27).</p>' +
       numRow('Ref', 'Booking reference', 'Guests use it as the payment reference', 'refPrefix', 'refNext') +
-      numRow('Quote', 'Quotation', 'Sent when a booking is made', 'quotePrefix', 'quoteNext') +
-      numRow('Invoice', 'Invoice', 'Made once a payment is confirmed', 'invPrefix', 'invNext') +
+      sepRow('sepQuote', 'Quotation', 'Sent when a booking is made') + (c.sepQuote ? numRow('Quote', 'Quotation numbers', 'Each new or updated quotation gets the next one', 'quotePrefix', 'quoteNext') : '') +
+      sepRow('sepInv', 'Invoice', 'Made once a payment is confirmed') + (c.sepInv ? numRow('Invoice', 'Invoice numbers', 'Each new or updated invoice gets the next one', 'invPrefix', 'invNext') : '') +
       '<p class="hint">' + ic('info') + ' Only lower a next number if you are sure it has not been used yet, or two documents could share a number.</p></section>' +
       '<section class="card"><header class="card-h"><h3>VAT</h3><label class="switch"><input type="checkbox" data-doc="vatOn"' + (c.vatOn ? ' checked' : '') + '><span></span>' + (c.vatOn ? 'VAT registered' : 'Not VAT registered') + '</label></header>' +
       (c.vatOn ? '<div class="grid2"><label class="fld"><span>VAT number</span><input data-doc="vatNo" value="' + esc(c.vatNo) + '" inputmode="numeric" placeholder="e.g. 4123456789"></label><label class="fld"><span>VAT rate (%)</span><input data-doc="vatRate" value="' + esc(c.vatRate) + '" inputmode="decimal"></label></div>' +
@@ -3078,7 +3082,7 @@
     }
     if (act === 'link-copy') { var lb = byRef(ref), lk = bookingLink(lb); try { navigator.clipboard.writeText(lk).then(function () { toast('Link copied'); }, function () { prompt('Copy the link', lk); }); } catch (e) { prompt('Copy the link', lk); } return; }
     if (act === 'fin-mark') { var fb = byRef(ref); fb.finalised = { at: nowStamp(), by: ME.name }; fb.notes.push({ at: nowStamp(), by: ME.name, text: 'Booking finalised by staff.' }); log('Booking ' + fb.ref + ' finalised', fb.ref); save(); refresh(); toast('Marked as finalised'); return; }
-    if (act === 'inv-cur') { var cb = byRef(ref), ci_ = curDoc(cb); CUR_INV[cb.ref + '|' + ci_.no] = ci_; return invView(cb, ci_); }
+    if (act === 'inv-cur') { var cb = byRef(ref), ci_ = curDoc(cb); CUR_INV[cb.ref + '|' + K.docKey(ci_)] = ci_; return invView(cb, ci_); }
     if (act === 'inv-view' || act === 'inv-dl' || act === 'inv-send') {
       var ip = ref.split('|'), ib = byRef(ip[0]), iv = invGet(ib, ip[1]); if (!iv) { toast('Invoice not found'); return; }
       if (act === 'inv-view') return invView(ib, iv);
@@ -3207,7 +3211,8 @@
     if (t.matches('[data-rp-cmp]')) { RP.compare = t.checked; rpSave(); rpInstant = true; render(); }
     if (t.matches('[data-copy-from]')) { actStand(null, t.value || null); }
     if (t.matches('[data-ph-file]')) { Array.prototype.slice.call(t.files || []).slice(0, 10).forEach(function (file) { shrink(file, function (url) { if (EDIT) { EDIT.photos.push(url); phRefresh(); } }); }); t.value = ''; }
-    if (t.matches('[data-doc][type=checkbox]')) { var dv = K.docCfg(); dv[t.dataset.doc] = t.checked; K.docSave(dv); log('VAT switched ' + (t.checked ? 'on' : 'off') + ' for quotations and invoices'); render(); return; }
+    if (t.matches('[data-doc][type=checkbox]')) { var dv = K.docCfg(); dv[t.dataset.doc] = t.checked; K.docSave(dv); var dk_ = t.dataset.doc, dw_ = dk_ === 'sepQuote' ? 'Quotations' : 'Invoices';
+      log(dk_ === 'vatOn' ? 'VAT switched ' + (t.checked ? 'on' : 'off') + ' for quotations and invoices' : dw_ + (t.checked ? ' now get their own numbers' : ' now use the booking reference')); render(); return; }
     if (t.matches('[data-close-stand]')) { var id = t.dataset.closeStand; if (t.checked) delete DB.closed[id]; else DB.closed[id] = true; log(standById(id).name + (t.checked ? ' opened' : ' closed') + ' for bookings'); save(); render(); toast(standById(id).name + (t.checked ? ' is open for bookings' : ' is closed to new bookings')); }
   }
   function onSubmit(e) {

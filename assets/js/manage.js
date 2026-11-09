@@ -112,7 +112,7 @@
     }
     // no invoice kept yet: build one from the booking
     var sl = shopList(v.shop), shopAmt = price(v, shopSum(v.shop));
-    return { kind: v.paid ? 'Invoice' : 'Quote', validTo: v.paid ? '' : depDueOf(v), no: K.invoiceNo(v.ref, v.paid ? 'Invoice' : 'Quote', 1), date: v.created || today(), ref: v.ref, guest: { name: (v.first + ' ' + v.last).trim(), email: v.email, phone: v.phone }, stay: stayInfo,
+    return { kind: v.paid ? 'Invoice' : 'Quote', validTo: v.paid ? '' : depDueOf(v), no: K.sepNo && !K.sepNo(v.paid ? 'Invoice' : 'Quote') ? v.ref : K.invoiceNo(v.ref, v.paid ? 'Invoice' : 'Quote', 1), date: v.created || today(), ref: v.ref, guest: { name: (v.first + ' ' + v.last).trim(), email: v.email, phone: v.phone }, stay: stayInfo,
       lines: stayLinesFor(v, v, v.total - shopAmt).concat(sl.map(function (x) { return shopLine(v, x); })),
       total: v.total, paid: v.paid, deposit: Math.round(v.total * depPct / 100), depPct: depPct, depositDue: depDueOf(v), balanceDue: addD(v.ci, -balDays()), payFull: nights(v.created || today(), v.ci) <= balDays() + depDays() };
   }
@@ -137,8 +137,8 @@
     }
     if (a.shopItems) lines = lines.filter(function (l) { return l.tag !== 'shop'; }).concat(a.shopItems.map(function (x) { return shopLine(v, x); }));
     var total = lines.reduce(function (x, l) { return x + (l.amt || 0); }, 0);
-    var q = cur.kind === 'Quote', no = K.takeNo ? K.takeNo(q ? 'Quote' : 'Invoice') : K.invoiceNo(v.ref, cur.kind, n);
-    return Object.assign(cur, { no: no, date: today(), lines: lines, total: total, deposit: cur.paid ? cur.deposit : Math.round(total * (cur.depPct || 50) / 100), note: 'Updated ' + (q ? 'quotation' : 'invoice') + ': replaces ' + cur.no + '.' });
+    var q = cur.kind === 'Quote', no = K.takeNo ? K.takeNo(q ? 'Quote' : 'Invoice', v.ref) : K.invoiceNo(v.ref, cur.kind, n);
+    return Object.assign(cur, { id: K.docId ? K.docId() : '', no: no, date: today(), lines: lines, total: total, deposit: cur.paid ? cur.deposit : Math.round(total * (cur.depPct || 50) / 100), note: 'Updated ' + (q ? 'quotation' : 'invoice') + (no === cur.no ? '' : ': replaces ' + cur.no) + '.' });
   }
   function invModal(v) {
     var inv = invoiceFor(v), st = K.invoiceState(inv), m = document.createElement('div');

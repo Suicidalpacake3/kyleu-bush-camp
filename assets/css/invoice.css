@@ -45,7 +45,7 @@
 .inv-lines tfoot .inv-due td:first-child { font-size: 1.15rem; font-weight: 900; color: var(--i-ember); }
 .inv-paid .inv-lines tfoot .inv-due td,
 .inv-paid .inv-lines tfoot .inv-due td:first-child { color: var(--i-ok); }
-.inv-pay { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 24px 0; }
+.inv-pay { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 24px 24px 0; }
 .inv-pay > div { background: var(--i-sand); border-radius: 12px; padding: 14px 16px; }
 .inv-pay ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .inv-pay li { display: flex; justify-content: space-between; gap: 10px; }
@@ -56,15 +56,15 @@
 .inv-note { margin: 12px 24px 0; color: var(--i-soft); font-size: .86rem; }
 .inv-own { color: var(--i-bark); font-weight: 800; }
 .inv-paidtip { margin: 10px 0 0; font-size: .8rem; color: var(--i-soft); }
-.inv-notes { margin: 16px 24px 0; }
+.inv-notes { margin: 24px 24px 0; }
 .inv-notes ul { margin: 0; padding-left: 18px; display: grid; gap: 3px; font-size: .86rem; color: var(--i-soft); }
 .inv-notes li::marker { color: var(--i-sun); }
 .inv-notes b { color: var(--i-bark); }
-.inv-thanks { margin: 14px 24px 0; font-weight: 800; font-size: .9rem; }
+.inv-thanks { margin: 20px 24px 0; font-weight: 800; font-size: .9rem; }
 .inv-sign { margin: 6px 24px 0; font-size: .86rem; color: var(--i-soft); }
 .inv-sign b { color: var(--i-bark); }
 /* DGR CP logo: the approved file, on a light background with clear space around it */
-.inv-dgr { display: flex; align-items: center; gap: 36px; margin: 18px 24px 0; padding: 18px 20px; border: 1px solid var(--i-line); border-radius: 12px; background: #fff; }
+.inv-dgr { display: flex; align-items: center; gap: 36px; margin: 34px 24px 0; padding: 18px 20px; border: 1px solid var(--i-line); border-radius: 12px; background: #fff; }
 .inv-dgr img { height: 44px; width: auto; flex: none; margin: 4px 0; }
 .inv-dgr p { margin: 0; font-size: .86rem; color: var(--i-soft); }
 .inv-dgr b { color: var(--i-bark); }

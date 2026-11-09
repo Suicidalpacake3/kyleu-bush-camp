@@ -39,7 +39,7 @@
      VAT on or off with the VAT number, and the bank details printed on every quotation and invoice.
      Demo: kept in this browser ("kyleu-docs"). Live: saved on the server, so numbers never repeat. */
   var CFG_KEY = 'kyleu-docs';
-  var CFG0 = { refPrefix: 'KY26', refNext: 5901, quotePrefix: 'QUO', quoteNext: 1001, invPrefix: 'INV', invNext: 1001, vatOn: false, vatNo: '', vatRate: 15 };
+  var CFG0 = { refPrefix: 'KY26', refNext: 5901, quotePrefix: 'QUO', quoteNext: 1001, invPrefix: 'INV', invNext: 1001, sepQuote: false, sepInv: false, vatOn: false, vatNo: '', vatRate: 15 };
   K.docCfg = function () { var c = {}; try { c = JSON.parse(localStorage.getItem(CFG_KEY) || '{}') || {}; } catch (e) {} return Object.assign({}, CFG0, c); };
   K.docSave = function (c) { try { localStorage.setItem(CFG_KEY, JSON.stringify(c)); } catch (e) {} applyCfg(); };
   function applyCfg() { var c = K.docCfg(); ['bank', 'accName', 'accNo', 'branch', 'accType', 'swift'].forEach(function (k) { if (c[k]) BIZ[k] = c[k]; }); }
@@ -48,11 +48,17 @@
   function fmtNo(prefix, n) { prefix = String(prefix || '').trim(); return (prefix ? prefix + ' ' : '') + n; }
   K.fmtNo = fmtNo;
   // the number the next one will get, without using it up (for previews)
-  K.peekNo = function (kind) { var c = K.docCfg(), k = NUM[kind]; return fmtNo(c[k[0]], c[k[1]]); };
+  // by default a booking has one number: its quotation and invoice use the booking reference and it never changes.
+  // In Settings, quotations and/or invoices can be switched to their own running numbers instead.
+  K.sepNo = function (kind) { var c = K.docCfg(); return kind === 'Quote' ? !!c.sepQuote : kind === 'Invoice' ? !!c.sepInv : true; };
+  K.peekNo = function (kind, ref) { if (ref && !K.sepNo(kind)) return ref; var c = K.docCfg(), k = NUM[kind]; return fmtNo(c[k[0]], c[k[1]]); };
   // use up the next number (a booking, quotation or invoice was made)
-  K.takeNo = function (kind) { var c = K.docCfg(), k = NUM[kind], no = fmtNo(c[k[0]], c[k[1]]); c[k[1]] = (+c[k[1]] || 0) + 1; K.docSave(c); return no; };
+  K.takeNo = function (kind, ref) { if (ref && !K.sepNo(kind)) return ref; var c = K.docCfg(), k = NUM[kind], no = fmtNo(c[k[0]], c[k[1]]); c[k[1]] = (+c[k[1]] || 0) + 1; K.docSave(c); return no; };
   // a previewed number was kept: move the counter on if it was the next one
-  K.commitNo = function (kind, no) { if (no === K.peekNo(kind)) K.takeNo(kind); };
+  K.commitNo = function (kind, no) { if (K.sepNo(kind) && no === K.peekNo(kind)) K.takeNo(kind); };
+  // documents can share a number (one per booking), so each one also has its own id
+  K.docId = function () { return 'd' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36); };
+  K.docKey = function (inv) { return (inv && (inv.id || inv.no)) || ''; };
   K.vatOn = function () { return !!K.docCfg().vatOn; };
   // what the document is called: a quotation until it is paid, then an invoice (a tax invoice when Kyleu is VAT registered)
   function kindName(inv) { return inv.kind === 'Quote' ? 'Quotation' : K.vatOn() ? 'Tax invoice' : 'Invoice'; }
@@ -196,19 +202,19 @@
     stayRows(inv).forEach(function (r) { font(8.5, false, C.soft); text(r[0], 108, yy); font(9.3, true); text(String(r[1]), 128, yy); yy += 4.5; });
     y = Math.max(y, yy) + 3.5;
     // lines: Qty | Description | Unit price | Total
-    var xD = hasQ ? L + 16 : L + 4, xU = R - 34, dW = (hasQ ? xU - 6 : R - 30) - xD;
+    var xD = hasQ ? L + 16 : L + 4, xU = R - 34, dW = (hasQ ? xU - 24 : R - 30) - xD;   // leave room for the unit price (right-aligned at xU) and the total
     fill(C.bark); doc.roundedRect(L, y, W, 7.5, 1.5, 1.5, 'F'); font(7.8, true, C.white);
     if (hasQ) text('QTY', L + 4, y + 5); text('DESCRIPTION', xD, y + 5); if (hasQ) text('UNIT PRICE', xU, y + 5, { align: 'right' }); text('TOTAL', R - 4, y + 5, { align: 'right' }); y += 7.5;
     inv.lines.forEach(function (l, i) {
-      font(9.3); var ls = doc.splitTextToSize(clean(l.t), dW), h = ls.length * 4.4 + 3.6; need(h);
+      font(9.3); var ls = doc.splitTextToSize(clean(l.t), dW), h = ls.length * 4.4 + 4.2; need(h);
       if (i % 2) { fill(C.sand); doc.rect(L, y, W, h, 'F'); }
       if (hasQ && l.q) text(String(l.q), L + 4, y + 5); text(ls, xD, y + 5);
       if (hasQ && l.u != null && !l.free) text(money(l.u), xU, y + 5, { align: 'right' });
       text(l.free ? 'Free' : (l.amt < 0 ? '-' : '') + money(Math.abs(l.amt)), R - 4, y + 5, { align: 'right' }); y += h;
     });
-    doc.setDrawColor(C.line[0], C.line[1], C.line[2]); doc.setLineWidth(.3); doc.line(L, y, R, y); y += 6;
+    doc.setDrawColor(C.line[0], C.line[1], C.line[2]); doc.setLineWidth(.3); doc.line(L, y, R, y); y += 7;
     totals(inv, st).forEach(function (r) { var strong = r[2] === 'total' || r[2] === 'due'; need(7); font(strong ? 10.8 : 9.3, strong, r[2] === 'due' ? (st.bal ? C.ember : C.ok) : C.bark); text(r[0], 150, y, { align: 'right' }); text(r[1], R - 4, y, { align: 'right' }); y += strong ? 6.5 : 5.4; });
-    y += 3;
+    y += 6;
     // when to pay + bank details
     if (st.k === 'due' || st.k === 'quote') {
       var bh = 50; need(bh + 4); var bx = y;
@@ -218,16 +224,16 @@
       font(7.4, false, C.soft); text(doc.splitTextToSize(clean(PAIDTIP), 80), L + 4, bx + 34);
       ry = bx + 11.5; bankRows().forEach(function (r) { font(8.3, false, C.soft); text(r[0], 110, ry); font(8.8, true); text(r[1], 138, ry); ry += 4; });
       fill(C.sun); doc.roundedRect(110, bx + bh - 8.5, 82, 5.5, 1, 1, 'F'); font(8.5, true, C.white); text('Use reference ' + inv.ref, 151, bx + bh - 4.6, { align: 'center' });
-      y = bx + bh + 5;
+      y = bx + bh + 9;
     }
     if (inv.note) { font(9.5, true); var nl = doc.splitTextToSize(clean(inv.note), W); need(nl.length * 4.4 + 3); text(nl, L, y); y += nl.length * 4.4 + 3; }
     // please note (the camp rules from the old quote)
     need(32); font(7.5, true, C.soft); text('PLEASE NOTE', L, y); y += 4.8;
     notes().forEach(function (n) { font(8.4, /OWN RISK/.test(n), /OWN RISK/.test(n) ? C.bark : C.soft); var ls = doc.splitTextToSize(clean(n), W - 5); need(ls.length * 3.7); fill(C.sun); doc.circle(L + 1.6, y - 1.1, .65, 'F'); text(ls, L + 5, y); y += ls.length * 3.7 + .2; });
-    y += 2; font(8.6, true); var tl = doc.splitTextToSize(THANKS, W); need(tl.length * 4.2 + 12); text(tl, L, y); y += tl.length * 4.2 + 1;
+    y += 4; font(8.6, true); var tl = doc.splitTextToSize(THANKS, W); need(tl.length * 4.2 + 12); text(tl, L, y); y += tl.length * 4.2 + 1;
     font(8.6, false, C.soft); text('Kind regards, ' + BIZ.signer + ' · ' + BIZ.phone + ' · ' + BIZ.email, L, y); y += 4.5;
     // DGR CP: approved logo on a light background with clear space around it
-    need(14);
+    var dgrH = 20; y = Math.max(y + 10, 282 - dgrH); if (y + dgrH > 282) { doc.addPage(); y = 262; }
     if (IMG.dgr) try { doc.addImage(IMG.dgr, 'JPEG', L, y, 29, 10.9); } catch (e) {}
     font(8.6, true); text('Kyleu is a proud DGR CP member.', L + 40, y + 3.4);
     font(8, false, C.soft); text(doc.splitTextToSize(DGR_TXT, W - 40).map(clean), L + 40, y + 7.4);

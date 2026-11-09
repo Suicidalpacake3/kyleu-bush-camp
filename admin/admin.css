@@ -1178,6 +1178,11 @@ html:has(body.lock) { overflow: hidden; }
 .doc-num > div b { display: block; }
 .doc-num > div small { display: block; color: var(--muted, #7a6a5a); font-size: .8rem; }
 .doc-num .fld { margin: 0; }
+.doc-sep { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px dashed var(--line); }
+.doc-sep > div b { display: block; }
+.doc-sep > div small { display: block; color: var(--muted, #7a6a5a); font-size: .8rem; }
+.doc-sep + .doc-num { border-top: 0; padding-top: 0; }
+.doc-sep .switch { flex: none; }
 .doc-next { grid-column: 1 / -1; margin: 0; font-size: .86rem; color: var(--muted, #7a6a5a); }
 .doc-next b { color: var(--ink, #2a1b12); letter-spacing: .02em; }
 @media (max-width: 640px) { .doc-num { grid-template-columns: 1fr 1fr; } .doc-num > div { grid-column: 1 / -1; } }
