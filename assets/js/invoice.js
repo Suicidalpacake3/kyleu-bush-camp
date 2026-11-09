@@ -217,23 +217,27 @@
     y += 6;
     // when to pay + bank details
     if (st.k === 'due' || st.k === 'quote') {
-      var bh = 50; need(bh + 4); var bx = y;
+      var bh = 46; need(bh + 4); var bx = y;
       fill(C.sand); doc.roundedRect(L, bx, 88, bh, 2, 2, 'F'); doc.roundedRect(106, bx, 90, bh, 2, 2, 'F');
       font(7.5, true, C.soft); text('WHEN TO PAY', L + 4, bx + 6.5); text('OUR BANK DETAILS', 110, bx + 6.5);
       var ry = bx + 13; schedule(inv).forEach(function (r) { font(9.5, true); text(r[0], L + 4, ry); text(r[1], L + 84, ry, { align: 'right' }); font(8, false, C.soft); text(r[2], L + 4, ry + 4.2); ry += 10; });
       font(7.4, false, C.soft); text(doc.splitTextToSize(clean(PAIDTIP), 80), L + 4, bx + 34);
       ry = bx + 11.5; bankRows().forEach(function (r) { font(8.3, false, C.soft); text(r[0], 110, ry); font(8.8, true); text(r[1], 138, ry); ry += 4; });
       fill(C.sun); doc.roundedRect(110, bx + bh - 8.5, 82, 5.5, 1, 1, 'F'); font(8.5, true, C.white); text('Use reference ' + inv.ref, 151, bx + bh - 4.6, { align: 'center' });
-      y = bx + bh + 9;
+      y = bx + bh + 8;
     }
     if (inv.note) { font(9.5, true); var nl = doc.splitTextToSize(clean(inv.note), W); need(nl.length * 4.4 + 3); text(nl, L, y); y += nl.length * 4.4 + 3; }
     // please note (the camp rules from the old quote)
-    need(32); font(7.5, true, C.soft); text('PLEASE NOTE', L, y); y += 4.8;
-    notes().forEach(function (n) { font(8.4, /OWN RISK/.test(n), /OWN RISK/.test(n) ? C.bark : C.soft); var ls = doc.splitTextToSize(clean(n), W - 5); need(ls.length * 3.7); fill(C.sun); doc.circle(L + 1.6, y - 1.1, .65, 'F'); text(ls, L + 5, y); y += ls.length * 3.7 + .2; });
-    y += 4; font(8.6, true); var tl = doc.splitTextToSize(THANKS, W); need(tl.length * 4.2 + 12); text(tl, L, y); y += tl.length * 4.2 + 1;
+    var DGR_H = 16, DGR_GAP = 7, BOTTOM = 283;
+    var tailH = 4.8 + notes().reduce(function (a, n) { font(8.4, /OWN RISK/.test(n)); return a + doc.splitTextToSize(clean(n), W - 5).length * 3.7 + .2; }, 0);
+    font(8.6, true); tailH += 4 + doc.splitTextToSize(THANKS, W).length * 4.2 + 1 + 4.5 + DGR_GAP + DGR_H;
+    if (y + tailH > BOTTOM) { doc.addPage(); y = 20; }
+    font(7.5, true, C.soft); text('PLEASE NOTE', L, y); y += 4.8;
+    notes().forEach(function (n) { font(8.4, /OWN RISK/.test(n), /OWN RISK/.test(n) ? C.bark : C.soft); var ls = doc.splitTextToSize(clean(n), W - 5); fill(C.sun); doc.circle(L + 1.6, y - 1.1, .65, 'F'); text(ls, L + 5, y); y += ls.length * 3.7 + .2; });
+    y += 4; font(8.6, true); var tl = doc.splitTextToSize(THANKS, W); text(tl, L, y); y += tl.length * 4.2 + 1;
     font(8.6, false, C.soft); text('Kind regards, ' + BIZ.signer + ' · ' + BIZ.phone + ' · ' + BIZ.email, L, y); y += 4.5;
     // DGR CP: approved logo on a light background with clear space around it
-    var dgrH = 20; y = Math.max(y + 10, 282 - dgrH); if (y + dgrH > 282) { doc.addPage(); y = 262; }
+    y = Math.max(y + DGR_GAP, BOTTOM - DGR_H);
     if (IMG.dgr) try { doc.addImage(IMG.dgr, 'JPEG', L, y, 29, 10.9); } catch (e) {}
     font(8.6, true); text('Kyleu is a proud DGR CP member.', L + 40, y + 3.4);
     font(8, false, C.soft); text(doc.splitTextToSize(DGR_TXT, W - 40).map(clean), L + 40, y + 7.4);
