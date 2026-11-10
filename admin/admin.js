@@ -1379,12 +1379,23 @@
      Without it (the file did not load) a plain text box is shown instead, so nothing is ever lost. */
   var STORY = null;
   function storyField(html, label) {
-    return '<div class="story-fld"><span class="fld-l">' + label + '</span><div class="story-host" data-story></div><textarea data-story-src hidden>' + esc(html || '') + '</textarea>' +
+    return '<div class="story-fld"><div class="story-top"><span class="fld-l">' + label + '</span><button type="button" class="story-help" data-story-tour title="Watch a short tour of the writing tool"><b aria-hidden="true">?</b><span>Show me how</span></button></div><div class="story-host" data-story></div><textarea data-story-src hidden>' + esc(html || '') + '</textarea>' +
       '<p class="hint">' + ic('info') + ' Write and lay out the story here exactly as guests will see it. Select words to make them bold, highlight them or change the font, and use <b>Photo</b> to put a picture wherever you like.</p></div>';
   }
   function storyMount(f) {
     var host = $('[data-story]', f), src = $('[data-story-src]', f); STORY = null; if (!host) return;
-    if (window.KyEditor && KyEditor.mount) { try { STORY = KyEditor.mount(host, { html: src.value, placeholder: 'Write your story…' }); return; } catch (e) { STORY = null; } }
+    var tb = $('[data-story-tour]', f);
+    if (window.KyEditor && KyEditor.mount) {
+      try {
+        STORY = KyEditor.mount(host, { html: src.value, placeholder: 'Write your story…' });
+        // the question mark: a tour where a pretend mouse writes a sample story (the writer's own story comes back afterwards)
+        var edNow = STORY;
+        if (tb && KyEditor.tour) tb.addEventListener('click', function () { var dt = tb.closest('details'); if (dt) dt.open = true; KyEditor.tour(edNow, { photo: '../assets/img/photos/campfire-stand.jpg', onEnd: function () { try { tb.focus({ preventScroll: true }); } catch (e2) {} } }); });
+        else if (tb) tb.hidden = true;
+        return;
+      } catch (e) { STORY = null; }
+    }
+    if (tb) tb.hidden = true;
     // fallback: a plain box (paragraphs are kept)
     var d0 = document.createElement('div'); d0.innerHTML = src.value; var plain = $$('p,h2,h3,li,blockquote', d0).map(function (x) { return x.textContent.trim(); }).filter(Boolean).join('\n\n') || d0.textContent.trim();
     host.innerHTML = '<textarea rows="12" data-story-plain placeholder="Write it like a short message to your guests.">' + esc(plain) + '</textarea>';

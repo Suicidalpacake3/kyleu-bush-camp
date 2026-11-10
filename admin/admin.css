@@ -1337,3 +1337,13 @@ html:has(body.lock) { overflow: hidden; }
 
 /* the cover photo preview stays small so the story is not pushed far down */
 .m-card.xl .post-img img { max-height: 170px; width: auto; max-width: 100%; }
+/* the question mark above the writing tool: starts the tour */
+.story-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.story-top .fld-l { margin: 0; }
+.story-help { display: inline-flex; align-items: center; gap: 8px; border: 1.5px solid var(--sun, #e8731c); background: #fff4e6; color: var(--sun-d, #b8561a); font: inherit; font-size: .84rem; font-weight: 800; border-radius: 999px; padding: 4px 14px 4px 5px; cursor: pointer; transition: background .15s, transform .15s; }
+.story-help b { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--sun, #e8731c); color: #fff; font-size: .95rem; animation: story-help 2.6s ease-in-out 3; }
+.story-help:hover { background: #ffe8cc; transform: translateY(-1px); }
+.story-help[hidden] { display: none; }
+@keyframes story-help { 0%, 100% { box-shadow: 0 0 0 0 rgba(232, 115, 28, .55); } 50% { box-shadow: 0 0 0 8px rgba(232, 115, 28, 0); } }
+@media (prefers-reduced-motion: reduce) { .story-help b { animation: none; } }
+

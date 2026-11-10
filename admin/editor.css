@@ -191,3 +191,57 @@
   .kyed-imgbar { width: auto; }
   .kyed-alt { min-width: 0; }
 }
+
+/* =========================================================
+   The guided tour (editor-tour.js): a pretend mouse, a key label and an explaining card
+   ========================================================= */
+.kyt-shield { position: fixed; inset: 0; z-index: 2147483000; background: transparent; }
+.kyt-cur { position: fixed; left: 0; top: 0; z-index: 2147483003; width: 30px; height: 30px; pointer-events: none; will-change: transform; filter: drop-shadow(0 3px 5px rgba(0, 0, 0, .4)); transition: opacity .3s; }
+.kyt-cur.rest { opacity: 0; }
+.kyt-cur svg { display: block; width: 30px; height: 30px; transform-origin: 5px 3px; transition: transform .12s ease; }
+.kyt-cur svg path { fill: #fff; stroke: #2a1b12; stroke-width: 1.7; stroke-linejoin: round; }
+.kyt-cur.down svg { transform: scale(.8); }
+.kyt-ring { position: absolute; left: 5px; top: 3px; width: 0; height: 0; }
+.kyt-ring::before { content: ""; position: absolute; left: -24px; top: -24px; width: 48px; height: 48px; border-radius: 50%; border: 3px solid #e8731c; background: rgba(244, 183, 64, .25); opacity: 0; transform: scale(.2); }
+.kyt-ring.go::before { animation: kyt-ring .6s ease-out; }
+@keyframes kyt-ring { 0% { opacity: 1; transform: scale(.2); } 100% { opacity: 0; transform: scale(1.3); } }
+.kyt-keycap { position: fixed; z-index: 2147483002; pointer-events: none; font: 800 13px/1 'Nunito Sans', system-ui, sans-serif; color: #2a1b12; background: #fff; border: 1.5px solid #2a1b12; border-bottom-width: 4px; border-radius: 8px; padding: 7px 11px 6px; box-shadow: 0 8px 18px -8px rgba(0, 0, 0, .5); }
+.kyt-keycap.go { animation: kyt-key .62s ease; }
+@keyframes kyt-key { 0% { transform: translateY(-6px); opacity: 0; } 25% { transform: translateY(0); opacity: 1; } 45% { transform: translateY(3px); border-bottom-width: 1.5px; } 70% { transform: translateY(0); border-bottom-width: 4px; opacity: 1; } 100% { opacity: 0; } }
+/* the tool the mouse is on */
+.kyt-hot { box-shadow: 0 0 0 3px rgba(232, 115, 28, .65), 0 0 0 8px rgba(232, 115, 28, .18) !important; border-radius: 8px; }
+.kyt-panel { position: fixed; z-index: 2147483001; left: 50%; bottom: 16px; width: min(620px, calc(100vw - 20px)); transform: translate(-50%, 30px); opacity: 0; transition: transform .45s cubic-bezier(.2, .8, .2, 1), opacity .3s;
+  background: #2a1b12; color: #fff; border-radius: 18px; border-top: 4px solid #f4b740; padding: 12px 18px 14px; box-shadow: 0 26px 60px -16px rgba(0, 0, 0, .65); font: 15px/1.5 'Nunito Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; text-align: left; }
+.kyt-panel.in { transform: translate(-50%, 0); opacity: 1; }
+.kyt-panel.nudge { animation: kyt-nudge .4s ease; }
+@keyframes kyt-nudge { 0%, 100% { transform: translate(-50%, 0); } 35% { transform: translate(-50%, -7px); } 70% { transform: translate(-50%, 2px); } }
+.kyt-top { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.kyt-n { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #f4b740; white-space: nowrap; }
+.kyt-dots { display: flex; gap: 5px; flex: 1; }
+.kyt-dots i { width: 18px; height: 4px; border-radius: 4px; background: rgba(255, 255, 255, .2); transition: background .3s; }
+.kyt-dots i.done { background: rgba(244, 183, 64, .65); }
+.kyt-dots i.on { background: #f4b740; }
+.kyt-x { margin-left: auto; border: 0; background: none; color: rgba(255, 255, 255, .75); font: inherit; font-size: 13px; font-weight: 700; text-decoration: underline; cursor: pointer; padding: 4px 2px; }
+.kyt-x:hover { color: #fff; }
+.kyt-h { margin: 2px 0 4px; font: 700 20px/1.25 'Fraunces', Georgia, serif; color: #fff; text-transform: none; letter-spacing: 0; }
+.kyt-p { margin: 0; color: rgba(255, 255, 255, .88); }
+.kyt-tips ul { margin: 8px 0 0; padding-left: 20px; }
+.kyt-tips li { margin: 3px 0; color: rgba(255, 255, 255, .88); }
+.kyt-tips li::marker { color: #f4b740; }
+.kyt-tips b { color: #fff; }
+.kyt-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.kyt-acts[hidden], .kyt-tips[hidden], .kyt-keycap[hidden] { display: none; }
+.kyt-b { border: 1.5px solid rgba(255, 255, 255, .3); background: transparent; color: #fff; font: inherit; font-size: 13.5px; font-weight: 800; border-radius: 999px; padding: 7px 15px; cursor: pointer; }
+.kyt-b:hover { border-color: #fff; }
+.kyt-b.kyt-go { background: #e8731c; border-color: #e8731c; }
+.kyt-b:focus-visible, .kyt-x:focus-visible { outline: 3px solid #f4b740; outline-offset: 2px; }
+.kyt-panel.paused { border-top-color: #fff; }
+.kyt-panel.paused .kyt-n::after { content: " · paused"; color: #fff; }
+@media (max-width: 560px) {
+  .kyt-panel { bottom: 8px; padding: 10px 14px 12px; font-size: 14px; border-radius: 16px; }
+  .kyt-h { font-size: 17px; }
+  .kyt-dots i { width: 10px; }
+  .kyt-b { padding: 6px 12px; font-size: 13px; }
+}
+@media (prefers-reduced-motion: reduce) { .kyt-panel, .kyt-cur svg { transition: none; } .kyt-ring.go::before, .kyt-keycap.go, .kyt-panel.nudge { animation: none; } }
+
