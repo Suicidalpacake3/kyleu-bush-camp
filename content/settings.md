@@ -65,11 +65,12 @@
 > Posts, blogs and videos about Kyleu, shown on the Experience Kyleu page. One per line: title, colon, link, then · and who wrote it.
 > Paste a link to a public Instagram or Facebook post here when a guest tags you. YouTube videos play right on the page.
 > If a video's owner has switched off playing on other websites, add "· opens on YouTube" at the end and it shows as a picture that opens YouTube.
+> Every story shows as the same card. YouTube videos bring their own picture. For anything else, add "· image assets/img/photos/your-photo.jpg" to give the card a picture.
 - Camping at Kyleu Bush Camp, a campsite review: https://www.youtube.com/watch?v=Xd__-CE1f1M · Camping In Africa
 - Campsite review, Kyleu Bush Camp: https://www.youtube.com/watch?v=zgGsowi0qBY · IRONMAN 4x4 Africa
 - Dinokeng safari, camping inside the reserve at Kyleu: https://www.youtube.com/watch?v=0J3WxQ6CyVQ · 4WheelingSA
 - Camping at Kyleu Bush Camp with a Metalian Genie: https://www.youtube.com/watch?v=zqM9cCAOB88 · Get Out, GO!
 - Dinokeng's best off-grid campsite? Kyleu Bush Camp: https://www.youtube.com/watch?v=8h8Qt48nL0s · Budget Travelers · opens on YouTube
-- Kyleu Bush Camp on video: https://www.facebook.com/transafricatours/videos/kyleu-bush-camp/1504586673966492/ · Trans Africa Tours
-- Kyleu Bush Camp review: https://basecamp.africa/kyleu-bush-camp-review/ · Basecamp
-- A weekend at Dinokeng's Kyleu Bush Camp: https://blog.tracks4africa.co.za/a-weekend-at-dinokengs-kyleu-bush-camp/ · Tracks4Africa
+- Kyleu Bush Camp on video: https://www.facebook.com/transafricatours/videos/kyleu-bush-camp/1504586673966492/ · Trans Africa Tours · image assets/img/photos/campfire-stand.jpg
+- Kyleu Bush Camp review: https://basecamp.africa/kyleu-bush-camp-review/ · Basecamp · image assets/img/photos/camp-overlanders.jpg
+- A weekend at Dinokeng's Kyleu Bush Camp: https://blog.tracks4africa.co.za/a-weekend-at-dinokengs-kyleu-bush-camp/ · Tracks4Africa · image assets/img/photos/tent-and-trailer.jpg

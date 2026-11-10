@@ -132,8 +132,8 @@
     var holSec = secs.filter(function (s) { return /holiday|long weekend/i.test(s.title); })[0];
     var holidays = {};
     if (holSec) holSec.items.forEach(function (it) { if (/^\d{4}-\d{2}-\d{2}$/.test(it.label)) holidays[it.label] = it.raw; });
-    // nights charged at the weekend rate (0 = Sunday night ... 6 = Saturday night): Friday and Saturday unless staff change it in the admin
-    var wkDays = W.rules && W.rules.wkDays && W.rules.wkDays.length ? W.rules.wkDays.map(Number) : [5, 6];
+    // nights charged at the weekend rate (0 = Sunday night ... 6 = Saturday night): Friday, Saturday and Sunday unless staff change it in the admin
+    var wkDays = W.rules && W.rules.wkDays && W.rules.wkDays.length ? W.rules.wkDays.map(Number) : [5, 6, 0];
     if (W.hol) { Object.keys(W.hol.del || {}).forEach(function (d) { delete holidays[d]; }); Object.keys(W.hol.add || {}).forEach(function (d) { holidays[d] = W.hol.add[d]; }); }
     return { year: year, sections: secs, find: find, num: num, holidays: holidays, wkDays: wkDays };
   }

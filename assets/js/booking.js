@@ -22,7 +22,7 @@
   function today() { var t = new Date(); t.setHours(0, 0, 0, 0); return t; }
   function nightsOf(ci, co) { var out = []; for (var d = new Date(ci); d < co; d = addDays(d, 1)) out.push(new Date(d)); return out; }
   function nice(d, opts) { return d.toLocaleDateString('en-ZA', opts || { weekday: 'short', day: 'numeric', month: 'short' }); }
-  function isWeekendNight(d) { var dow = d.getDay(); return (P && P.wkDays ? P.wkDays.indexOf(dow) >= 0 : dow === 5 || dow === 6) || !!(P && P.holidays[iso(addDays(d, 1))]); }
+  function isWeekendNight(d) { var dow = d.getDay(); return (P && P.wkDays ? P.wkDays.indexOf(dow) >= 0 : dow === 5 || dow === 6 || dow === 0) || !!(P && P.holidays[iso(addDays(d, 1))]); }
 
   /* ---------- simulated availability (replace with real system) ---------- */
   function hash(str) { var h = 2166136261; for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return ((h >>> 0) % 1000) / 1000; }

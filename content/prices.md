@@ -13,14 +13,14 @@
 Rates year: 2026
 
 ## Ablution stands (Fenced & Unfenced)
-- Weekend per person per night: R245 · Fri & Sat nights and long weekends (minimum 2 nights)
-- Weekday per person per night: R160 · Sun to Thu nights
+- Weekend per person per night: R245 · Fri, Sat & Sun nights and long weekends (minimum 2 nights)
+- Weekday per person per night: R160 · Mon to Thu nights
 - Pensioner weekday per person per night: R115 · Mon to Thu nights
 - Children under 12: R0 · Free
 
 ## Self-sufficient stands (Unfenced, on the spruit)
-- Weekend per person per night: R180 · Fri & Sat nights and long weekends (minimum 2 nights)
-- Weekday per person per night: R100 · Sun to Thu nights
+- Weekend per person per night: R180 · Fri, Sat & Sun nights and long weekends (minimum 2 nights)
+- Weekday per person per night: R100 · Mon to Thu nights
 - Pensioner weekday per person per night: R100 · Mon to Thu nights
 - Children under 12: R0 · Free
 - Porta potty hire per night: R100 · Includes cleaning
@@ -67,6 +67,7 @@ Rates year: 2026
 - Day visitors: 0 · Charged on arrangement with management (by prior arrangement only)
 
 ## Long weekends and public holidays
+> Friday, Saturday and Sunday nights are charged at the weekend rate, Monday to Thursday nights at the weekday rate (change this in the admin: Rates & fees, Payment & booking rules).
 > Nights before these dates are charged at the weekend rate. Add or remove dates as needed (format YYYY-MM-DD).
 - 2026-12-16: Day of Reconciliation
 - 2026-12-25: Christmas Day

@@ -68,7 +68,7 @@
         if (isEnd) cls.push(preview ? 'hend' : 'end');
         if (isStart && end) cls.push('has-band');
         if (inRange) { cls.push(preview ? 'hin' : 'in'); idx++; }
-        if (d.getDay() === 5 || d.getDay() === 6) cls.push('wknd');
+        if (d.getDay() === 5 || d.getDay() === 6 || d.getDay() === 0) cls.push('wknd');   // weekend-rate nights: Friday, Saturday and Sunday
         var n = isEnd && ci ? nightsBetween(ci, end) : 0;
         html += '<span class="' + cls.join(' ') + '"' + (inRange ? ' style="--i:' + idx + '"' : '') + '><button type="button" class="dp-d" data-d="' + iso(d) + '"' + (past ? ' disabled' : '') +
           ' aria-label="' + fmt(d, LONG) + (isStart ? ', arrival' : '') + (isEnd && !preview ? ', departure' : '') + '"' + (isStart || (isEnd && !preview) ? ' aria-pressed="true"' : '') + '>' + dd + '</button>' +

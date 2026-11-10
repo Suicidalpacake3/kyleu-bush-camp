@@ -100,33 +100,53 @@
     $$('[data-guest-stories]').forEach(function (el) {
       K.settings().then(function (S) {
         var so = K.social() || {}, esc = K.esc;
-        var posts = so.posts ? so.posts.filter(function (x) { return x.show; }) : (S.list ? S.list('Guest stories') : []).filter(function (it) { return /^https?:/.test(it.value); }).map(function (it) { var pp = it.value.split(' · '); return { url: pp[0].trim(), title: it.label, by: (pp[1] || '').trim(), out: /youtube|opens/i.test(pp[2] || '') }; });
+        // Stories: the list in content/settings.md, plus what staff added, hid or removed in the admin.
+        // Links that are new in settings.md always show, even in a browser that still holds an older admin list.
+        var md = (S.list ? S.list('Guest stories') : []).filter(function (it) { return /^https?:/.test(it.value); }).map(function (it) {
+          var pp = it.value.split(' · '), x = { url: pp[0].trim(), title: it.label, by: (pp[1] || '').trim() };
+          pp.slice(2).forEach(function (f) { var im = f.match(/^\s*image\s+(\S+)/i); if (im) x.img = im[1]; else if (/youtube|opens/i.test(f)) x.out = true; });
+          return x;
+        });
+        var posts = md;
+        if (so.posts) { var known = {}; so.posts.forEach(function (x) { known[x.url] = 1; }); (so.gone || []).forEach(function (u) { known[u] = 1; }); posts = md.filter(function (x) { return !known[x.url]; }).concat(so.posts.filter(function (x) { return x.show; })); }
         var igFeed = so.posts ? so.igFeed : S.get('Instagram feed ID', ''), igN = +(so.igCount || S.get('Instagram photos', 6)) || 6;
         var fbUrl = S.get('Facebook', ''), fbOn = so.posts ? so.fbFeed !== false : !/^off|no/i.test(S.get('Facebook feed', 'on'));
         var ytId = function (u) { var m = String(u).match(/(?:youtu\.be\/|[?&]v=|\/(?:embed|shorts|live)\/)([\w-]{11})/); return /youtu/i.test(u) && m ? m[1] : ''; };
-        var post = function (x) {
-          var yt = ytId(x.url);
-          // the owner switched off playing on other websites: the picture opens the video on YouTube instead
-          if (yt && x.out) return '<figure class="soc-embed yt" data-reveal><a class="yt-lite" href="' + esc(x.url) + '" target="_blank" rel="noopener" style="background-image:url(\'https://i.ytimg.com/vi/' + yt + '/hqdefault.jpg\')" aria-label="Watch on YouTube: ' + esc(x.title || 'YouTube video') + '"><span class="yt-play" aria-hidden="true"></span><span class="yt-out">Watch on YouTube</span></a><figcaption>' + esc(x.title) + (x.by ? ' · ' + esc(x.by) : '') + '</figcaption></figure>';
-          if (yt) return '<figure class="soc-embed yt" data-reveal><button type="button" class="yt-lite" data-yt="' + yt + '" style="background-image:url(\'https://i.ytimg.com/vi/' + yt + '/hqdefault.jpg\')" aria-label="Play the video: ' + esc(x.title || 'YouTube video') + '"><span class="yt-play" aria-hidden="true"></span></button><figcaption>' + esc(x.title) + (x.by ? ' · ' + esc(x.by) : '') + '</figcaption></figure>';
-          var u = x.url, ig = u.match(/instagram\.com\/(?:[\w.]+\/)?(p|reel|tv)\/([\w-]+)/i), host = u.replace(/^https?:\/\/(www\.)?/, '').split('/')[0];
-          if (ig) return '<figure class="soc-embed ig" data-reveal><iframe data-url="' + esc(u) + '" src="https://www.instagram.com/' + ig[1] + '/' + ig[2] + '/embed/captioned/" title="' + esc(x.title || 'Instagram post') + '" loading="lazy" allowtransparency="true" scrolling="no"></iframe><figcaption>' + esc(x.title) + (x.by ? ' · ' + esc(x.by) : '') + '</figcaption></figure>';
-          if (/facebook\.com\/.+\/(posts|videos|photos)|facebook\.com\/(permalink|photo|watch)|fb\.watch/i.test(u)) return '<figure class="soc-embed fb" data-reveal><iframe data-url="' + esc(u) + '" src="https://www.facebook.com/plugins/post.php?href=' + encodeURIComponent(u) + '&show_text=true&width=500" title="' + esc(x.title || 'Facebook post') + '" loading="lazy" scrolling="no" allow="encrypted-media"></iframe><figcaption>' + esc(x.title) + (x.by ? ' · ' + esc(x.by) : '') + '</figcaption></figure>';
-          var kind = /instagram/i.test(host) ? 'ig' : /facebook|fb\./i.test(host) ? 'fb' : /youtu/i.test(host) ? 'yt' : 'blog';
-          return '<a class="gstory" href="' + esc(u) + '" target="_blank" rel="noopener" data-reveal><span class="story-ic ' + kind + '"><svg><use href="#' + (kind === 'ig' ? 'i-ig' : kind === 'fb' ? 'i-fb' : 'i-news') + '"/></svg></span><span><b>' + esc(x.title) + '</b><small>' + esc(x.by || host) + '</small></span><span class="link-arrow">Read</span></a>';
+        var KIND = { yt: ['YouTube', '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21.6 7.2a2.5 2.5 0 0 0-1.8-1.8C18.2 5 12 5 12 5s-6.2 0-7.8.4A2.5 2.5 0 0 0 2.4 7.2 26 26 0 0 0 2 12a26 26 0 0 0 .4 4.8 2.5 2.5 0 0 0 1.8 1.8C5.8 19 12 19 12 19s6.2 0 7.8-.4a2.5 2.5 0 0 0 1.8-1.8A26 26 0 0 0 22 12a26 26 0 0 0-.4-4.8zM10 15V9l5.2 3z"/></svg>'], fb: ['Facebook', '<svg aria-hidden="true"><use href="#i-fb"/></svg>'], ig: ['Instagram', '<svg aria-hidden="true"><use href="#i-ig"/></svg>'], tt: ['TikTok', '<svg aria-hidden="true"><use href="#i-tt"/></svg>'], web: ['Article', '<svg aria-hidden="true"><use href="#i-news"/></svg>'] };
+        // every story is the same card: a picture, where it comes from, a title and who made it
+        var card = function (x) {
+          var u = x.url, yt = ytId(u), host = u.replace(/^https?:\/\/(www\.)?/, '').split('/')[0];
+          var kind = yt ? 'yt' : /instagram\.com/i.test(u) ? 'ig' : /facebook\.com|fb\.watch/i.test(u) ? 'fb' : /tiktok\.com/i.test(u) ? 'tt' : 'web';
+          var video = !!yt || /\/(videos?|reels?|watch|tv)\b|fb\.watch|tiktok\.com/i.test(u), here = yt && !x.out;
+          var pic = x.imgKey ? '<img data-gs-file="' + esc(x.imgKey) + '" alt="" loading="lazy">' : x.img ? '<img src="' + esc(x.img) + '" alt="" loading="lazy">'
+            : yt ? '<img src="https://i.ytimg.com/vi/' + yt + '/maxresdefault.jpg" alt="" loading="lazy" onerror="this.onerror=null;this.src=\'https://i.ytimg.com/vi/' + yt + '/hqdefault.jpg\'">' : '<span class="gs-blank">' + KIND[kind][1] + '</span>';
+          var go = here ? 'Watch here' : yt ? 'Watch on YouTube' : video ? 'Watch on ' + KIND[kind][0] : kind === 'web' ? 'Read the story' : 'See it on ' + KIND[kind][0];
+          var inner = '<span class="gs-media">' + pic + '<span class="gs-badge">' + KIND[kind][1] + KIND[kind][0] + '</span>' + (video ? '<span class="gs-play" aria-hidden="true"></span>' : '') + '</span>' +
+            '<span class="gs-body"><b>' + esc(x.title) + '</b><small>' + esc(x.by || host) + '</small><span class="gs-go">' + go + (here ? '' : ' <svg aria-hidden="true"><use href="#i-arrow"/></svg>') + '</span></span>';
+          return here ? '<button type="button" class="gs-card gs-' + kind + '" data-gs-yt="' + yt + '" data-gs-url="' + esc(u) + '" data-gs-title="' + esc(x.title) + '" data-reveal>' + inner + '</button>'
+            : '<a class="gs-card gs-' + kind + '" href="' + esc(u) + '" target="_blank" rel="noopener" data-reveal>' + inner + '</a>';
         };
         var live = (igFeed ? '<div class="soc-live-ig"><h3><svg><use href="#i-ig"/></svg>Latest on Instagram</h3><div class="ig-grid" data-ig-grid><p class="muted">Loading photos…</p></div></div>' : '') +
           (fbOn && fbUrl ? '<div class="soc-live-fb"><h3><svg><use href="#i-fb"/></svg>On Facebook</h3><a class="fb-card" href="' + esc(fbUrl) + '" target="_blank" rel="noopener"><span class="fb-ic"><svg><use href="#i-fb"/></svg></span><span class="fb-txt"><b>Kyleu Bush Camp</b><small>Camp news, sightings and photos from our guests</small></span><span class="btn btn-sm">See our page</span></a></div>' : '');
-        var embeds = posts.filter(function (x) { return ytId(x.url) || /instagram\.com\/(?:[\w.]+\/)?(p|reel|tv)\/|facebook\.com\/.+\/(posts|videos|photos)|facebook\.com\/(permalink|photo|watch)|fb\.watch/i.test(x.url); }), links = posts.filter(function (x) { return embeds.indexOf(x) < 0; });
+        var FIRST = 6, more = posts.length > FIRST;
         el.innerHTML = (live ? '<div class="soc-live' + (igFeed && fbOn && fbUrl ? ' two' : '') + '">' + live + '</div>' : '') +
-          (embeds.length ? '<div class="soc-embeds">' + embeds.map(post).join('') + '</div>' : '') +
-          (links.length ? '<div class="stories">' + links.map(post).join('') + '</div>' : '') ||
+          (posts.length ? '<div class="gs-grid' + (more ? ' gs-folded' : '') + '">' + posts.map(card).join('') + '</div>' + (more ? '<p class="center gs-more"><button type="button" class="btn btn-ghost" data-gs-more>Show all ' + posts.length + ' stories</button></p>' : '') : '') ||
           '<p class="muted">Guest stories will appear here.</p>';
         el.classList.remove('stories');
-        el.addEventListener('click', function (e) { var b = e.target.closest('[data-yt]'); if (!b) return; var fr = document.createElement('div'); fr.className = 'yt-frame'; fr.innerHTML = '<iframe src="https://www.youtube-nocookie.com/embed/' + b.dataset.yt + '?autoplay=1&rel=0" title="' + esc(b.getAttribute('aria-label') || 'YouTube video') + '" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>'; b.replaceWith(fr); });
-        $$('.soc-embed iframe', el).forEach(function (fr) {
-          var done = false; fr.addEventListener('load', function () { done = true; });
-          setTimeout(function () { if (done) return; var fig = fr.closest('.soc-embed'), u = fr.getAttribute('data-url') || ''; if (fig) fig.outerHTML = '<a class="gstory" href="' + esc(u) + '" target="_blank" rel="noopener"><span class="story-ic ' + (/instagram/.test(u) ? 'ig' : 'fb') + '"><svg><use href="#' + (/instagram/.test(u) ? 'i-ig' : 'i-fb') + '"/></svg></span><span><b>' + esc(fr.title || 'See the post') + '</b><small>Open the post</small></span><span class="link-arrow">Open</span></a>'; }, 15000);
+        // pictures staff uploaded in the admin (demo: kept in this browser's file store)
+        $$('[data-gs-file]', el).forEach(function (im) { if (K.files) K.files.get(im.getAttribute('data-gs-file')).then(function (bl) { if (bl) im.src = URL.createObjectURL(bl); else im.outerHTML = '<span class="gs-blank"><svg aria-hidden="true"><use href="#i-news"/></svg></span>'; }); });
+        // a YouTube video plays in a viewer on top of the page, so every card can stay the same size
+        var closeViewer = function () { var m = $('.gs-viewer'); if (!m) return; m.remove(); document.documentElement.classList.remove('gs-lock'); document.removeEventListener('keydown', onViewerKey, true); if (closeViewer.back) { try { closeViewer.back.focus(); } catch (e) {} } };
+        var onViewerKey = function (e) { if (e.key === 'Escape') { e.preventDefault(); closeViewer(); } };
+        el.addEventListener('click', function (e) {
+          if (e.target.closest('[data-gs-more]')) { $('.gs-grid', el).classList.remove('gs-folded'); e.target.closest('.gs-more').remove(); K.reveal(el); return; }
+          var b = e.target.closest('[data-gs-yt]'); if (!b) return;
+          var m = document.createElement('div'); m.className = 'gs-viewer'; m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true'); m.setAttribute('aria-label', b.dataset.gsTitle || 'Video');
+          m.innerHTML = '<div class="gs-viewer-in"><button type="button" class="gs-x" aria-label="Close the video"><svg aria-hidden="true"><use href="#i-x"/></svg></button><div class="gs-frame"><iframe src="https://www.youtube-nocookie.com/embed/' + b.dataset.gsYt + '?autoplay=1&rel=0" title="' + esc(b.dataset.gsTitle || 'YouTube video') + '" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>' +
+            '<p class="gs-cap"><b>' + esc(b.dataset.gsTitle || '') + '</b><a href="' + esc(b.dataset.gsUrl) + '" target="_blank" rel="noopener">Open on YouTube</a></p></div>';
+          m.addEventListener('click', function (ev) { if (ev.target === m || ev.target.closest('.gs-x')) closeViewer(); });
+          closeViewer.back = b; document.body.appendChild(m); document.documentElement.classList.add('gs-lock'); document.addEventListener('keydown', onViewerKey, true);
+          $('.gs-x', m).focus();
         });
         // the live Instagram photos come through the feed Kyleu connected (Behold); each opens the post on Instagram
         var grid = $('[data-ig-grid]', el);

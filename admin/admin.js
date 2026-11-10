@@ -54,7 +54,7 @@
   function ensureStands() { if (!DB.stands) { DB.stands = JSON.parse(JSON.stringify(STANDS)); STANDS = DB.stands; } }
   function imgSrc(p) { return /^(data:|https?:)/.test(p) ? p : '../' + p; }
   function slugify(s) { return K.norm(s).replace(/[^a-z0-9 ]/g, '').trim().replace(/ +/g, '-') || 'stand'; }
-  function isWeekendNight(s) { var dow = D(s).getDay(); return (P.wkDays ? P.wkDays.indexOf(dow) >= 0 : dow === 5 || dow === 6) || !!P.holidays[add(s, 1)]; }
+  function isWeekendNight(s) { var dow = D(s).getDay(); return (P.wkDays ? P.wkDays.indexOf(dow) >= 0 : dow === 5 || dow === 6 || dow === 0) || !!P.holidays[add(s, 1)]; }
   function quote(standId, ci, co, g, ex) {
     ex = ex || {};
     var st = standById(standId), ss = st.area === 'self-sufficient', sec = ss ? 'Self-sufficient' : 'Ablution stands';
@@ -1095,7 +1095,7 @@
   var WEBK = 'kyleu-web-content';
   function webDB() { DB.web = DB.web || {}; var w = DB.web; w.text = w.text || {}; w.settings = w.settings || {}; w.rateText = w.rateText || {}; w.home = w.home || {}; return w; }
   // which nights cost the weekend rate (set on Rates & fees > Payment & booking rules)
-  function applyWk() { var d = DB && DB.web && DB.web.wkDays; P.wkDays = d && d.length ? d.slice() : [5, 6]; }
+  function applyWk() { var d = DB && DB.web && DB.web.wkDays; P.wkDays = d && d.length ? d.slice() : [5, 6, 0]; }
   function publishWeb() {
     if (!DB || !P) return;
     var w = webDB(), prices = {};
@@ -1326,17 +1326,41 @@
       DB.social = { instagram: '', facebook: '', tiktok: '', hashtag: '#KyleuBushCamp', igFeed: '', igCount: 6, fbFeed: true, posts: [] };
       if (K.settings) K.settings().then(function (S) {   // start from content/settings.md
         var so = DB.social; so.instagram = S.get('Instagram', ''); so.facebook = S.get('Facebook', ''); so.tiktok = S.get('TikTok', ''); so.hashtag = S.get('Hashtag', so.hashtag);
-        so.posts = (S.list('Guest stories') || []).filter(function (it) { return /^https?:/.test(it.value); }).map(function (it) { var pp = it.value.split(' · '); return { id: uid('sp'), url: pp[0].trim(), title: it.label, by: (pp[1] || '').trim(), out: /youtube|opens/i.test(pp[2] || ''), show: true }; });
+        so.posts = socFromMd(S); SOC_SYNCED = true;
         socSave(); if (route() === 'social') render();
       }).catch(function () {});
     }
+    socSync();
     return DB.social;
   }
+  function socFromMd(S) {
+    return (S.list('Guest stories') || []).filter(function (it) { return /^https?:/.test(it.value); }).map(function (it) {
+      var pp = it.value.split(' · '), x = { id: uid('sp'), url: pp[0].trim(), title: it.label, by: (pp[1] || '').trim(), show: true };
+      pp.slice(2).forEach(function (f) { var im = f.match(/^\s*image\s+(\S+)/i); if (im) x.img = im[1]; else if (/youtube|opens/i.test(f)) x.out = true; });
+      return x;
+    });
+  }
+  // stories added to settings.md since this list was made are added to it once (never ones that were removed here)
+  var SOC_SYNCED = false;
+  function socSync() {
+    if (SOC_SYNCED || !DB.social || !K.settingsFile) return; SOC_SYNCED = true;
+    K.settingsFile().then(function (S) {
+      var so = DB.social, known = {}; so.gone = so.gone || [];
+      so.posts.forEach(function (x) { known[x.url] = 1; }); so.gone.forEach(function (u) { known[u] = 1; });
+      var add = socFromMd(S).filter(function (x) { return !known[x.url]; });
+      if (!add.length) return;
+      so.posts = add.concat(so.posts); socSave(); if (route() === 'social') render();
+    }).catch(function () {});
+  }
+  function socThumbs() { $$('[data-soc-img]').forEach(function (im) { K.files.get(im.dataset.socImg).then(function (b) { if (b) im.src = URL.createObjectURL(b); }); }); }
+  function socYt(u) { var m = String(u).match(/(?:youtu\.be\/|[?&]v=|\/(?:embed|shorts|live)\/)([\w-]{11})/); return /youtu/i.test(u) && m ? m[1] : ''; }
+  function socPic(x) { var y = socYt(x.url); return x.imgKey ? '<img data-soc-img="' + esc(x.imgKey) + '" alt="">' : x.img ? '<img src="' + esc(imgSrc(x.img)) + '" alt="">' : y ? '<img src="https://i.ytimg.com/vi/' + y + '/mqdefault.jpg" alt="">' : ''; }
   function socSave() { save(); try { localStorage.setItem(SOCK, JSON.stringify(DB.social)); } catch (e) {} }
   function socKind(u) { return /instagram\.com/i.test(u) ? 'ig' : /facebook\.com|fb\.watch/i.test(u) ? 'fb' : /tiktok\.com/i.test(u) ? 'tt' : /youtu/i.test(u) ? 'yt' : 'web'; }
   var SOC_KIND = { ig: 'Instagram post', fb: 'Facebook post', tt: 'TikTok', yt: 'YouTube', web: 'Article or blog' };
   function vSocial() {
     var so = socDB(), shown = so.posts.filter(function (x) { return x.show; }).length;
+    setTimeout(socThumbs, 0);
     var fld = function (k, label, ph, hint) { return '<label class="fld"><span>' + label + '</span><input data-soc="' + k + '" value="' + esc(so[k] || '') + '" placeholder="' + esc(ph) + '" autocomplete="off"></label>' + (hint ? '<p class="hint">' + hint + '</p>' : ''); };
     return '<div class="page-h"><div><h1>Social media</h1><p class="muted">Kyleu\'s accounts, the live feeds and the posts shown on the website (Experience Kyleu page, "Stories from our campers", and the footer of every page).</p></div><div class="ph-act"><a class="btn ghost" href="../experience.html#stories" target="_blank" rel="noopener">' + ic('ext') + 'See it on the website</a></div></div>' +
       '<div class="cols"><section class="card"><header class="card-h"><h3>Your accounts</h3></header>' +
@@ -1352,10 +1376,11 @@
       (so.igFeed ? '' : '<ol class="soc-steps"><li>Make a free account at <a href="https://behold.so" target="_blank" rel="noopener">behold.so</a>.</li><li>Connect Kyleu\'s Instagram (it must be a Business or Creator account; switching is free in the Instagram app).</li><li>Create a <b>JSON feed</b>, copy its <b>feed ID</b> and paste it above.</li></ol>') +
       '</section></div>' +
       '<section class="card"><header class="card-h"><h3>Featured posts</h3><span class="count">' + shown + ' shown</span><div class="ph-act"><button class="btn sm" data-act="soc-add">' + ic('plus') + 'Add a post</button></div></header>' +
-      '<p class="muted small">Hand-picked posts under "Stories from our campers": a guest\'s Instagram or Facebook post (shown as the post itself), a blog or an article (shown as a link). The post must be public.</p>' +
+      '<p class="muted small">Hand-picked videos, posts and articles under "Stories from our campers". Each one shows as the same neat card: a picture, where it is from, your title and who made it. YouTube videos play right on the page; anything else opens where it lives. Add a picture to a Facebook, Instagram or article card so it does not show a plain colour.</p>' +
       (so.posts.length ? '<div class="list soc-list">' + so.posts.map(function (x, i) {
         var k = socKind(x.url);
-        return '<div class="brow soc-row' + (x.show ? '' : ' off') + '"><span class="soc-ic ' + k + '">' + ic(k === 'ig' || k === 'fb' ? 'image' : 'ext') + '</span><span class="brow-g"><b>' + esc(x.title || 'Untitled') + '</b><small>' + SOC_KIND[k] + (x.by ? ' · ' + esc(x.by) : '') + ' · ' + esc(x.url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 48)) + '</small></span>' +
+        var pic = socPic(x);
+        return '<div class="brow soc-row' + (x.show ? '' : ' off') + '">' + (pic ? '<span class="soc-th">' + pic + '</span>' : '<span class="soc-ic ' + k + '">' + ic(k === 'ig' || k === 'fb' ? 'image' : 'ext') + '</span>') + '<span class="brow-g"><b>' + esc(x.title || 'Untitled') + '</b><small>' + SOC_KIND[k] + (x.by ? ' · ' + esc(x.by) : '') + ' · ' + esc(x.url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 48)) + '</small></span>' +
           '<span class="soc-acts"><button type="button" class="btn ghost sm" data-act="soc-show" data-ref="' + x.id + '">' + (x.show ? 'Shown' : 'Hidden') + '</button>' +
           '<button type="button" class="icon-btn sm" data-act="soc-up" data-ref="' + x.id + '" aria-label="Move up"' + (i ? '' : ' disabled') + '>' + ic('chev-l', 'up') + '</button><button type="button" class="icon-btn sm" data-act="soc-down" data-ref="' + x.id + '" aria-label="Move down"' + (i < so.posts.length - 1 ? '' : ' disabled') + '>' + ic('chev-r', 'down') + '</button>' +
           '<button type="button" class="icon-btn sm" data-act="soc-edit" data-ref="' + x.id + '" aria-label="Edit">' + ic('edit') + '</button><button type="button" class="icon-btn sm danger-t" data-act="soc-del" data-ref="' + x.id + '" aria-label="Remove">' + ic('x') + '</button></span></div>';
@@ -1363,18 +1388,29 @@
       '<p class="demo-note">' + ic('info') + 'Demo: changes show on the website in this browser straight away. In the live version they are saved on the server, so every visitor sees them. <button type="button" class="link-btn" data-act="soc-md">Copy as settings.md text</button></p>';
   }
   function actSocPost(id) {
-    var so = socDB(), x = id ? so.posts.filter(function (p) { return p.id === id; })[0] : null, d = x || { url: '', title: '', by: '' };
-    modal(x ? 'Edit post' : 'Add a post', '<label class="fld"><span>Link to the post</span><input name="url" value="' + esc(d.url) + '" placeholder="https://www.instagram.com/p/..." autocomplete="off"></label>' +
+    var so = socDB(), x = id ? so.posts.filter(function (p) { return p.id === id; })[0] : null, d = x || { url: '', title: '', by: '' }, newPic = null, dropPic = false;
+    var picBox = function () { var cur = dropPic ? '' : newPic ? '<img src="' + newPic.url + '" alt="">' : socPic(d); return (cur || '<span class="soc-nopic">' + ic('image') + '</span>') + '<span class="soc-pic-acts"><label class="btn ghost sm">' + ic('image') + (cur ? 'Change the picture' : 'Add a picture') + '<input type="file" accept="image/*" data-soc-file hidden></label>' + ((newPic || d.imgKey || d.img) && !dropPic ? '<button type="button" class="btn ghost sm" data-soc-nopic>' + ic('x') + 'Remove it</button>' : '') + '</span>'; };
+    modal(x ? 'Edit post' : 'Add a post', '<label class="fld"><span>Link to the video, post or article</span><input name="url" value="' + esc(d.url) + '" placeholder="https://www.instagram.com/p/..." autocomplete="off"></label>' +
       '<div class="grid2"><label class="fld"><span>Title</span><input name="title" value="' + esc(d.title) + '" placeholder="e.g. Sunrise from Stand 4"></label><label class="fld"><span>By (optional)</span><input name="by" value="' + esc(d.by) + '" placeholder="e.g. @campwiththeventers"></label></div>' +
+      '<span class="fld-l">Picture on the card</span><div class="soc-pic" data-soc-pic>' + picBox() + '</div>' +
+      '<p class="hint">' + ic('info') + ' YouTube videos bring their own picture. For a Facebook or Instagram post or an article, add a photo or a screenshot of the post so the card looks its best.</p>' +
       '<label class="check"><input type="checkbox" name="out"' + (d.out ? ' checked' : '') + '><span>YouTube only: this video will not play on other websites, so open it on YouTube instead</span></label>' +
-      '<p class="hint">' + ic('info') + ' Instagram and Facebook posts show as the post itself, YouTube videos play right on the page, and anything else shows as a link card. If a YouTube video shows "Video unavailable" on the website, its owner has switched off playing on other websites: tick the box above. The post must be public, and it is polite to ask the guest first.</p>',
+      '<p class="hint">' + ic('info') + ' If a YouTube video shows "Video unavailable" on the website, its owner has switched off playing on other websites: tick the box above. The post must be public, and it is polite to ask the guest first.</p>',
       x ? 'Save' : 'Add post', function (f) {
         var url = fval(f, 'url');
         if (!/^https?:\/\/\S+\.\S+/.test(url)) { toast('Paste the full link, starting with https://'); return false; }
         var row = { url: url, title: fval(f, 'title') || SOC_KIND[socKind(url)], by: fval(f, 'by'), out: !!fval(f, 'out') && socKind(url) === 'yt' };
-        if (x) Object.assign(x, row); else so.posts.unshift(Object.assign({ id: uid('sp'), show: true }, row));
-        log((x ? 'Updated' : 'Added') + ' social post: ' + row.title); socSave(); render(); toast(x ? 'Post saved' : 'Post added. It shows on the website now.');
-      });
+        var t = x; if (x) Object.assign(x, row); else { t = Object.assign({ id: uid('sp'), show: true }, row); so.posts.unshift(t); }
+        var fin = function () { log((x ? 'Updated' : 'Added') + ' social post: ' + row.title); socSave(); render(); toast(x ? 'Post saved' : 'Post added. It shows on the website now.'); };
+        if (dropPic && !newPic) { if (t.imgKey) K.files.del(t.imgKey); delete t.imgKey; delete t.img; }
+        if (newPic) { var key = 'soc-img-' + t.id; K.files.put(key, newPic.blob).then(function () { t.imgKey = key; delete t.img; fin(); }, function () { toast('The picture could not be saved in this browser.'); fin(); }); }
+        else fin();
+      }, { onOpen: function (f) {
+        var box = $('[data-soc-pic]', f);
+        f.addEventListener('change', function (e) { if (!e.target.matches('[data-soc-file]')) return; var file = e.target.files && e.target.files[0]; if (!file) return; resizeImg(file, 1400, function (blob) { if (!blob) { toast('That photo could not be opened'); return; } newPic = { blob: blob, url: URL.createObjectURL(blob) }; dropPic = false; box.innerHTML = picBox(); }); });
+        f.addEventListener('click', function (e) { if (e.target.closest('[data-soc-nopic]')) { newPic = null; dropPic = true; box.innerHTML = picBox(); } });
+        setTimeout(socThumbs, 0);
+      } });
   }
   /* The writing tool (admin/editor.js) for a news story: used the same way for camp news and Dinokeng news.
      Without it (the file did not load) a plain text box is shown instead, so nothing is ever lost. */
@@ -2543,13 +2579,13 @@
     var ab = secByRe(/^ablution/i), ss = secByRe(/^self-sufficient/i), feeI = $('[data-rate$="|Card payment fee percentage"]'), fee = feeI ? parseFloat(feeI.value) || 0 : cardFee();
     var c = function (n) { return Math.round(n * (1 + fee / 100)); };
     var wk = rateVal(ab, 'Weekend per person per night', 245), wd = rateVal(ab, 'Weekday per person per night', 160), swk = rateVal(ss, 'Weekend per person per night', 180);
-    return '<b>2 adults, Friday and Saturday night on a fenced stand:</b> ' + money(4 * wk) + ' EFT, or ' + money(4 * c(wk)) + ' by card.<br><b>2 adults, Sunday to Tuesday (2 nights):</b> ' + money(4 * wd) + ' EFT, or ' + money(4 * c(wd)) + ' by card.<br><b>2 adults, a weekend on a self-sufficient stand:</b> ' + money(4 * swk) + ' EFT, or ' + money(4 * c(swk)) + ' by card.';
+    return '<b>2 adults, Friday and Saturday night on a fenced stand:</b> ' + money(4 * wk) + ' EFT, or ' + money(4 * c(wk)) + ' by card.<br><b>2 adults, Monday to Wednesday (2 nights):</b> ' + money(4 * wd) + ' EFT, or ' + money(4 * c(wd)) + ' by card.<br><b>2 adults, a weekend on a self-sufficient stand:</b> ' + money(4 * swk) + ' EFT, or ' + money(4 * c(swk)) + ' by card.';
   }
   function vRates() {
     var tabs = [['stay', 'Stay rates'], ['words', 'Wording and Dinokeng fees'], ['extras', 'Extras & activities'], ['rules', 'Payment & booking rules'], ['holidays', 'Holidays']];
     var ab = secByRe(/^ablution/i), ss = secByRe(/^self-sufficient/i), gd = secByRe(/game drive/i), br = secByRe(/booking rules/i), body = '';
     if (RT.tab === 'stay') {
-      var rows = [['Weekend per person per night', 'Weekend night', 'Friday and Saturday nights, and nights before a public holiday'], ['Weekday per person per night', 'Weekday night', 'Sunday to Thursday nights'], ['Pensioner weekday per person per night', 'Pensioner, weekday', 'Monday to Thursday nights, per pensioner'], ['Children under 12', 'Children under ' + num('Booking rules', 'Children free under age', 12), 'Per child, per night']];
+      var rows = [['Weekend per person per night', 'Weekend night', 'Friday, Saturday and Sunday nights, and nights before a public holiday'], ['Weekday per person per night', 'Weekday night', 'Monday to Thursday nights'], ['Pensioner weekday per person per night', 'Pensioner, weekday', 'Monday to Thursday nights, per pensioner'], ['Children under 12', 'Children under ' + num('Booking rules', 'Children free under age', 12), 'Per child, per night']];
       rows.forEach(function (r) { var d = rateWord(ab, r[0], 'note'); if (d) r[2] = 'On the website: "' + esc(d) + '"'; });
       body = '<section class="card flush"><table class="tbl rate-matrix"><thead><tr><th>Per person, per night</th><th class="r">Ablution stands<small>Fenced and unfenced</small></th><th class="r">Self-sufficient stands<small>On the spruit</small></th></tr></thead><tbody>' +
         rows.map(function (r) { return '<tr><td data-l="Rate"><b>' + r[1] + '</b><small>' + r[2] + '</small></td><td data-l="Ablution stands" class="r">' + rateIn(ab, r[0], { aria: r[1] + ', ablution stands' }) + '</td><td data-l="Self-sufficient stands" class="r">' + rateIn(ss, r[0], { aria: r[1] + ', self-sufficient stands' }) + '</td></tr>'; }).join('') + '</tbody></table></section>' +
@@ -2578,7 +2614,7 @@
         ['Balance due days before arrival', 'days', 'Balance deadline', 'The rest is due this many days before arrival.'],
         ['Minimum nights over a weekend', 'nights', 'Weekend minimum', 'Shortest stay allowed over a Friday or Saturday night.'],
         ['Children free under age', 'years', 'Children stay free under', 'Children younger than this pay nothing.']];
-      var DN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'], wkd = P.wkDays || [5, 6], wdNames = [1, 2, 3, 4, 5, 6, 0].filter(function (d) { return wkd.indexOf(d) < 0; }).map(function (d) { return DN[d]; });
+      var DN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'], wkd = P.wkDays || [5, 6, 0], wdNames = [1, 2, 3, 4, 5, 6, 0].filter(function (d) { return wkd.indexOf(d) < 0; }).map(function (d) { return DN[d]; });
       body = '<section class="card"><header class="card-h"><h3>Weekend-rate nights</h3><span class="muted small">Saves as you tick</span></header><p class="muted small">Tick the nights that cost the weekend rate. All other nights cost the weekday rate. The night before a public holiday always costs the weekend rate.</p>' +
         '<div class="wk-days">' + [1, 2, 3, 4, 5, 6, 0].map(function (d) { return '<label class="check wk-day' + (wkd.indexOf(d) >= 0 ? ' on' : '') + '"><input type="checkbox" data-wkday="' + d + '"' + (wkd.indexOf(d) >= 0 ? ' checked' : '') + '><span>' + DN[d] + ' night</span></label>'; }).join('') + '</div>' +
         '<p class="hint">' + ic('info') + ' Now: weekday rate on ' + (wdNames.length ? esc(wdNames.join(', ')) : 'no') + ' nights. If you change this, also update the rate descriptions on the <b>Wording and Dinokeng fees</b> tab so the website says the same. Bookings already made keep their price.</p></section>' +
@@ -3257,11 +3293,11 @@
       if (act === 'soc-show') { sx.show = !sx.show; toast(sx.show ? 'Shown on the website' : 'Hidden from the website'); }
       if (act === 'soc-up' && si > 0) { so.posts.splice(si, 1); so.posts.splice(si - 1, 0, sx); }
       if (act === 'soc-down' && si < so.posts.length - 1) { so.posts.splice(si, 1); so.posts.splice(si + 1, 0, sx); }
-      if (act === 'soc-del') { closeModal(); modal('Remove this post?', '<p>' + esc(sx.title) + ' is taken off the website. The post itself stays on ' + SOC_KIND[socKind(sx.url)].split(' ')[0] + '.</p>', 'Remove', function () { so.posts.splice(so.posts.indexOf(sx), 1); log('Removed social post: ' + sx.title); socSave(); render(); toast('Post removed'); }, { danger: true }); return; }
+      if (act === 'soc-del') { closeModal(); modal('Remove this post?', '<p>' + esc(sx.title) + ' is taken off the website. The post itself stays on ' + SOC_KIND[socKind(sx.url)].split(' ')[0] + '.</p>', 'Remove', function () { so.gone = so.gone || []; so.gone.push(sx.url); if (sx.imgKey) K.files.del(sx.imgKey); so.posts.splice(so.posts.indexOf(sx), 1); log('Removed social post: ' + sx.title); socSave(); render(); toast('Post removed'); }, { danger: true }); return; }
       socSave(); render(); return;
     }
     if (act === 'soc-md') {
-      var sm = socDB(), md = '## Links\n- Facebook: ' + sm.facebook + '\n- Instagram: ' + sm.instagram + '\n- TikTok: ' + sm.tiktok + '\n- Hashtag: ' + sm.hashtag + '\n- Instagram feed ID: ' + sm.igFeed + '\n- Instagram photos: ' + sm.igCount + '\n- Facebook feed: ' + (sm.fbFeed ? 'on' : 'off') + '\n\n## Guest stories\n' + sm.posts.filter(function (x) { return x.show; }).map(function (x) { return '- ' + String(x.title).replace(/:/g, ',') + ': ' + x.url + (x.by || x.out ? ' · ' + (x.by || 'YouTube') : '') + (x.out ? ' · opens on YouTube' : ''); }).join('\n');
+      var sm = socDB(), md = '## Links\n- Facebook: ' + sm.facebook + '\n- Instagram: ' + sm.instagram + '\n- TikTok: ' + sm.tiktok + '\n- Hashtag: ' + sm.hashtag + '\n- Instagram feed ID: ' + sm.igFeed + '\n- Instagram photos: ' + sm.igCount + '\n- Facebook feed: ' + (sm.fbFeed ? 'on' : 'off') + '\n\n## Guest stories\n' + sm.posts.filter(function (x) { return x.show; }).map(function (x) { return '- ' + String(x.title).replace(/:/g, ',') + ': ' + x.url + (x.by || x.out ? ' · ' + (x.by || 'YouTube') : '') + (x.out ? ' · opens on YouTube' : '') + (x.img ? ' · image ' + x.img : ''); }).join('\n');
       modal('Text for content/settings.md', '<p class="muted small">Replace these two parts of content/settings.md with this text to publish the social media settings for every visitor.</p><textarea rows="14" readonly style="width:100%;font-family:monospace;font-size:.82rem">' + esc(md) + '</textarea>', null, null, { wide: true });
       return;
     }
@@ -3340,7 +3376,7 @@
     if (act === 'invite') { modal('Invite a staff member', '<label class="fld"><span>Name</span><input name="n"></label><label class="fld"><span>Email</span><input name="e" type="email"></label><label class="fld"><span>Role</span><select name="r">' + Object.keys(ROLES).map(function (r) { return '<option>' + r + '</option>'; }).join('') + '</select></label>', 'Send invite', function () { toast('Invite sent (demo)'); }); return; }
     if (act === 'connect') { modal('Connect ' + esc(ref), '<p>In the live version you would sign in to your ' + esc(ref) + ' account here. Guests then pay on ' + esc(ref) + '\'s secure page and the booking is confirmed by itself the moment the payment goes through.</p><p class="muted small">Card numbers never touch the Kyleu website.</p>', null); return; }
     if (act === 'export-json') { var bl = document.createElement('a'); bl.href = URL.createObjectURL(new Blob([JSON.stringify(DB, null, 1)], { type: 'application/json' })); bl.download = 'kyleu-admin-backup.json'; bl.click(); return; }
-    if (act === 'reset') { modal('Reset demo data?', '<p>All demo bookings, payments and notes go back to the start. Bookings made on the website demo are removed too.</p>', 'Reset', function () { try { localStorage.removeItem(KEY); localStorage.removeItem(WEB); localStorage.removeItem('kyleu-web-news'); localStorage.removeItem(WEBK); localStorage.removeItem(POPK); } catch (x) {} STANDS = CONTENT_STANDS.slice(); P.holidays = JSON.parse(ORIG_HOL); CART = {}; IN.id = null; DB = null; P.wkDays = [5, 6]; DB = seed(); migrate(); save(); render(); toast('Demo data reset'); }, { danger: true }); return; }
+    if (act === 'reset') { modal('Reset demo data?', '<p>All demo bookings, payments and notes go back to the start. Bookings made on the website demo are removed too.</p>', 'Reset', function () { try { localStorage.removeItem(KEY); localStorage.removeItem(WEB); localStorage.removeItem('kyleu-web-news'); localStorage.removeItem(WEBK); localStorage.removeItem(POPK); } catch (x) {} STANDS = CONTENT_STANDS.slice(); P.holidays = JSON.parse(ORIG_HOL); CART = {}; IN.id = null; DB = null; P.wkDays = [5, 6, 0]; DB = seed(); migrate(); save(); render(); toast('Demo data reset'); }, { danger: true }); return; }
   }
   function onInput(e) {
     var t = e.target;
@@ -3389,7 +3425,7 @@
     if (wt.matches && wt.matches('[data-wkday]')) {
       var wds = $$('[data-wkday]').filter(function (x) { return x.checked; }).map(function (x) { return +x.dataset.wkday; });
       if (!wds.length) { toast('At least one night must cost the weekend rate'); render(); return; }
-      webDB().wkDays = wds.sort().join() === '5,6' ? null : wds; applyWk(); log('Weekend-rate nights changed'); save(); render(); toast('Saved. New bookings use it from now on.'); return;
+      webDB().wkDays = wds.sort().join() === '0,5,6' ? null : wds; applyWk(); log('Weekend-rate nights changed'); save(); render(); toast('Saved. New bookings use it from now on.'); return;
     }
     if (wt.matches && wt.matches('[data-hero-file]')) {
       var hf = wt.files && wt.files[0]; if (!hf) return;

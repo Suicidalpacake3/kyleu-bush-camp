@@ -98,7 +98,7 @@
     var acc = 0;
     for (var d = p(ci), end = p(co); d < end; d.setDate(d.getDate() + 1)) {
       var dow = d.getDay(), nx = new Date(d); nx.setDate(nx.getDate() + 1);
-      var wk = (P.wkDays ? P.wkDays.indexOf(dow) >= 0 : dow === 5 || dow === 6) || !!P.holidays[iso(nx)], pens = (!wk && dow >= 1 && dow <= 4) ? R.pe : (wk ? R.wk : R.wd);
+      var wk = (P.wkDays ? P.wkDays.indexOf(dow) >= 0 : dow === 5 || dow === 6 || dow === 0) || !!P.holidays[iso(nx)], pens = (!wk && dow >= 1 && dow <= 4) ? R.pe : (wk ? R.wk : R.wd);
       acc += g.adults * (wk ? R.wk : R.wd) + g.pens * pens + g.kids * R.kid;
     }
     return acc;
@@ -112,7 +112,7 @@
     var grp = { wk: [], wd: [] }, amt = { wk: 0, wd: 0 }, pensUsed = false, paying = g.adults + g.pens;
     for (var d = p(ci), end = p(co); d < end; d.setDate(d.getDate() + 1)) {
       var dow = d.getDay(), nx = new Date(d); nx.setDate(nx.getDate() + 1);
-      var wk = (P.wkDays ? P.wkDays.indexOf(dow) >= 0 : dow === 5 || dow === 6) || !!P.holidays[iso(nx)], k = wk ? 'wk' : 'wd';
+      var wk = (P.wkDays ? P.wkDays.indexOf(dow) >= 0 : dow === 5 || dow === 6 || dow === 0) || !!P.holidays[iso(nx)], k = wk ? 'wk' : 'wd';
       var pr = (!wk && dow >= 1 && dow <= 4) ? R.pe : (wk ? R.wk : R.wd); if (g.pens && pr !== (wk ? R.wk : R.wd)) pensUsed = true;
       grp[k].push(new Date(d)); amt[k] += g.adults * (wk ? R.wk : R.wd) + g.pens * pr;
     }
