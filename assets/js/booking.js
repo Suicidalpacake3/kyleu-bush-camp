@@ -22,7 +22,7 @@
   function today() { var t = new Date(); t.setHours(0, 0, 0, 0); return t; }
   function nightsOf(ci, co) { var out = []; for (var d = new Date(ci); d < co; d = addDays(d, 1)) out.push(new Date(d)); return out; }
   function nice(d, opts) { return d.toLocaleDateString('en-ZA', opts || { weekday: 'short', day: 'numeric', month: 'short' }); }
-  function isWeekendNight(d) { var dow = d.getDay(); return dow === 5 || dow === 6 || !!(P && P.holidays[iso(addDays(d, 1))]); }
+  function isWeekendNight(d) { var dow = d.getDay(); return (P && P.wkDays ? P.wkDays.indexOf(dow) >= 0 : dow === 5 || dow === 6) || !!(P && P.holidays[iso(addDays(d, 1))]); }
 
   /* ---------- simulated availability (replace with real system) ---------- */
   function hash(str) { var h = 2166136261; for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return ((h >>> 0) % 1000) / 1000; }
@@ -366,6 +366,7 @@
     if ((S && /q2b/i.test(S.get('Booking mode', 'demo')))) { window.open(S.get('Live availability (Q2B)'), '_blank', 'noopener'); return; }
     booking = { stand: current, ci: sel.ci, co: sel.co, g: { adults: state.adults, pens: state.pens, kids: state.kids } };
     extras = {}; shopQty = {}; extras.__shop = shopQty;
+    var intl = $('[data-intl]', modal); if (intl && K.intlNote) intl.innerHTML = K.intlNote({ what: current.name + ', ' + nice(sel.ci, { day: 'numeric', month: 'long', year: 'numeric' }) + ' to ' + nice(sel.co, { day: 'numeric', month: 'long', year: 'numeric' }) });
     step = 1; renderSide(); renderExtras(); goStep(1);
     modal.classList.add('open'); document.body.classList.add('lock');
     var payFull = quote(booking.stand, booking.ci, booking.co).payFull, online = onlinePay();
@@ -422,7 +423,7 @@
     return q;
   }
   function renderExtras() {
-    var box = $('[data-extras]', modal); if (!box) return;   // camp shop and porta potty, on the "Check your booking" step, so it is all on one invoice
+    var box = $('[data-extras]', modal); if (!box) return;   // camp shop and porta potty, on the "Check your booking" step, so it is all on one quotation
     box.innerHTML = EXTRAS.filter(function (x) { return !x.only || x.only === booking.stand.area; }).map(function (x) {
       var ctl = x.unit === 'toggle' ? '<label class="check" style="margin:0"><input type="checkbox" data-x="' + x.id + '"> Add</label>'
         : '<div class="sb-guests"><button type="button" data-xm="' + x.id + '" aria-label="Fewer">−</button><output data-xo="' + x.id + '">0</output><button type="button" data-xp="' + x.id + '" aria-label="More">+</button></div>';
@@ -437,6 +438,21 @@
     });
     $$('[data-x]', box).forEach(function (c) { c.onchange = function () { extras[c.dataset.x] = c.checked ? 1 : 0; renderSide(); }; });
     K.shopPicker($('[data-shop]', modal), SHOP, shopQty, renderSide);
+  }
+  // "Anything we should know?" sits after the camp shop on the "Check your booking" step,
+  // because guests write things like "one bag of ice per day" about what they just ordered
+  function placeNotes() {
+    var ta = $('[name=notes]', modal), shop = $('.bk-shop', modal); if (!ta || !shop) return;
+    var field = ta.closest('.field') || ta;
+    if (field.closest('.mc-step') === shop.closest('.mc-step')) return;   // already on that step
+    field.classList.add('bk-notes');
+    ta.placeholder = 'For example: one bag of ice per day, please. Celebrating something? Travelling with a big group?';
+    shop.parentNode.insertBefore(field, shop.nextSibling);
+  }
+  // a place for the note for guests booking from outside South Africa, under "How it works" on the pay step
+  function placeIntl() {
+    var eft = $('[data-eft]', modal); if (!eft || $('[data-intl]', modal)) return;
+    var d = document.createElement('div'); d.setAttribute('data-intl', ''); eft.appendChild(d);
   }
   function validate(stepEl) {
     var ok = true;
@@ -477,7 +493,7 @@
     var blink = 'manage.html?b=' + encodeURIComponent(ref) + '&k=' + bkey;
     var isCard = pay === 'full' || pay === 'deposit';
     var paid = pay === 'full' ? q.cardTotal : pay === 'deposit' ? q.cardDeposit : pay === 'eft' ? (q.payFull ? q.total : q.deposit) : 0;
-    var inv = makeInvoice(ref, q, isCard, paid, cv);
+    var inv = makeInvoice(ref, q, isCard, paid, cv), docW = K.docWord(inv), DocW = docW.charAt(0).toUpperCase() + docW.slice(1);
     // Demo only: keep a copy in THIS browser so it shows up in the admin mock-up (/admin). Never any card details.
     try {
       var saved = JSON.parse(localStorage.getItem('kyleu-web-bookings') || '[]'), now = new Date();
@@ -496,14 +512,16 @@
       '<p class="muted">' + K.esc(booking.stand.name) + ' · ' + nice(booking.ci, { weekday: 'long', day: 'numeric', month: 'long' }) + ' to ' + nice(booking.co, { weekday: 'long', day: 'numeric', month: 'long' }) + '</p>' +
       '<div class="ref">' + ref + '</div>' +
       (paid ? '<p class="muted" style="font-size:.9rem">' + K.money(paid) + ' received' + (isCard ? '' : ' by instant EFT') + '.</p>' : '') +
-      // the invoice is emailed straight away, then shown here too
-      '<div class="inv-sent" data-inv-sent role="status"><span class="spin"></span>Emailing your ' + (paid ? 'invoice' : 'quotation') + ' to ' + K.esc(f('email')) + '…</div>' +
+      (f('notes') ? '<p class="muted bk-said">Your note for us: "' + K.esc(f('notes')) + '"</p>' : '') +
+      // the quotation (or invoice, once something is paid) is emailed straight away, then shown here too
+      '<div class="inv-sent" data-inv-sent role="status"><span class="spin"></span>Emailing your ' + docW + ' to ' + K.esc(f('email')) + '…</div>' +
       // what to do now comes first: how much, by when, where to pay, then "I have paid"
       (paid < inv.total ? (function () {
         var st = K.invoiceState(inv);
-        return '<div class="pay-now"><h3>Pay ' + K.money(st.now) + ' by EFT</h3><p>' + (q.payFull ? 'The full amount, ' + (q.fullDue <= today() ? 'as soon as you can' : 'by ' + nice(q.fullDue, { weekday: 'long', day: 'numeric', month: 'long' })) + ', because you arrive soon.' : 'This is the ' + q.depPct + '% deposit. Your quotation is valid for 5 days, until ' + nice(parse(inv.depositDue), { weekday: 'long', day: 'numeric', month: 'long' }) + ', and your stand is held until then. The balance of ' + K.money(inv.total - inv.deposit) + ' is due by ' + nice(q.balanceDue, { day: 'numeric', month: 'long' }) + '.') + '</p>' +
+        return '<div class="pay-now"><h3>Pay ' + K.money(st.now) + ' by EFT</h3><p>' + (q.payFull ? 'The full amount, ' + (q.fullDue <= today() ? 'as soon as you can' : 'by ' + nice(q.fullDue, { weekday: 'long', day: 'numeric', month: 'long' })) + ', because you arrive soon.' : 'This is the ' + q.depPct + '% deposit. Your quotation is valid for ' + depDays() + ' days, until ' + nice(parse(inv.depositDue), { weekday: 'long', day: 'numeric', month: 'long' }) + ', and your stand is held until then. The balance of ' + K.money(inv.total - inv.deposit) + ' is due by ' + nice(q.balanceDue, { day: 'numeric', month: 'long' }) + '.') + '</p>' +
           '<dl>' + K.bankRows().map(function (r) { return '<div><dt>' + r[0] + '</dt><dd>' + K.esc(r[1]) + '</dd></div>'; }).join('') + '<div class="ref-row"><dt>Payment reference</dt><dd>' + ref + '</dd></div></dl>' +
-          '<button class="btn btn-green" type="button" data-inv-paid><svg><use href="#i-check"/></svg>I have paid</button><div class="paid-box" data-paid-box></div></div>';
+          '<button class="btn btn-green" type="button" data-inv-paid><svg><use href="#i-check"/></svg>I have paid</button><div class="paid-box" data-paid-box></div></div>' +
+          (!paid && K.intlNote ? K.intlNote({ ref: ref }) : '');
       })() : '') +
       '<div class="bk-link"><svg><use href="#i-doc"/></svg><div><b>The link to your booking</b><p>We have emailed it to you too. Use it to tell us you have paid or to amend your booking, and once it is paid in full, to finalise it.</p><a href="' + blink + '">Open my booking</a></div></div>' +
       '<h3 style="margin:26px 0 6px">What happens next</h3><ol class="next-steps">' +
@@ -513,13 +531,13 @@
       '<li><b>✓</b><span>Once your booking is <b>paid in full</b>, we email you a link to <b>finalise</b> it: your vehicles and who is in each one, and roughly when you arrive. Want more from the camp shop later? Add it with the link to your booking.</span></li>' +
       '<li><b>✓</b><span>Enter at Dinokeng <b>Tau Gate</b>, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km. <a href="contact.html">Directions</a></span></li></ol>' +
       '<div class="cta-actions"><button class="btn" type="button" data-ics><svg><use href="#i-cal"/></svg>Add to calendar</button><a class="btn btn-green" target="_blank" rel="noopener" href="https://wa.me/27604584478?text=' + encodeURIComponent('Hi Kyleu! My booking reference is ' + ref + ' (' + booking.stand.name + ', ' + iso(booking.ci) + ' to ' + iso(booking.co) + ').') + '"><svg><use href="#i-wa"/></svg>WhatsApp us your reference</a></div>' +
-      '<details class="inv-fold"><summary>' + (paid ? 'See your invoice' : 'See your quotation') + '</summary><div class="inv-wrap">' + K.invoiceHTML(inv) + '</div></details>' +
-      '<div class="inv-acts"><button class="btn btn-ghost" type="button" data-inv-pdf><svg><use href="#i-doc"/></svg>Download ' + (paid ? 'invoice' : 'quotation') + ' (PDF)</button><button class="btn btn-ghost" type="button" data-inv-print><svg><use href="#i-doc"/></svg>Print</button></div>' +
+      '<details class="inv-fold"><summary>See your ' + docW + '</summary><div class="inv-wrap">' + K.invoiceHTML(inv) + '</div></details>' +
+      '<div class="inv-acts"><button class="btn btn-ghost" type="button" data-inv-pdf><svg><use href="#i-doc"/></svg>Download ' + docW + ' (PDF)</button><button class="btn btn-ghost" type="button" data-inv-print><svg><use href="#i-doc"/></svg>Print</button></div>' +
       '<div class="demo-flag" style="margin:22px 0 0;text-align:left"><svg><use href="#i-info"/></svg><span>Demo mode: this is a mock-up. No booking was made, nothing was charged and no details were sent anywhere. A copy stays in this browser only, so you can see it in the admin demo.</span></div></div>';
     $('[data-ics]', box).onclick = downloadICS;
-    setTimeout(function () { var s = $('[data-inv-sent]', box); if (s) { s.className = 'inv-sent ok'; s.innerHTML = '<svg><use href="#i-check"/></svg>' + (paid ? 'Invoice' : 'Quotation') + ' sent to ' + K.esc(f('email')) + ' by email'; } }, 1400);
+    setTimeout(function () { var s = $('[data-inv-sent]', box); if (s) { s.className = 'inv-sent ok'; s.innerHTML = '<svg><use href="#i-check"/></svg>' + DocW + ' sent to ' + K.esc(f('email')) + ' by email'; } }, 1400);
     $('[data-inv-pdf]', box).onclick = function () { K.downloadInvoice(inv).catch(function () { K.toast('The PDF could not be made. Check your internet connection.'); }); };
-    $('[data-inv-print]', box).onclick = function () { K.printInvoice(inv).catch(function () { K.toast('The invoice could not be printed. Try Download PDF instead.'); }); };
+    $('[data-inv-print]', box).onclick = function () { K.printInvoice(inv).catch(function () { K.toast('The ' + docW + ' could not be printed. Try Download PDF instead.'); }); };
     var pb = $('[data-inv-paid]', box); if (pb) pb.onclick = function () { var pbx = $('[data-paid-box]', box); K.paidForm(pbx, inv, function (c) { if (c) pb.remove(); }); pbx.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
     goStep(4); confetti();
   }
@@ -625,6 +643,7 @@
     grid = $('.stands-grid'); if (!grid) return;
     mapBox = $('#map-view'); resultsTitle = $('[data-results-title]'); resultsSub = $('[data-results-sub]'); ruleNote = $('.rule-note[data-weekend]');
     sheet = $('.sheet'); backdrop = $('.sheet-backdrop'); modal = $('.modal');
+    placeNotes(); placeIntl();
 
     var qs = new URLSearchParams(location.search), t = today();
     state.ci = parse(qs.get('in')); if (state.ci && state.ci < t) state.ci = null;

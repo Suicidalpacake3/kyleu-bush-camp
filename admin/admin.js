@@ -34,6 +34,8 @@
         for (var j = 0; j < t.items.length; j++) { var it = t.items[j]; if (K.norm(it.label).indexOf(lk) === 0) { var k = t.title + '|' + it.label; if (DB.rates[k] != null) return DB.rates[k]; } } } }
     return P.num(sec, label, d);
   }
+  // "5 days": how long a quotation is valid, counted from the day it was made
+  function validDays(from, to) { var n = Math.max(1, diff(String(from).slice(0, 10), to)); return n + ' day' + (n === 1 ? '' : 's'); }
   function cardFee() { return num('Booking rules', 'Card payment fee percentage', 3); }
   function toCard(n) { return Math.round(n * (1 + cardFee() / 100)); }
   function hasFee() { return cardFee() > 0; }
@@ -52,7 +54,7 @@
   function ensureStands() { if (!DB.stands) { DB.stands = JSON.parse(JSON.stringify(STANDS)); STANDS = DB.stands; } }
   function imgSrc(p) { return /^(data:|https?:)/.test(p) ? p : '../' + p; }
   function slugify(s) { return K.norm(s).replace(/[^a-z0-9 ]/g, '').trim().replace(/ +/g, '-') || 'stand'; }
-  function isWeekendNight(s) { var dow = D(s).getDay(); return dow === 5 || dow === 6 || !!P.holidays[add(s, 1)]; }
+  function isWeekendNight(s) { var dow = D(s).getDay(); return (P.wkDays ? P.wkDays.indexOf(dow) >= 0 : dow === 5 || dow === 6) || !!P.holidays[add(s, 1)]; }
   function quote(standId, ci, co, g, ex) {
     ex = ex || {};
     var st = standById(standId), ss = st.area === 'self-sufficient', sec = ss ? 'Self-sufficient' : 'Ablution stands';
@@ -105,6 +107,7 @@
       return { k: 'pending', t: 'Awaiting EFT', tone: 'warn' };
     }
     if (balance(b) <= 0) return { k: 'paid', t: 'Paid in full', tone: 'ok' };
+    if (b.onArrival) return { k: 'arrival', t: 'Pays on arrival (' + b.onArrival.how.toLowerCase() + ')', tone: 'info' };   // arranged with Kyleu: no deposit, never released
     if (TODAY > balanceDue(b)) return { k: 'baldue', t: 'Balance overdue', tone: 'bad' };
     if (diff(TODAY, balanceDue(b)) <= 7) return { k: 'baldue', t: 'Balance due ' + fd(balanceDue(b)), tone: 'warn' };
     return { k: 'deposit', t: 'Deposit paid', tone: 'info' };
@@ -292,7 +295,7 @@
     db.log.sort(function (a, b) { return a.at < b.at ? 1 : -1; });
     return db;
   }
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(DB)); return true; } catch (e) { return false; } }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(DB)); publishWeb(); return true; } catch (e) { return false; } }
   function loadDB() {
     try { DB = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { DB = null; }
     if (!DB || DB.v !== 4) { DB = seed(); save(); }
@@ -300,7 +303,7 @@
     DB.gone = DB.gone || {};
     if (DB.stands) { CONTENT_STANDS.forEach(function (s) { if (!DB.stands.some(function (x) { return x.id === s.id; }) && !DB.gone[s.id]) DB.stands.push(JSON.parse(JSON.stringify(s))); }); STANDS = DB.stands; }   // campsites added in the map editor join the list   // stands added or changed in this admin
     if (!DB.products) DB.products = defaultProducts();
-    DB.threads = DB.threads || []; DB.popSeen = DB.popSeen || {}; applyHol();
+    DB.threads = DB.threads || []; DB.popSeen = DB.popSeen || {}; applyHol(); applyWk();
     migrate(); importWeb(); importAmend(); importPop(); importPaid(); sweepHolds();
   }
   /* ---------- an unpaid quotation holds the stand for 5 days ----------
@@ -459,8 +462,8 @@
     { id: 'leuan', name: 'Leuan', role: 'Front desk', email: 'leuan@kyleu.co.za' }
   ];
   var ROLES = {
-    Owner: ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'rates', 'settings', 'news', 'dgrnews', 'social'],
-    Manager: ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'news', 'dgrnews', 'social'],
+    Owner: ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'rates', 'settings', 'news', 'dgrnews', 'social', 'webtext'],
+    Manager: ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'news', 'dgrnews', 'social', 'webtext'],
     'Front desk': ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'shop', 'drives', 'news', 'dgrnews', 'social']
   };
   var NAV = [
@@ -480,8 +483,9 @@
     { id: 'rates', t: 'Rates & fees', i: 'tag', g: 'Setup' },
     { id: 'settings', t: 'Settings', i: 'cog', g: 'Setup' },
     { id: 'news', t: 'Camp news', i: 'note', g: 'Website' },
-    { id: 'dgrnews', t: 'Dinokeng updates', i: 'news', g: 'Website' },
-    { id: 'social', t: 'Social media', i: 'image', g: 'Website' }
+    { id: 'dgrnews', t: 'Dinokeng news', i: 'news', g: 'Website' },
+    { id: 'social', t: 'Social media', i: 'image', g: 'Website' },
+    { id: 'webtext', t: 'Website wording', i: 'edit', g: 'Website' }
   ];
   function can(view) { return ME && ROLES[ME.role].indexOf(view) >= 0; }
   function ic(n, cls) { return '<svg class="ic' + (cls ? ' ' + cls : '') + '" aria-hidden="true"><use href="#i-' + n + '"/></svg>'; }
@@ -547,7 +551,9 @@
     if (inN) main.push('<button class="btn green" data-act="checkout" data-ref="' + b.ref + '">' + ic('out') + 'Check out' + (cs0.length > 1 ? ' a vehicle' : '') + '</button>');
     main.push('<button class="btn ghost" data-act="remind" data-ref="' + b.ref + '">' + ic('send') + 'Send a message</button>');
     var more = [];
-    if (!cancelled) more.push('<button type="button" data-act="send-doc" data-ref="' + b.ref + '|invoice">' + ic('note') + (pd > 0 ? 'Send the invoice' : 'Send the quotation') + '</button>');
+    if (b.status === 'pending') more.push('<button type="button" data-act="on-arrival" data-ref="' + b.ref + '">' + ic('cash') + 'Guest will pay on arrival</button>');
+    if (b.onArrival && bal > 0 && !cancelled) more.push('<button type="button" data-act="on-arrival-off" data-ref="' + b.ref + '">' + ic('return') + 'Undo "pays on arrival"</button>');
+    if (!cancelled) more.push('<button type="button" data-act="send-doc" data-ref="' + b.ref + '|invoice">' + ic('note') + (pd > 0 || b.onArrival ? 'Send the invoice' : 'Send the quotation') + '</button>');
     if (!cancelled) more.push('<button type="button" data-act="edit" data-ref="' + b.ref + '">' + ic('edit') + 'Edit booking</button>');
     more.push('<button type="button" data-act="link-copy" data-ref="' + b.ref + '">' + ic('note') + 'Copy the guest\'s booking link</button>');
     if (!cancelled && b.status !== 'out') more.push('<button type="button" class="danger-t" data-act="cancel" data-ref="' + b.ref + '">' + ic('x') + 'Cancel booking</button>');
@@ -624,6 +630,26 @@
   }
 
   /* ---------- actions ---------- */
+  // A regular who arranged with Kyleu to pay when they arrive: the booking is confirmed without a deposit,
+  // the quotation becomes an invoice marked "pay on arrival", and the stand is never released automatically.
+  function actOnArrival(ref) {
+    var b = byRef(ref); if (!b) return;
+    modal('Guest will pay on arrival',
+      '<p>Use this only for guests you have arranged it with. <b>' + esc(guestName(b)) + '</b>\'s booking is confirmed without a deposit, the stand stays theirs (it is not released after ' + num('Booking rules', 'Deposit due within days of invoice', 5) + ' days), and the quotation becomes an invoice that says ' + money(b.total) + ' is to be paid on arrival.</p>' +
+      '<span class="fld-l">How will they pay?</span><div class="seg"><label><input type="radio" name="how" value="Cash" checked><span>' + ic('cash') + 'Cash</span></label><label><input type="radio" name="how" value="Card"><span>' + ic('card') + 'Card</span></label></div>' +
+      '<label class="fld"><span>Note for the team (optional)</span><input name="why" placeholder="e.g. Regular guest, arranged by WhatsApp with Sherri"></label>' +
+      '<p class="hint">' + ic('info') + ' This is not offered on the website. When they pay at the gate, press Record payment as usual.</p>',
+      'Confirm the booking', function (f) {
+        var how = ($('[name=how]:checked', f) || {}).value || 'Cash', why = fval(f, 'why');
+        b.onArrival = { how: how, at: nowStamp(), by: ME.name }; b.status = 'confirmed'; b.pop = false; b.softHold = null; b.paidClaim = null;
+        b.notes.push({ at: nowStamp(), by: ME.name, text: 'Confirmed without a deposit: the guest pays ' + money(b.total) + ' on arrival (' + how.toLowerCase() + ').' + (why ? ' ' + why : '') });
+        var docs0 = b.invoices || [], lastQ = docs0.filter(function (x) { return x.kind === 'Quote'; }).pop();
+        var inv = invFor(b, 'Invoice', null, { by: ME.name, note: 'Payment on arrival (' + how.toLowerCase() + '), as arranged with Kyleu.' });
+        b.invoices = docs0; b.invoices.push(inv); K.commitNo('Invoice', inv.no);
+        log((lastQ ? 'Quotation is now ' : 'Made ') + K.kindName(inv).toLowerCase() + ' ' + inv.no + ' for ' + guestName(b) + ': pays on arrival (' + how.toLowerCase() + ')', b.ref); save(); refresh(); toast('Booking confirmed. They pay on arrival.');
+        setTimeout(function () { invView(b, inv, true); }, 60);
+      });
+  }
   function actPay(ref) {
     var b = byRef(ref), bal = balance(b), isPend = b.status === 'pending';
     var cl = b.paidClaim, dueNow = cl ? cl.amt : isPend ? deposit(b) : bal;
@@ -668,12 +694,12 @@
       } });
   }
   var TEMPLATES = {
-    eft: { t: 'EFT deposit reminder', s: 'Your Kyleu booking: deposit reminder', b: function (b) { return 'Hi {first},\n\nThank you for booking {stand} from {ci} to {co}. To secure your stand please pay the deposit of {deposit} by {depdue} using reference {ref}. Your quotation is valid until then; after that the stand is released.\n\nBank: {bank}\n\nUpload your proof of payment at www.kyleu.co.za/pop.html, or reply to this email with it attached.\n\nSee you in the bush!\nThe Kyleu team'; } },
+    eft: { t: 'EFT deposit reminder', s: 'Your Kyleu booking: deposit reminder', b: function (b) { return 'Hi {first},\n\nThank you for booking {stand} from {ci} to {co}. To secure your stand please pay the deposit of {deposit} using reference {ref}. Your quotation is valid for {qdays}; after that the stand is released.\n\nBank: {bank}\n\nUpload your proof of payment at www.kyleu.co.za/pop.html, or reply to this email with it attached.\n\nSee you in the bush!\nThe Kyleu team'; } },
     balance: { t: 'Balance reminder', s: 'Your Kyleu stay is coming up', b: function (b) { return 'Hi {first},\n\nYour stay at {stand} starts on {ci}. The balance of {balance} is due by {baldue}. Pay by EFT with reference {ref}, or reply and we will send a card payment link.\n\nThe Kyleu team'; } },
     arrival: { t: 'Pre-arrival information', s: 'Getting to Kyleu Bush Camp', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}.\n\nDirections: enter Dinokeng at Tau Gate, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km.\n\nKyleu is a proud DGR CP member, so we send you a Conservation Fee Discount Voucher code for each vehicle. Enter it when you buy your conservation fees at https://dinokeng.plnktn.io to pay R85 instead of R100 per adult per night. To use the self-drive route, each vehicle also needs a Self Drive Permit (R250 once off).\n\nEvery adult signs an indemnity form when you arrive. Let us know roughly when you will arrive and we will have your stand ready. Gate questions: 060 458 4478.\n\nThe Kyleu team'; } },
     thanks: { t: 'Thank you & review', s: 'Thanks for staying at Kyleu', b: function (b) { return 'Hi {first},\n\nThank you for camping with us at {stand}. We hope you loved the bush! If you have a minute, a Google review helps our small family camp a lot.\n\nThe Kyleu team'; } },
     invoice: { t: 'Quotation or invoice', s: 'Your Kyleu {doc} {ref}', b: function (b) { return b && b.payments && paid(b) > 0 ? 'Hi {first},\n\nPlease find your invoice for {stand}, {ci} to {co}, attached.\n\nTotal {total}, paid so far {paid}, balance {balance}. Pay by EFT using reference {ref}.\n\nThe Kyleu team'
-      : 'Hi {first},\n\nThank you for booking {stand}, {ci} to {co}. Please find your quotation attached, with our bank details and your booking reference {ref}.\n\nThis quotation is valid for 5 days, until {qvalid}. To secure your stand, please pay {deposit} by then, using reference {ref}.\n\nOnce payment has been made, upload your proof of payment directly to your booking:\n{link}\n\nThe Kyleu team'; } },
+      : 'Hi {first},\n\nThank you for booking {stand}, {ci} to {co}. Please find your quotation attached, with our bank details and your booking reference {ref}.\n\nThis quotation is valid for {qdays}. To secure your stand, please pay {deposit} using reference {ref}.\n\nOnce payment has been made, upload your proof of payment directly to your booking:\n{link}\n\nThe Kyleu team'; } },
     indemnity: { t: 'Indemnity form', s: 'Kyleu indemnity form for {ref}', b: function (b) { return 'Hi {first},\n\nPlease find the Kyleu indemnity form attached, one page per vehicle. Every adult signs it when you arrive. You are welcome to print it and fill it in before you come, which makes check-in quicker.\n\nSee you on {ci}!\nThe Kyleu team'; } },
     update: { t: 'Booking updated', s: 'Your Kyleu booking {ref} has been updated', b: function (b) { return 'Hi {first},\n\nWe have updated your booking {ref}: {stand}, {ci} to {co}.\nTotal {total}, paid {paid}, balance {balance}.\n\nIf anything looks wrong, just reply to this email.\n\nThe Kyleu team'; } },
     extra: { t: 'Extra amount to pay', s: 'Your updated Kyleu invoice {ref}', b: function (b) { return 'Hi {first},\n\nThank you for letting us know about the change to your booking {ref}. Your new total is {total}. You have already paid {paid}, so {balance} is still to pay.\n\nThe updated invoice is attached. Please pay the {balance} by EFT using reference {ref} before you arrive on {ci}.\n\nThe Kyleu team'; } },
@@ -684,7 +710,7 @@
   };
   function fill(t, b) {
     var dcodes = (b.cars || []).map(function (c) { return c.dgr; }).filter(Boolean);
-    var map = { doc: b && b.payments && paid(b) > 0 ? 'invoice' : 'quotation', bank: bankLine(), qvalid: fd(depositDue(b), { weekday: 'long', day: 'numeric', month: 'long' }), link: bookingLink(b), voucher: dcodes.length ? dcodes.join(', ') : 'the codes we send you', first: b.guest.first, stand: standById(b.stand).name, ci: fd(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }), co: fd(b.co, { weekday: 'long', day: 'numeric', month: 'long' }), deposit: money(deposit(b)), depdue: fd(depositDue(b), { day: 'numeric', month: 'long' }), ref: b.ref, balance: money(balance(b)), baldue: fd(balanceDue(b), { day: 'numeric', month: 'long' }), total: money(b.total), paid: money(paid(b)) };
+    var map = { qdays: validDays(String(b.created || TODAY).slice(0, 10), depositDue(b)), doc: b && b.payments && paid(b) > 0 ? 'invoice' : 'quotation', bank: bankLine(), qvalid: fd(depositDue(b), { weekday: 'long', day: 'numeric', month: 'long' }), link: bookingLink(b), voucher: dcodes.length ? dcodes.join(', ') : 'the codes we send you', first: b.guest.first, stand: standById(b.stand).name, ci: fd(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }), co: fd(b.co, { weekday: 'long', day: 'numeric', month: 'long' }), deposit: money(deposit(b)), depdue: fd(depositDue(b), { day: 'numeric', month: 'long' }), ref: b.ref, balance: money(balance(b)), baldue: fd(balanceDue(b), { day: 'numeric', month: 'long' }), total: money(b.total), paid: money(paid(b)) };
     return t.replace(/\{(\w+)\}/g, function (_, k) { return map[k] != null ? map[k] : _; });
   }
   function actRemind(ref) { var b = byRef(ref); sendTemplate(b, defaultTemplate(b)); }
@@ -1061,6 +1087,110 @@
   function copyText(s, msg) { var done = function () { toast(msg || 'Copied'); }; if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(String(s)).then(done, function () { fallbackCopy(s); done(); }); else { fallbackCopy(s); done(); } }
   function fallbackCopy(s) { var ta = document.createElement('textarea'); ta.value = s; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (e) {} ta.remove(); }
 
+  /* =========================================================
+     Website wording, contact details and rate wording.
+     What staff change here is handed to the website.
+     Demo: through this browser ("kyleu-web-content"). Live: saved on the server.
+     ========================================================= */
+  var WEBK = 'kyleu-web-content';
+  function webDB() { DB.web = DB.web || {}; var w = DB.web; w.text = w.text || {}; w.settings = w.settings || {}; w.rateText = w.rateText || {}; w.home = w.home || {}; return w; }
+  // which nights cost the weekend rate (set on Rates & fees > Payment & booking rules)
+  function applyWk() { var d = DB && DB.web && DB.web.wkDays; P.wkDays = d && d.length ? d.slice() : [5, 6]; }
+  function publishWeb() {
+    if (!DB || !P) return;
+    var w = webDB(), prices = {};
+    Object.keys(DB.rates || {}).forEach(function (k) { prices[k] = { amount: DB.rates[k] }; });
+    Object.keys(w.rateText).forEach(function (k) { prices[k] = Object.assign(prices[k] || {}, w.rateText[k]); });
+    var out = { prices: prices, text: w.text, settings: w.settings, hol: DB.hol || null, home: w.home, rules: { wkDays: w.wkDays && w.wkDays.length ? w.wkDays : null } };
+    if (DB.products) out.shop = DB.products.filter(function (p) { return p.active !== false; }).map(function (p) { return { label: p.label, amount: p.amount, note: p.note || '' }; });
+    try { localStorage.setItem(WEBK, JSON.stringify(out)); } catch (e) {}
+  }
+  // the name and description of a rate as the website shows them
+  function rateWord(sec, label, f) { var it = sec && sec.items.filter(function (i) { return i.label === label; })[0]; if (!it) return ''; var o = webDB().rateText[sec.title + '|' + label] || {}; return f === 'name' ? (o.name || it.label) : (o.note != null ? o.note : it.note || ''); }
+
+  var WEB = { tab: 'details', q: '', pages: null, loading: false, S0: null };
+  var WEB_PAGES = [['home', 'Home', 'index.html'], ['discover', 'Discover', 'discover.html'], ['experience', 'Experience', 'experience.html'], ['dinokeng', 'Dinokeng', 'dinokeng.html'], ['stay', 'Stay and book', 'stay.html'], ['stands', 'Stands', 'stands.html'], ['news', 'Camp news', 'news.html'], ['contact', 'Contact', 'contact.html'], ['policies', 'Policies', 'policies.html'], ['site', 'Footer', 'index.html']];
+  var WEB_KIND = { h1: 'Main heading', h2: 'Heading', h3: 'Sub-heading', h4: 'Sub-heading', h5: 'Sub-heading', p: 'Text', figcaption: 'Photo caption', summary: 'Question', li: 'List item', dt: 'Label', dd: 'Text', blockquote: 'Quote', span: 'Small label', div: 'Label' };
+  // wording from a page, shown the way staff type it: **bold**, *highlighted*, [words](link)
+  function htmlToEdit(node) {
+    var out = '';
+    (function walk(n) { Array.prototype.forEach.call(n.childNodes, function (c) {
+      if (c.nodeType === 3) out += c.nodeValue.replace(/[ \t\r\n]+/g, ' ');
+      else if (c.nodeType === 1) { var t = c.tagName.toLowerCase(); if (t === 'br') out += '\n'; else if (t === 'strong' || t === 'b') { out += '**'; walk(c); out += '**'; } else if (t === 'em' || t === 'i') { out += '*'; walk(c); out += '*'; } else if (t === 'a') { out += '['; walk(c); out += '](' + (c.getAttribute('href') || '') + ')'; } else if (t !== 'svg') walk(c); }
+    }); })(node);
+    return out.replace(/ ?\n ?/g, '\n').trim();
+  }
+  function webLoad() {
+    if (WEB.loading || WEB.pages) return; WEB.loading = true;
+    var files = []; WEB_PAGES.forEach(function (p) { if (files.indexOf(p[2]) < 0) files.push(p[2]); });
+    var pages = {}; WEB_PAGES.forEach(function (p) { pages[p[0]] = []; });
+    Promise.all(files.map(function (f) {
+      return fetch('../' + f, { cache: 'no-cache' }).then(function (r) { return r.text(); }).then(function (html) {
+        var doc = new DOMParser().parseFromString(html, 'text/html'), group = '';
+        $$('[data-edit]', doc).forEach(function (el) {
+          var key = el.getAttribute('data-edit'), pg = key.split('.')[0], tag = el.tagName.toLowerCase(); if (!pages[pg] || pages[pg].some(function (x) { return x.key === key; })) return;
+          if (pg === 'site' && f !== 'index.html') return;
+          var def = htmlToEdit(el); if (!def) return;
+          if (tag === 'h1' || tag === 'h2') { group = def.replace(/\*/g, ''); for (var bi = pages[pg].length - 1; bi >= 0 && pages[pg][bi].tag === 'span'; bi--) pages[pg][bi].group = group; }   // the small label above a heading belongs with it
+          pages[pg].push({ key: key, tag: tag, def: def, group: pg === 'site' ? 'Footer' : group, faq: tag === 'p' && !!el.closest('.ans') });
+        });
+      }).catch(function () {});
+    })).then(function () { return K.settingsFile ? K.settingsFile() : null; }).catch(function () { return null; }).then(function (S) {
+      WEB.S0 = S;
+      // wording the booking steps draw by themselves
+      pages.stay.push({ key: 'booking.intl.title', tag: 'h3', def: 'Booking from outside South Africa?', group: 'Paying for a booking' });
+      pages.stay.push({ key: 'booking.intl.text', tag: 'p', def: 'Bank transfers from other countries can be expensive. WhatsApp us and we will arrange for you to pay by cash or card when you arrive.', group: 'Paying for a booking' });
+      WEB.pages = pages; WEB.loading = false; if (route() === 'webtext') render();
+    });
+  }
+  var WEB_SET = [['Phone', 'Phone number', 'Shown in the header, footer and contact page', 'tel'], ['WhatsApp number', 'WhatsApp number', 'Country code first, no spaces or plus sign, e.g. 27604584478', 'tel'], ['Email', 'Email address', 'Where guests email you', 'email'], ['Guest rating', 'Guest rating (stars)', 'Shown on the home page and the Experience page, e.g. 4.9', 'text'], ['Google reviews', 'Link to your Google reviews', 'The "Read our reviews" button opens this', 'url'], ['Pay Dinokeng fees', 'Link to pay Dinokeng fees', 'Dinokeng\'s own payment page', 'url']];
+  function vWeb() {
+    webLoad();
+    var w = webDB(), tabs = [['details', 'Contact details']].concat(WEB_PAGES.map(function (p) { return [p[0], p[1]]; })), body = '', nChanged = Object.keys(w.text).length;
+    var tabN = function (id) { if (!WEB.pages || id === 'details') return 0; return WEB.pages[id].filter(function (x) { return w.text[x.key] != null; }).length; };
+    if (!WEB.pages) body = '<p class="empty">Loading the website\'s wording…</p>';
+    else if (WEB.tab === 'details') {
+      body = '<section class="card"><header class="card-h"><h3>Contact details and links</h3><span class="muted small">Used all over the website</span></header><div class="wt-set">' +
+        WEB_SET.map(function (r) { var def = WEB.S0 ? WEB.S0.get(r[0], '') : '', cur = w.settings[r[0]] != null ? w.settings[r[0]] : def;
+          return '<label class="fld"><span>' + r[1] + (w.settings[r[0]] != null ? ' <em class="wt-ch">Changed</em>' : '') + '</span><input data-ws="' + esc(r[0]) + '" data-def="' + esc(def) + '" value="' + esc(cur) + '" type="' + (r[3] === 'email' ? 'email' : 'text') + '"' + (r[3] === 'tel' ? ' inputmode="tel"' : r[3] === 'url' ? ' inputmode="url"' : '') + '><small class="muted">' + r[2] + '</small></label>'; }).join('') + '</div>' +
+        '<p class="hint">' + ic('info') + ' Each box saves by itself when you click outside it. Social media links are on the <a href="#/social">Social media</a> page, bank details under <a href="#/settings">Settings</a>, and prices on the <a href="#/rates">Rates &amp; fees</a> page.</p></section>';
+    } else {
+      var list = WEB.pages[WEB.tab] || [], q = WEB.q.trim().toLowerCase(), file = WEB_PAGES.filter(function (p) { return p[0] === WEB.tab; })[0][2], heroCard = '';
+      if (WEB.tab === 'home') {
+        var hv = w.home.hero || '', hopt = function (v, img, t, sub, extra) { return '<label class="hero-opt' + (hv === v ? ' on' : '') + '"><input type="radio" name="hero" data-hero value="' + v + '"' + (hv === v ? ' checked' : '') + '>' + img + '<span><b>' + t + '</b><small>' + sub + '</small>' + (extra || '') + '</span></label>'; };
+        heroCard = '<section class="card"><header class="card-h"><h3>Header photo</h3><span class="muted small">The big photo at the top of the home page</span></header><div class="hero-pick">' +
+          hopt('', '<img src="../assets/img/hero/kyleu-sunset.jpg" alt="">', 'Sunset at camp', 'Sharp on phones and on big screens') +
+          hopt('tree', '<img src="../assets/img/hero/kyleu-camp.jpg" alt="">', 'Camp under the tree', 'A small photo, so it looks soft on big screens') +
+          hopt('own', '<img data-own-hero alt="" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==">', 'Your own photo', 'A wide photo, at least 2000 pixels across', '<span class="btn ghost sm hero-up">' + ic('image') + (w.home.heroName ? 'Choose another' : 'Choose a photo') + '<input type="file" accept="image/*" data-hero-file hidden></span>') +
+          '</div></section>';
+        setTimeout(function () { var im = $('[data-own-hero]'); if (im && K.files) K.files.get('home-hero').then(function (b) { if (b) im.src = URL.createObjectURL(b); }); }, 0);
+      }
+      if (q) list = list.filter(function (x) { return (x.def + ' ' + (w.text[x.key] || '')).toLowerCase().indexOf(q) >= 0; });
+      var groups = [], cur = null; list.forEach(function (x) { if (!cur || cur.t !== x.group) { cur = { t: x.group, items: [] }; groups.push(cur); } cur.items.push(x); });
+      body = heroCard + '<div class="filters"><label class="search">' + ic('search') + '<input type="search" data-wtq placeholder="Find wording on this page" value="' + esc(WEB.q) + '" aria-label="Find wording"></label><a class="btn ghost" href="../' + file + '" target="_blank" rel="noopener">' + ic('ext') + 'View this page</a></div>' +
+        (groups.length ? groups.map(function (g) {
+          return '<section class="card wt-card"><header class="card-h"><h3>' + esc(g.t || 'Top of the page') + '</h3></header>' + g.items.map(function (x) {
+            var has = w.text[x.key] != null, val = has ? w.text[x.key] : x.def, long = val.length > 70 || /\n/.test(val) || x.def.length > 70, kind = x.faq ? 'Answer' : WEB_KIND[x.tag] || 'Text';
+            return '<div class="wt-row' + (has ? ' changed' : '') + '"><label class="fld"><span>' + kind + (has ? ' <em class="wt-ch">Changed</em>' : '') + '</span>' +
+              (long ? '<textarea data-wt="' + esc(x.key) + '" rows="' + Math.min(9, Math.max(2, Math.ceil(val.length / 85))) + '">' + esc(val) + '</textarea>' : '<input data-wt="' + esc(x.key) + '" value="' + esc(val) + '">') + '</label>' +
+              (has ? '<button type="button" class="link-btn" data-wt-reset="' + esc(x.key) + '">' + ic('return') + 'Use the original wording</button>' : '') + '</div>';
+          }).join('') + '</section>';
+        }).join('') : '<p class="empty">' + (q ? 'No wording on this page matches your search.' : 'This page has no wording to change here: the website fills it in by itself.') + '</p>');
+    }
+    return '<div class="page-h"><div><h1>Website wording</h1><p class="muted">Change the words on the website yourself. Pick a page, change a box and click outside it: it saves by itself and the website updates.</p></div>' + (nChanged ? '<div class="ph-act"><span class="pill info"><i></i>' + nChanged + ' wording change' + (nChanged === 1 ? '' : 's') + ' live</span></div>' : '') + '</div>' +
+      '<div class="rp-tabs page-tabs">' + tabs.map(function (t) { var n = tabN(t[0]); return '<button class="' + (WEB.tab === t[0] ? 'on' : '') + '" data-webtab="' + t[0] + '">' + t[1] + (n ? ' <span class="tab-n">' + n + '</span>' : '') + '</button>'; }).join('') + '</div>' +
+      (WEB.tab !== 'details' && WEB.pages ? '<p class="hint wt-tips">' + ic('info') + ' <span>Put <b>**two stars**</b> around words to make them bold and <b>*one star*</b> to highlight them. A link is written as <b>[the words](https://the-link)</b>. Prices and anything the booking system fills in are not here: change prices on the <a href="#/rates">Rates &amp; fees</a> page.</span></p>' : '') + body +
+      '<p class="demo-note">' + ic('info') + 'Demo: your changes show on the website in this browser. In the live version they are saved on the server, so every visitor sees them.</p>';
+  }
+  // make a photo smaller before it is kept (longest side at most `max` pixels)
+  function resizeImg(file, max, cb) {
+    var url = URL.createObjectURL(file), im = new Image();
+    im.onload = function () { var k = Math.min(1, max / Math.max(im.width, im.height)), c = document.createElement('canvas'); c.width = Math.round(im.width * k); c.height = Math.round(im.height * k); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(url); c.toBlob(function (b) { cb(b, im.width, im.height); }, 'image/jpeg', .86); };
+    im.onerror = function () { URL.revokeObjectURL(url); cb(null); };
+    im.src = url;
+  }
+  function webFind(key) { var f = null; Object.keys(WEB.pages || {}).forEach(function (p) { WEB.pages[p].forEach(function (x) { if (x.key === key) f = x; }); }); return f; }
+
   /* ---------- camp news: posts for the website's news page ---------- */
   var MDPOSTS = null, MDLOAD = false, NEWSK = 'kyleu-web-news';
   function loadMd() { if (MDLOAD) return; MDLOAD = true; if (!K.blogFile) { MDPOSTS = []; return; } K.blogFile().then(function (p) { MDPOSTS = p; }).catch(function () { MDPOSTS = []; }).then(function () { var v = route(); if (v === 'news' || v === 'dashboard') render(); }); }
@@ -1090,10 +1220,10 @@
   function vNews() {
     if (MDPOSTS === null) loadMd();
     var ps = allPosts(), shown = ps.filter(function (p) { return !p.draft && !p.hidden; }), ago = shown.length ? diff(shown[0].date, TODAY) : null, fresh = ago !== null && ago <= 7;
-    return '<div class="page-h"><div><h1>Camp news</h1><p class="muted">Posts for the Camp news page on the website, newest first.</p></div><div class="ph-act"><a class="btn ghost" href="../news.html" target="_blank" rel="noopener">' + ic('ext') + 'View news page</a><button class="btn" data-act="news-new">' + ic('plus') + 'New post</button></div></div>' +
+    return '<div class="page-h"><div><h1>Camp news</h1><p class="muted">Posts for the Camp news page on the website, newest first. Tick <b>Front page news</b> on a post to feature it in the big block on the home page.</p></div><div class="ph-act"><a class="btn ghost" href="../news.html" target="_blank" rel="noopener">' + ic('ext') + 'View news page</a><button class="btn" data-act="news-new">' + ic('plus') + 'New post</button></div></div>' +
       '<div class="news-status ' + (fresh ? 'fresh' : 'quiet') + '">' + ic(fresh ? 'check' : 'clock') + '<div>' + (MDPOSTS === null ? 'Loading posts…' : ago === null ? '<b>No posts yet.</b> The news page shows a "nothing new this week" note until the first one.' : fresh ? '<b>Fresh news is on the website.</b> The latest post went up ' + (ago === 0 ? 'today' : ago === 1 ? 'yesterday' : ago + ' days ago') + '.' : '<b>Last post ' + ago + ' days ago.</b> The news page still shows your recent posts, but a fresh one keeps it alive. A short note about sightings, the weather or camp news is plenty.') + '</div></div>' +
       '<div class="card flush"><table class="tbl"><thead><tr><th>Post</th><th>Date</th><th>Tags</th><th>Status</th></tr></thead><tbody>' +
-      (ps.length ? ps.map(function (p) { return '<tr data-post="' + esc(p.key) + '" tabindex="0"><td data-l="Post"><span class="post-row">' + (p.image ? '<img src="' + esc(imgSrc(p.image)) + '" alt="">' : '<span class="post-noimg">' + ic('image') + '</span>') + '<span><b>' + esc(p.title) + '</b><small>' + esc(p.summary || '') + '</small></span></span></td><td data-l="Date" data-s="' + esc(p.date) + '">' + fd(p.date, { day: 'numeric', month: 'short', year: 'numeric' }) + '</td><td data-l="Tags">' + ((p.tags || []).map(function (t) { return '<span class="tag">' + esc(t) + '</span>'; }).join('') || '<span class="muted">None</span>') + '</td><td data-l="Status">' + pill(postState(p)) + '</td></tr>'; }).join('') : '<tr><td colspan="4" class="empty">No posts yet.</td></tr>') + '</tbody></table></div>' +
+      (ps.length ? ps.map(function (p) { return '<tr data-post="' + esc(p.key) + '" tabindex="0"><td data-l="Post"><span class="post-row">' + (p.image ? '<img src="' + esc(imgSrc(p.image)) + '" alt="">' : '<span class="post-noimg">' + ic('image') + '</span>') + '<span><b>' + esc(p.title) + '</b><small>' + esc(p.summary || '') + '</small></span></span></td><td data-l="Date" data-s="' + esc(p.date) + '">' + fd(p.date, { day: 'numeric', month: 'short', year: 'numeric' }) + '</td><td data-l="Tags">' + ((p.tags || []).map(function (t) { return '<span class="tag">' + esc(t) + '</span>'; }).join('') || '<span class="muted">None</span>') + '</td><td data-l="Status">' + pill(postState(p)) + (p.front && !p.draft && !p.hidden ? ' <span class="pill front"><i></i>Front page</span>' : '') + '</td></tr>'; }).join('') : '<tr><td colspan="4" class="empty">No posts yet.</td></tr>') + '</tbody></table></div>' +
       '<p class="demo-note">' + ic('info') + 'Demo: posts you publish or delete here change the website\'s news page in this browser. In the live version they are saved on (or deleted from) the server, so every visitor sees the change.</p>';
   }
   /* =========================================================
@@ -1131,12 +1261,12 @@
   function vDgr() {
     dgrLoad(); setTimeout(dgrThumbs, 0);
     var all = dgrAll(), shown = all.filter(function (x) { return !x.hidden; });
-    return '<div class="page-h"><div><h1>Dinokeng updates</h1><p class="muted">The Bush Telegraph, the Dinokeng magazine, Dinokeng news and maps, shown on the Dinokeng page under "News from the reserve". The newest one is featured at the top, maps and guides get their own row, and every item credits Dinokeng.</p></div><div class="ph-act"><a class="btn ghost" href="../dinokeng.html#reserve-news" target="_blank" rel="noopener">' + ic('ext') + 'View on the website</a><button class="btn" data-act="dgr-new">' + ic('plus') + 'Add an update</button></div></div>' +
+    return '<div class="page-h"><div><h1>Dinokeng news</h1><p class="muted">The Bush Telegraph, the Dinokeng magazine, Dinokeng news and maps, shown on the Dinokeng page under "News from the reserve". Add a PDF or a link, or write a full story with photos. Tick <b>Front page news</b> to feature one on the home page.</p></div><div class="ph-act"><a class="btn ghost" href="../dinokeng.html#reserve-news" target="_blank" rel="noopener">' + ic('ext') + 'View on the website</a><button class="btn" data-act="dgr-new">' + ic('plus') + 'Add an update</button></div></div>' +
       '<section class="card"><header class="card-h"><h3>On the website</h3><span class="count">' + shown.length + ' shown</span></header>' +
       (DGRMD === null ? '<p class="empty">Loading…</p>' : all.length ? '<div class="list">' + all.map(function (x) {
         var th = x.coverKey ? '<img data-dgr-cover="' + esc(x.coverKey) + '" alt="">' : x.image ? '<img src="' + esc(imgSrc(x.image)) + '" alt="">' : ic('news');
         return '<button type="button" class="brow dgr-row' + (x.hidden ? ' off' : '') + '" data-act="dgr-edit" data-ref="' + esc(x.key) + '"><span class="dgr-th">' + th + '</span><span class="brow-g"><b>' + esc(x.title) + '</b><small>' + esc(x.type) + (x.date ? ' · ' + fd(x.date) : '') + (x.file || x.fileKey ? ' · PDF' + (x.size ? ' ' + esc(x.size) : '') : '') + (x.link ? ' · link' : '') + '</small></span>' +
-          (x.pinned ? '<span class="pill info">Shown first</span>' : '') + (x.hidden ? '<span class="pill muted">Hidden</span>' : '<span class="pill ok">Shown</span>') + ic('chev-r') + '</button>';
+          (x.front && !x.hidden ? '<span class="pill front"><i></i>Front page</span>' : '') + (x.article ? '<span class="pill muted">Full story</span>' : '') + (x.pinned ? '<span class="pill info">Shown first</span>' : '') + (x.hidden ? '<span class="pill muted">Hidden</span>' : '<span class="pill ok">Shown</span>') + ic('chev-r') + '</button>';
       }).join('') + '</div>' : '<p class="empty">Nothing yet. Press Add an update.</p>') + '</section>' +
       '<p class="demo-note">' + ic('info') + 'How it looks on the website: a cover (made from the PDF\'s first page if you do not add one), the kind and date, your heading and a few sentences, and buttons to read or download it. Demo: changes, uploads and deletes stay in this browser. In the live version they are saved on (or deleted from) the server, so every visitor sees them. Ask Dinokeng before posting newsletters that were only meant for partners.</p>';
   }
@@ -1146,20 +1276,23 @@
       (isFile ? '<p class="hint">' + ic('info') + ' This one comes from the website\'s dinokeng-updates.md file. Your changes are saved on top of it.</p>' : '') +
       '<div class="grid2"><label class="fld"><span>Kind</span><select name="type">' + DGR_TYPES.map(function (t) { return '<option' + (t === d.type ? ' selected' : '') + '>' + t + '</option>'; }).join('') + '</select></label><label class="fld"><span>Date</span><input type="date" name="date" value="' + esc(d.date || TODAY) + '"></label></div>' +
       '<label class="fld"><span>Heading</span><input name="title" value="' + esc(d.title) + '" placeholder="e.g. A fresh start for the bush: block burns in the south"></label>' +
-      '<label class="fld"><span>Announcement (two or three sentences in your own words)</span><textarea name="text" rows="5" placeholder="What is it about, and why should a guest read it?">' + esc(d.text || '') + '</textarea></label>' +
+      '<label class="fld"><span>Announcement (two or three sentences in your own words)</span><textarea name="text" rows="4" placeholder="What is it about, and why should a guest read it?">' + esc(d.text || '') + '</textarea></label>' +
+      '<details class="story-more"' + (d.article ? ' open' : '') + '><summary>' + ic('edit') + '<span><b>Write a full story</b><small>Optional: your own article with photos, shown like a camp news story. Leave it empty for just the PDF or link.</small></span></summary>' + storyField(d.article || '', 'The full story') + '</details>' +
       '<h5>The file or link</h5><label class="fld"><span>PDF ' + ((d.file || d.fileKey) ? '(now: ' + esc(d.fileName || String(d.file).split('/').pop()) + (d.size ? ', ' + esc(d.size) : '') + '; choose another to replace it)' : '') + '</span><input type="file" name="pdf" accept="application/pdf"></label>' +
       '<div class="grid2"><label class="fld"><span>Or a link (e.g. the magazine on Dinokeng\'s website)</span><input name="link" value="' + esc(d.link || '') + '" placeholder="https://"></label><label class="fld"><span>Button text for the link</span><input name="button" value="' + esc(d.button || '') + '" placeholder="e.g. Read the magazines"></label></div>' +
       '<label class="fld"><span>Cover picture (optional: without one, the cover is made from the PDF\'s first page)</span><input type="file" name="cover" accept="image/*"></label>' +
-      '<label class="check"><input type="checkbox" name="pinned"' + (d.pinned ? ' checked' : '') + '><span>Show it first (featured at the top)</span></label>' +
+      '<label class="check front-check"><input type="checkbox" name="front"' + (d.front ? ' checked' : '') + '><span><b>Front page news:</b> show this in the big block on the home page. Untick it any time; it stays on the Dinokeng page.</span></label>' +
+      '<label class="check"><input type="checkbox" name="pinned"' + (d.pinned ? ' checked' : '') + '><span>Show it first on the Dinokeng page (featured at the top)</span></label>' +
       '<label class="check"><input type="checkbox" name="shown"' + (d.hidden ? '' : ' checked') + '><span>Show it on the website</span></label>' +
       (it ? delBox('update') : ''),
       it ? 'Save' : 'Add update', function (f) {
-        var v = { type: fval(f, 'type'), title: fval(f, 'title'), date: fval(f, 'date'), text: f.elements.text.value.trim(), link: fval(f, 'link'), button: fval(f, 'button'), pinned: !!fval(f, 'pinned'), hidden: !fval(f, 'shown') };
+        var st = storyRead(f), v = { type: fval(f, 'type'), title: fval(f, 'title'), date: fval(f, 'date'), text: f.elements.text.value.trim(), link: fval(f, 'link'), button: fval(f, 'button'), pinned: !!fval(f, 'pinned'), hidden: !fval(f, 'shown'), front: !!fval(f, 'front'), article: st.empty ? '' : st.html, imgs: st.imgs };
+        if (!v.text && !st.empty) v.text = st.text.replace(/\s+/g, ' ').trim().slice(0, 220);
         var pdf = f.elements.pdf.files[0], cov = f.elements.cover.files[0];
         if (!v.title) { toast('Give it a heading'); return false; }
         if (v.link && !/^https?:\/\//.test(v.link)) { toast('The link must start with https://'); return false; }
         if (pdf && !/pdf$/i.test(pdf.type || pdf.name)) { toast('Choose a PDF file'); return false; }
-        if (!it && !pdf && !v.link) { toast('Add a PDF or a link'); return false; }
+        if (!it && !pdf && !v.link && !v.article) { toast('Add a PDF or a link, or write a full story'); return false; }
         var id = it ? (isFile ? 'f-' + it.slug : it.id) : uid('dg'), jobs = [];
         if (pdf) { v.fileKey = 'dgr-file-' + id; v.fileName = pdf.name; v.size = mbSize(pdf.size); jobs.push(K.files.put(v.fileKey, pdf)); }
         if (cov) { v.coverKey = 'dgr-cover-' + id; jobs.push(K.files.put(v.coverKey, cov)); }
@@ -1170,11 +1303,12 @@
           else X.items.unshift(Object.assign({ id: id }, v));
           log((it ? 'Updated' : 'Added') + ' Dinokeng update: ' + v.title); dgrPush(); render(); toast(it ? 'Saved' : 'Added. It shows on the Dinokeng page now.');
         }).catch(function () { toast('The file could not be saved in this browser.'); });
-      }, { wide: true, noFocus: true, onOpen: function (f) {
+      }, { xl: true, noFocus: true, onOpen: function (f) {
+        storyMount(f);
         if (it) wireDel(f, function () {
           // one added here is removed with its uploaded PDF and cover; one from dinokeng-updates.md is marked deleted so it never shows again
           var up = isFile ? (X.over[it.slug] || {}) : X.items.filter(function (y) { return y.id === it.id; })[0] || {};
-          if (up.fileKey) K.files.del(up.fileKey); if (up.coverKey) K.files.del(up.coverKey);
+          if (up.fileKey) K.files.del(up.fileKey); if (up.coverKey) K.files.del(up.coverKey); (up.imgs || []).forEach(function (k) { K.files.del(k); });
           if (isFile) X.over[it.slug] = { deleted: true }; else X.items.splice(X.items.indexOf(up), 1);
           log('Deleted Dinokeng update: ' + it.title); dgrPush(); closeModal(); render(); toast('Deleted. It is gone from the Dinokeng page.');
         });
@@ -1211,6 +1345,7 @@
       '<section class="card"><header class="card-h"><h3>Live feeds</h3></header>' +
       '<h5>Facebook</h5><label class="check"><input type="checkbox" data-soc-chk="fbFeed"' + (so.fbFeed ? ' checked' : '') + '><span>Show a "See our Facebook page" box on the website</span></label>' +
       '<p class="hint">' + (so.facebook ? '<span class="pill ok">' + ic('check') + 'On</span> ' : '<span class="pill muted">Waiting</span> Add the Facebook page link under Your accounts first. ') + 'Facebook\'s own live-feed box needs Facebook cookies, which most browsers now block on other websites, so it stays empty. To show Facebook posts on the website, add them one by one under Featured posts below.</p>' +
+      '<h5>YouTube videos</h5><p class="hint">' + ic('info') + ' Paste a YouTube link under Featured posts below and the video plays right on the Experience Kyleu page.</p>' +
       '<h5>Instagram</h5>' + fld('igFeed', 'Instagram feed ID', 'e.g. a1B2c3D4e5F6g7', '') +
       '<label class="fld"><span>How many photos</span><select data-soc-sel="igCount">' + [6, 9, 12].map(function (n) { return '<option' + (+so.igCount === n ? ' selected' : '') + '>' + n + '</option>'; }).join('') + '</select></label>' +
       '<p class="hint">' + (so.igFeed ? '<span class="pill ok">' + ic('check') + 'Connected</span> The newest Instagram photos show on the website by themselves.' : '<span class="pill muted">Not connected</span> Instagram only allows a live feed through an account connection. Free and once only:') + '</p>' +
@@ -1240,6 +1375,25 @@
         log((x ? 'Updated' : 'Added') + ' social post: ' + row.title); socSave(); render(); toast(x ? 'Post saved' : 'Post added. It shows on the website now.');
       });
   }
+  /* The writing tool (admin/editor.js) for a news story: used the same way for camp news and Dinokeng news.
+     Without it (the file did not load) a plain text box is shown instead, so nothing is ever lost. */
+  var STORY = null;
+  function storyField(html, label) {
+    return '<div class="story-fld"><span class="fld-l">' + label + '</span><div class="story-host" data-story></div><textarea data-story-src hidden>' + esc(html || '') + '</textarea>' +
+      '<p class="hint">' + ic('info') + ' Write and lay out the story here exactly as guests will see it. Select words to make them bold, highlight them or change the font, and use <b>Photo</b> to put a picture wherever you like.</p></div>';
+  }
+  function storyMount(f) {
+    var host = $('[data-story]', f), src = $('[data-story-src]', f); STORY = null; if (!host) return;
+    if (window.KyEditor && KyEditor.mount) { try { STORY = KyEditor.mount(host, { html: src.value, placeholder: 'Write your story…' }); return; } catch (e) { STORY = null; } }
+    // fallback: a plain box (paragraphs are kept)
+    var d0 = document.createElement('div'); d0.innerHTML = src.value; var plain = $$('p,h2,h3,li,blockquote', d0).map(function (x) { return x.textContent.trim(); }).filter(Boolean).join('\n\n') || d0.textContent.trim();
+    host.innerHTML = '<textarea rows="12" data-story-plain placeholder="Write it like a short message to your guests.">' + esc(plain) + '</textarea>';
+  }
+  function storyRead(f) {
+    if (STORY) { var h = STORY.getHTML(), t = STORY.getText(); return { html: STORY.isEmpty() ? '' : h, text: t, empty: STORY.isEmpty(), imgs: STORY.imageKeys ? STORY.imageKeys() : [] }; }
+    var ta = $('[data-story-plain]', f), tx = ta ? ta.value.trim() : '';
+    return { html: tx.split(/\n\s*\n/).filter(Boolean).map(function (x) { return '<p>' + esc(x).replace(/\n/g, '<br>') + '</p>'; }).join(''), text: tx, empty: !tx, imgs: [] };
+  }
   function postImgHTML(img) { return (img ? '<img src="' + esc(imgSrc(img)) + '" alt=""><button type="button" class="btn ghost sm" data-post-noimg>' + ic('x') + 'Remove photo</button>' : '') + '<label class="btn ghost sm">' + ic('image') + (img ? 'Change photo' : 'Add a photo') + '<input type="file" accept="image/*" data-post-file hidden></label>'; }
   function uniqueSlug(s) { var all = allPosts().map(function (p) { return p.slug; }), x = s || 'post', n = 2; while (all.indexOf(x) >= 0) x = s + '-' + n++; return x; }
   function postMd(p) { return '## ' + p.title + '\ndate: ' + p.date + '\n' + (p.image ? 'image: ' + (/^data:/.test(p.image) ? 'assets/img/blog/your-photo.jpg' : p.image) + '\n' : '') + 'summary: ' + p.summary + '\ntags: ' + p.tags + '\n\n' + p.body + '\n'; }
@@ -1252,22 +1406,24 @@
       '<div class="grid2"><label class="fld"><span>Date</span><input type="date" name="date" value="' + esc(d.date || TODAY) + '"></label><label class="fld"><span>Tags (separate with commas)</span><input name="tags" value="' + esc((d.tags || []).join(', ')) + '" placeholder="Camp news, Wildlife"></label></div>' +
       '<span class="fld-l">Photo</span><div class="post-img" data-post-img>' + postImgHTML(img) + '</div>' +
       '<label class="fld"><span>Short summary (shows on the news cards)</span><textarea name="summary" rows="2" maxlength="220">' + esc(d.summary || '') + '</textarea></label>' +
-      '<label class="fld"><span>The story</span><textarea name="body" rows="9" placeholder="Write it like a short message to your guests.">' + esc(d.body || '') + '</textarea></label>' +
-      '<p class="hint">Tips: a line starting with ### is a sub-heading, a line starting with - is a bullet, and **words** are bold.</p>' +
+      storyField(d.html ? d.body : (d.body ? K.markdown(d.body) : ''), 'The story') +
+      '<label class="check front-check"><input type="checkbox" name="front"' + (d.front ? ' checked' : '') + '><span><b>Front page news:</b> show this story in the big block on the home page. Untick it any time to take it off the home page; the story stays in Camp news.</span></label>' +
       '<label class="check"><input type="checkbox" name="draft"' + (d.draft ? ' checked' : '') + '><span>Save as a draft (not on the website yet)</span></label>' +
-      '<div class="m-acts left"><button type="button" class="btn ghost sm" data-post-copy>' + ic('note') + 'Copy as blog.md text</button>' + (hideSlug ? '<button type="button" class="btn ghost sm" data-post-hide>' + (N.hidden[hideSlug] ? 'Show on the website again' : 'Hide from the website') + '</button>' : '') + '</div>' + (isNew ? '' : delBox('post')),
+      '<div class="m-acts left">' + (hideSlug ? '<button type="button" class="btn ghost sm" data-post-hide>' + (N.hidden[hideSlug] ? 'Show on the website again' : 'Hide from the website') + '</button>' : '') + '</div>' + (isNew ? '' : delBox('post')),
       isNew ? 'Publish' : 'Save', function (f) {
-        var v = { title: fval(f, 'title'), date: fval(f, 'date') || TODAY, tags: fval(f, 'tags').split(',').map(function (t) { return t.trim(); }).filter(Boolean), summary: fval(f, 'summary'), body: fval(f, 'body'), image: img, draft: fval(f, 'draft') };
+        var st = storyRead(f), v = { title: fval(f, 'title'), date: fval(f, 'date') || TODAY, tags: fval(f, 'tags').split(',').map(function (t) { return t.trim(); }).filter(Boolean), summary: fval(f, 'summary'), body: st.html, html: true, imgs: st.imgs, image: img, draft: fval(f, 'draft'), front: !!fval(f, 'front') };
         if (!v.title) { toast('Give the post a title'); return false; }
-        if (!v.body && !v.summary) { toast('Write a few words for the post'); return false; }
-        if (!v.summary) v.summary = v.body.replace(/[#*\[\]()]/g, '').replace(/\s+/g, ' ').trim().slice(0, 160);
+        if (st.empty && !v.summary) { toast('Write a few words for the post'); return false; }
+        if (!v.summary) v.summary = st.text.replace(/\s+/g, ' ').trim().slice(0, 160);
         var p = a;
         if (!p) { p = { id: uid('p'), slug: f0 ? f0.slug : uniqueSlug(K.slug ? K.slug(v.title) : slugify(v.title)), of: f0 ? f0.slug : '' }; N.posts.push(p); }
         Object.assign(p, v);
         pushNews(); log((isNew ? 'Published' : 'Updated') + ' news post "' + v.title + '"' + (v.draft ? ' (draft)' : '')); save(); render();
-        toast(v.draft ? 'Draft saved' : isNew ? 'Post published on the news page' : 'Post saved');
-      }, { wide: true, onOpen: function (f) {
+        toast(v.draft ? 'Draft saved' : v.front ? 'Saved. It is on the home page as front page news.' : isNew ? 'Post published on the news page' : 'Post saved');
+      }, { xl: true, onOpen: function (f) {
+        storyMount(f);
         wireDel(f, function () {
+          ((a && a.imgs) || []).forEach(function (k) { K.files.del(k); });
           // a post made here is removed; a post from blog.md (or an edited copy of one) is marked deleted so it never shows again
           if (a) N.posts.splice(N.posts.indexOf(a), 1);
           if (f0 || (a && a.of)) N.deleted[f0 ? f0.slug : a.of] = 1;
@@ -1279,7 +1435,6 @@
         f.addEventListener('click', function (e) {
           var t = e.target;
           if (t.closest('[data-post-noimg]')) { img = ''; box.innerHTML = postImgHTML(''); return; }
-          if (t.closest('[data-post-copy]')) { copyText(postMd({ title: fval(f, 'title'), date: fval(f, 'date'), image: img, summary: fval(f, 'summary'), tags: fval(f, 'tags'), body: fval(f, 'body') }), 'Copied. Paste it at the top of content/blog.md'); return; }
           if (t.closest('[data-post-hide]')) { if (N.hidden[hideSlug]) delete N.hidden[hideSlug]; else N.hidden[hideSlug] = 1; pushNews(); log((N.hidden[hideSlug] ? 'Hid' : 'Showed') + ' news post "' + d.title + '"'); save(); closeModal(); render(); toast(N.hidden[hideSlug] ? 'Hidden from the website' : 'Back on the website'); return; }
         });
       } });
@@ -1850,7 +2005,7 @@
   function nextInvNo(b, kind) { return K.peekNo(kind, b.ref); }
   // the document to send now: a quotation until a payment is in, then an invoice; the last one again if nothing changed
   function curDoc(b) {
-    var list = b.invoices || [], last = list[list.length - 1], kind = paid(b) > 0 ? 'Invoice' : 'Quote';
+    var list = b.invoices || [], last = list[list.length - 1], kind = paid(b) > 0 || b.onArrival ? 'Invoice' : 'Quote';
     if (last && last.kind === kind && Math.round(last.total) === Math.round(b.total) && Math.round(last.paid || 0) === Math.round(paid(b))) return last;
     return invFor(b, kind, null, kind === 'Quote' ? { validTo: depositDue(b) } : {});
   }
@@ -1859,7 +2014,7 @@
     return Object.assign({ id: K.docId(), kind: kind, no: nextInvNo(b, kind), date: TODAY, ref: b.ref, guest: { name: guestName(b), email: b.guest.email, phone: b.guest.phone },
       stay: { stand: standById(b.stand).name, ci: b.ci, co: b.co, nights: diff(b.ci, b.co), guests: guestsLine(b), vehicles: b.vehTbc ? 'Not sure yet' : ensureCars(b).length },
       lines: lines, total: lines.reduce(function (a, l) { return a + l.amt; }, 0), paid: paid(b), deposit: deposit(b), depPct: depPct(), depositDue: depositDue(b), balanceDue: balanceDue(b),
-      payFull: payFullOf(b), cancelled: b.status === 'cancelled' }, extra || {});
+      payFull: payFullOf(b), cancelled: b.status === 'cancelled', onArrival: b.onArrival && kind !== 'Quote' ? b.onArrival.how : '' }, extra || {});
   }
   function invDoc(inv) { return { name: K.invoiceName(inv), inv: inv, build: function (doc) { K.invoiceDraw(doc, inv); } }; }
   // documents are found by their own id (several can share the booking number); older ones by number
@@ -1880,7 +2035,7 @@
   function invMailBody(b, inv, updated) {
     var st = K.invoiceState(inv);
     if (inv.kind === 'Quote') return 'Hi ' + b.guest.first + ',\n\n' + (updated ? 'Your booking ' + b.ref + ' was changed, so here is your updated quotation ' + inv.no + '.' : 'Thank you for booking ' + standById(b.stand).name + ' from ' + fd(b.ci, LONGD) + ' to ' + fd(b.co, LONGD) + '. Your quotation ' + inv.no + ' is attached, with our bank details and your booking reference ' + b.ref + '.') +
-      '\n\nThis quotation is valid for 5 days, until ' + fd(inv.validTo || depositDue(b), LONGD) + '. To secure your stand, pay ' + money(st.now || deposit(b)) + ' by then, using reference ' + b.ref + '.\n\nOnce payment has been made, upload your proof of payment directly to your booking (press "I have paid"):\n' + bookingLink(b) + '\n\nSee you in the bush!\nThe Kyleu team';
+      '\n\nThis quotation is valid for ' + validDays(inv.date || TODAY, inv.validTo || depositDue(b)) + '. To secure your stand, pay ' + money(st.now || deposit(b)) + ' using reference ' + b.ref + '.\n\nOnce payment has been made, upload your proof of payment directly to your booking (press "I have paid"):\n' + bookingLink(b) + '\n\nSee you in the bush!\nThe Kyleu team';
     return 'Hi ' + b.guest.first + ',\n\n' + (updated === 'staff' ? 'Please find your invoice ' + inv.no + ' for ' + standById(b.stand).name + ', ' + fd(b.ci, LONGD) + ' to ' + fd(b.co, LONGD) + ', attached.' : updated ? 'Your booking ' + b.ref + ' was changed, so here is your updated invoice ' + inv.no + '.' : 'Thank you for booking ' + standById(b.stand).name + ' from ' + fd(b.ci, LONGD) + ' to ' + fd(b.co, LONGD) + '. Your invoice ' + inv.no + ' is attached.') + '\n\n' +
       (st.k === 'due' ? st.t + '. Pay by EFT using reference ' + b.ref + '; our banking details are on the invoice. When you have paid, press "I have paid" on your booking page:\n' + bookingLink(b) + '\n\nOnce your booking is paid in full, the same link lets you finalise it (vehicles, passengers and arrival time).' : st.t) + '\n\nSee you in the bush!\nThe Kyleu team';
   }
@@ -1902,7 +2057,7 @@
   function invGet(b, key) { return invByNo(b, key) || CUR_INV[b.ref + '|' + key]; }
   function sendInvoice(b, inv) {
     sendBox({ b: b, title: 'Send ' + inv.kind.toLowerCase() + ' ' + inv.no, value: 'inv', choices: [['inv', inv.kind]], load: function () {
-      return { subject: (inv.kind === 'Quote' ? 'Your Kyleu quote ' : 'Your Kyleu invoice ') + inv.no, text: inv.kind === 'Quote' ? 'Hi ' + b.guest.first + ',\n\nHere is your quote ' + inv.no + ' for ' + standById(b.stand).name + ', ' + fd(b.ci, LONGD) + ' to ' + fd(b.co, LONGD) + '. The total is ' + money(inv.total) + (inv.validTo ? ', valid until ' + fd(inv.validTo, LONGD) : '') + '.\n\nYour stand is held once the deposit is paid. Our banking details are on the quote.\n\nThe Kyleu team' : invMailBody(b, inv, 'staff'), docs: [invDoc(inv)] };
+      return { subject: (inv.kind === 'Quote' ? 'Your Kyleu quotation ' : 'Your Kyleu invoice ') + inv.no, text: inv.kind === 'Quote' ? 'Hi ' + b.guest.first + ',\n\nHere is your quotation ' + inv.no + ' for ' + standById(b.stand).name + ', ' + fd(b.ci, LONGD) + ' to ' + fd(b.co, LONGD) + '. The total is ' + money(inv.total) + (inv.validTo ? ', and the quotation is valid for ' + validDays(inv.date || TODAY, inv.validTo) : '') + '.\n\nYour stand is held once the deposit is paid. Our banking details are on the quotation.\n\nThe Kyleu team' : invMailBody(b, inv, 'staff'), docs: [invDoc(inv)] };
     } });
   }
   function actInvNew(ref) {
@@ -2379,13 +2534,25 @@
     return '<b>2 adults, Friday and Saturday night on a fenced stand:</b> ' + money(4 * wk) + ' EFT, or ' + money(4 * c(wk)) + ' by card.<br><b>2 adults, Sunday to Tuesday (2 nights):</b> ' + money(4 * wd) + ' EFT, or ' + money(4 * c(wd)) + ' by card.<br><b>2 adults, a weekend on a self-sufficient stand:</b> ' + money(4 * swk) + ' EFT, or ' + money(4 * c(swk)) + ' by card.';
   }
   function vRates() {
-    var tabs = [['stay', 'Stay rates'], ['extras', 'Extras & activities'], ['rules', 'Payment & booking rules'], ['holidays', 'Holidays']];
+    var tabs = [['stay', 'Stay rates'], ['words', 'Wording and Dinokeng fees'], ['extras', 'Extras & activities'], ['rules', 'Payment & booking rules'], ['holidays', 'Holidays']];
     var ab = secByRe(/^ablution/i), ss = secByRe(/^self-sufficient/i), gd = secByRe(/game drive/i), br = secByRe(/booking rules/i), body = '';
     if (RT.tab === 'stay') {
       var rows = [['Weekend per person per night', 'Weekend night', 'Friday and Saturday nights, and nights before a public holiday'], ['Weekday per person per night', 'Weekday night', 'Sunday to Thursday nights'], ['Pensioner weekday per person per night', 'Pensioner, weekday', 'Monday to Thursday nights, per pensioner'], ['Children under 12', 'Children under ' + num('Booking rules', 'Children free under age', 12), 'Per child, per night']];
+      rows.forEach(function (r) { var d = rateWord(ab, r[0], 'note'); if (d) r[2] = 'On the website: "' + esc(d) + '"'; });
       body = '<section class="card flush"><table class="tbl rate-matrix"><thead><tr><th>Per person, per night</th><th class="r">Ablution stands<small>Fenced and unfenced</small></th><th class="r">Self-sufficient stands<small>On the spruit</small></th></tr></thead><tbody>' +
         rows.map(function (r) { return '<tr><td data-l="Rate"><b>' + r[1] + '</b><small>' + r[2] + '</small></td><td data-l="Ablution stands" class="r">' + rateIn(ab, r[0], { aria: r[1] + ', ablution stands' }) + '</td><td data-l="Self-sufficient stands" class="r">' + rateIn(ss, r[0], { aria: r[1] + ', self-sufficient stands' }) + '</td></tr>'; }).join('') + '</tbody></table></section>' +
         '<section class="card example"><header class="card-h"><h3>' + ic('info') + 'What guests will pay</h3><span class="muted small">Updates as you type</span></header><p data-example>' + exampleText() + '</p></section>';
+    }
+    if (RT.tab === 'words') {
+      body = '<p class="hint wt-tips">' + ic('info') + ' <span>This is how each rate is named and described on the website\'s rates tables. Change the wording and press Save changes. The prices themselves are on the Stay rates tab, except Dinokeng\'s own fees, which you update here when the reserve changes them.</span></p>' +
+        P.sections.filter(function (s) { return s.items.length && !/booking rules|holiday|shop|game drive/i.test(s.title); }).map(function (s) {
+          var dk = /dinokeng/i.test(s.title);
+          return '<section class="card"><header class="card-h"><h3>' + esc(s.title) + '</h3><span class="muted small">' + (dk ? 'Paid to the reserve, not to Kyleu' : 'Shown on the Discover page') + '</span></header><div class="rw-list">' + s.items.map(function (it) {
+            var k = s.title + '|' + it.label;
+            return '<div class="rw-row"><label class="fld"><span>Name on the website</span><input data-rw="' + esc(k) + '" data-rwf="name" data-def="' + esc(it.label) + '" value="' + esc(rateWord(s, it.label, 'name')) + '"></label><label class="fld"><span>Description</span><input data-rw="' + esc(k) + '" data-rwf="note" data-def="' + esc(it.note || '') + '" value="' + esc(rateWord(s, it.label, 'note')) + '"></label>' +
+              '<div class="rw-amt">' + (dk ? rateIn(s, it.label, { aria: it.label }) : '<span>' + (num(s.title, it.label, it.amount) === 0 ? 'Free' : money(num(s.title, it.label, it.amount))) + '</span>') + '</div></div>';
+          }).join('') + '</div></section>';
+        }).join('') + '<p><a class="btn ghost" href="../discover.html#rates" target="_blank" rel="noopener">' + ic('ext') + 'View the rates on the website</a></p>';
     }
     if (RT.tab === 'extras') {
       body = '<section class="card flush"><table class="tbl rate-matrix"><thead><tr><th>Extra</th><th class="r">Price</th></tr></thead><tbody>' +
@@ -2399,7 +2566,11 @@
         ['Balance due days before arrival', 'days', 'Balance deadline', 'The rest is due this many days before arrival.'],
         ['Minimum nights over a weekend', 'nights', 'Weekend minimum', 'Shortest stay allowed over a Friday or Saturday night.'],
         ['Children free under age', 'years', 'Children stay free under', 'Children younger than this pay nothing.']];
-      body = '<section class="card rules">' + R.map(function (r) { return '<div class="rule"><div><b>' + r[2] + '</b><p class="muted small">' + r[3] + '</p></div>' + rateIn(br, r[0], { unit: r[1], aria: r[2] }) + '</div>'; }).join('') + '</section>';
+      var DN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'], wkd = P.wkDays || [5, 6], wdNames = [1, 2, 3, 4, 5, 6, 0].filter(function (d) { return wkd.indexOf(d) < 0; }).map(function (d) { return DN[d]; });
+      body = '<section class="card"><header class="card-h"><h3>Weekend-rate nights</h3><span class="muted small">Saves as you tick</span></header><p class="muted small">Tick the nights that cost the weekend rate. All other nights cost the weekday rate. The night before a public holiday always costs the weekend rate.</p>' +
+        '<div class="wk-days">' + [1, 2, 3, 4, 5, 6, 0].map(function (d) { return '<label class="check wk-day' + (wkd.indexOf(d) >= 0 ? ' on' : '') + '"><input type="checkbox" data-wkday="' + d + '"' + (wkd.indexOf(d) >= 0 ? ' checked' : '') + '><span>' + DN[d] + ' night</span></label>'; }).join('') + '</div>' +
+        '<p class="hint">' + ic('info') + ' Now: weekday rate on ' + (wdNames.length ? esc(wdNames.join(', ')) : 'no') + ' nights. If you change this, also update the rate descriptions on the <b>Wording and Dinokeng fees</b> tab so the website says the same. Bookings already made keep their price.</p></section>' +
+        '<section class="card rules">' + R.map(function (r) { return '<div class="rule"><div><b>' + r[2] + '</b><p class="muted small">' + r[3] + '</p></div>' + rateIn(br, r[0], { unit: r[1], aria: r[2] }) + '</div>'; }).join('') + '</section>';
     }
     if (RT.tab === 'holidays') {
       var hol = Object.keys(P.holidays).filter(function (d) { return d >= TODAY; }).sort();
@@ -2933,7 +3104,7 @@
     return { items: list.slice(p * size, p * size + size), bar: pages > 1 ? '<div class="pager"><span>' + (p * size + 1) + ' to ' + Math.min(list.length, p * size + size) + ' of ' + list.length + '</span><button class="icon-btn sm" data-pg="' + key + '|-1"' + (p ? '' : ' disabled') + ' aria-label="Previous page">' + ic('chev-l') + '</button><button class="icon-btn sm" data-pg="' + key + '|1"' + (p < pages - 1 ? '' : ' disabled') + ' aria-label="Next page">' + ic('chev-r') + '</button></div>' : '' };
   }
 
-  var VIEWS = { dgrnews: vDgr, social: vSocial, dashboard: vDashboard, bookings: vBookings, eft: vEft, calendar: vCalendar, clients: vClients, payments: vPayments, shop: vShop, drives: vDrives, products: vProducts, vouchers: vVouchers, enquiries: vEnquiries, stands: vStands, rates: vRates, reports: vReports, news: vNews, settings: vSettings };
+  var VIEWS = { webtext: vWeb, dgrnews: vDgr, social: vSocial, dashboard: vDashboard, bookings: vBookings, eft: vEft, calendar: vCalendar, clients: vClients, payments: vPayments, shop: vShop, drives: vDrives, products: vProducts, vouchers: vVouchers, enquiries: vEnquiries, stands: vStands, rates: vRates, reports: vReports, news: vNews, settings: vSettings };
   function route() { var v = (location.hash.match(/^#\/(\w+)/) || [])[1] || 'dashboard'; if (v === 'guests') v = 'clients'; return VIEWS[v] && can(v) ? v : 'dashboard'; }
 
   /* ---------- shell ---------- */
@@ -3012,6 +3183,8 @@
     var stb = t.closest('[data-shoptab]'); if (stb) { SHOP.tab = stb.dataset.shoptab; render(); window.scrollTo(0, 0); return; }
     var pcat = t.closest('[data-pcat]'); if (pcat) { SHOP.cat = pcat.dataset.pcat; render(); return; }
     var prc = t.closest('[data-prodcat]'); if (prc) { PROD.cat = prc.dataset.prodcat; render(); return; }
+    var wtb = t.closest('[data-webtab]'); if (wtb) { WEB.tab = wtb.dataset.webtab; WEB.q = ''; render(); window.scrollTo(0, 0); return; }
+    var wrs = t.closest('[data-wt-reset]'); if (wrs) { var wrx = webFind(wrs.dataset.wtReset); delete webDB().text[wrs.dataset.wtReset]; log('Website wording put back to the original' + (wrx ? ': "' + wrx.def.slice(0, 60) + '"' : '')); save(); var wry = window.scrollY; render(); window.scrollTo(0, wry); toast('Back to the original wording'); return; }
     var rtb = t.closest('[data-ratetab]'); if (rtb) { var sb = $('[data-savebar]'); if (sb && !sb.hidden) { toast('Save or discard your changes first'); return; } RT.tab = rtb.dataset.ratetab; render(); return; }
     var hd = t.closest('[data-hol-del]'); if (hd) { var hdd = hd.dataset.holDel; if (DB.hol.add[hdd]) delete DB.hol.add[hdd]; else DB.hol.del[hdd] = 1; delete P.holidays[hdd]; log('Removed holiday ' + hdd); save(); render(); toast('Date removed'); return; }
     var se = t.closest('[data-set]'); if (se) { SET = se.dataset.set; render(); return; }
@@ -3107,6 +3280,8 @@
     if (act === 'client-book') { closeModal(); return actNew({ cid: ref }); }
     if (act === 'client-mail') { var mc = clientById(ref); closeModal(); actNewMail(); var mf = $('#modal form'); if (mf && mc) mf.elements.to.value = mc.email; return; }
     if (act === 'pay') return actPay(ref);
+    if (act === 'on-arrival') return actOnArrival(ref);
+    if (act === 'on-arrival-off') { var ob = byRef(ref); if (!ob || !ob.onArrival) return; ob.onArrival = null; if (!paid(ob)) ob.status = 'pending'; ob.notes.push({ at: nowStamp(), by: ME.name, text: '"Pays on arrival" was undone. The normal deposit rules apply again.' }); log('Undid pay on arrival for ' + guestName(ob), ob.ref); save(); refresh(); toast('Back to the normal deposit rules'); return; }
     if (act === 'pay-del') { var pdp = ref.split('|'), pb = byRef(pdp[0]), pi = +pdp[1], pp0 = pb && pb.payments[pi]; if (!pp0) return;
       return modal('Remove this payment?', '<p><b>' + money(pp0.amt) + ' ' + esc(pp0.type) + '</b> (' + methodLabel(pp0.m) + ', ' + fd(pp0.d) + ') comes off ' + esc(guestName(pb)) + '\'s booking. Only do this for a payment entered by mistake. It is noted on the booking.</p><label class="fld"><span>Why (optional)</span><input name="why" placeholder="e.g. Typed R5 000 instead of R500"></label>', 'Remove payment', function (f) {
         pb.payments.splice(pi, 1); var why = fval(f, 'why');
@@ -3145,18 +3320,22 @@
     if (act === 'csv-pay') { var rgp = simpleRange(PAYF.range); csv('kyleu-payments-' + rgp[0] + '-to-' + rgp[1] + '.csv', [['Date', 'Time', 'Type', 'From', 'For', 'Method', 'Amount', 'Card fee part']].concat(allTx().filter(function (p) { return p.d >= rgp[0] && p.d <= rgp[1]; }).map(function (p) { return [p.d, p.t, p.type, p.who, p.what, methodLabel(p.m), p.amt, p.fee]; }))); return; }
     if (act === 'save-rates') {
       $$('[data-rate]').forEach(function (inp) { var v = parseFloat(inp.value.replace(/[^\d.]/g, '')); if (!isNaN(v)) { var k = inp.dataset.rate.split('|'); var orig = P.num(k[0], k[1], null); if (orig !== v) DB.rates[k[0] + '|' + k[1]] = v; else delete DB.rates[k[0] + '|' + k[1]]; } });
-      log('Prices updated'); save(); render(); toast('Prices saved'); return;
+      var wr = webDB().rateText;
+      $$('[data-rw]').forEach(function (inp) { var k2 = inp.dataset.rw, f2 = inp.dataset.rwf, v2 = inp.value.trim(), o2 = wr[k2] || {}; if (v2 === inp.dataset.def || (f2 === 'name' && !v2)) delete o2[f2]; else o2[f2] = v2; if (Object.keys(o2).length) wr[k2] = o2; else delete wr[k2]; });
+      log('Prices updated'); save(); render(); toast('Saved. The website shows it now.'); return;
     }
     if (act === 'enq-book') { var q = thrById(ref), nm = q.name.split(' '); actNew({ first: nm[0], last: nm.slice(1).join(' '), email: q.email, phone: q.phone }); return; }
     if (act === 'invite') { modal('Invite a staff member', '<label class="fld"><span>Name</span><input name="n"></label><label class="fld"><span>Email</span><input name="e" type="email"></label><label class="fld"><span>Role</span><select name="r">' + Object.keys(ROLES).map(function (r) { return '<option>' + r + '</option>'; }).join('') + '</select></label>', 'Send invite', function () { toast('Invite sent (demo)'); }); return; }
     if (act === 'connect') { modal('Connect ' + esc(ref), '<p>In the live version you would sign in to your ' + esc(ref) + ' account here. Guests then pay on ' + esc(ref) + '\'s secure page and the booking is confirmed by itself the moment the payment goes through.</p><p class="muted small">Card numbers never touch the Kyleu website.</p>', null); return; }
     if (act === 'export-json') { var bl = document.createElement('a'); bl.href = URL.createObjectURL(new Blob([JSON.stringify(DB, null, 1)], { type: 'application/json' })); bl.download = 'kyleu-admin-backup.json'; bl.click(); return; }
-    if (act === 'reset') { modal('Reset demo data?', '<p>All demo bookings, payments and notes go back to the start. Bookings made on the website demo are removed too.</p>', 'Reset', function () { try { localStorage.removeItem(KEY); localStorage.removeItem(WEB); localStorage.removeItem('kyleu-web-news'); localStorage.removeItem(POPK); } catch (x) {} STANDS = CONTENT_STANDS.slice(); P.holidays = JSON.parse(ORIG_HOL); CART = {}; IN.id = null; DB = null; DB = seed(); migrate(); save(); render(); toast('Demo data reset'); }, { danger: true }); return; }
+    if (act === 'reset') { modal('Reset demo data?', '<p>All demo bookings, payments and notes go back to the start. Bookings made on the website demo are removed too.</p>', 'Reset', function () { try { localStorage.removeItem(KEY); localStorage.removeItem(WEB); localStorage.removeItem('kyleu-web-news'); localStorage.removeItem(WEBK); localStorage.removeItem(POPK); } catch (x) {} STANDS = CONTENT_STANDS.slice(); P.holidays = JSON.parse(ORIG_HOL); CART = {}; IN.id = null; DB = null; P.wkDays = [5, 6]; DB = seed(); migrate(); save(); render(); toast('Demo data reset'); }, { danger: true }); return; }
   }
   function onInput(e) {
     var t = e.target;
     if (t.matches('[data-f=q]')) { F.q = t.value; var pos = t.selectionStart; render(); var i = $('[data-f=q]'); i.focus(); i.setSelectionRange(pos, pos); return; }
     if (t.matches('[data-gq]')) { GQ = t.value; var p2 = t.selectionStart; render(); var g = $('[data-gq]'); g.focus(); g.setSelectionRange(p2, p2); return; }
+    if (t.matches('[data-rw]')) { var sb2 = $('[data-savebar]'); if (sb2) sb2.hidden = false; return; }
+    if (t.matches('[data-wtq]')) { WEB.q = t.value; var wp = t.selectionStart; render(); var wi = $('[data-wtq]'); wi.focus(); wi.setSelectionRange(wp, wp); return; }
     if (t.matches('[data-rate]')) { var sbar = $('[data-savebar]'); if (sbar) sbar.hidden = false; var ex = $('[data-example]'); if (ex) ex.innerHTML = exampleText(); var c = $('[data-cardof="' + t.dataset.rate.replace(/"/g, '\\"') + '"]'), v = parseFloat(t.value); if (c) c.textContent = v && hasFee() ? 'Card ' + money(toCard(v)) : ''; return; }
     if (t.matches('[data-q]')) { var qk = t.dataset.q, qp = qk.split(':'); FO(qp[0])[qp[1]] = t.value; resetPages(); var qpos = t.selectionStart; render(); var nq = $('[data-q="' + qk + '"]'); if (nq) { nq.focus(); nq.setSelectionRange(qpos, qpos); } return; }
     if (t.matches('[data-f=q],[data-gq],[data-inq],[data-payq],[data-shopq],[data-prodq]')) resetPages();
@@ -3188,6 +3367,37 @@
     }
   }
   function onChange(e) {
+    var wt = e.target;
+    if (wt.matches && wt.matches('[data-wt]')) {
+      var wx = webFind(wt.dataset.wt), ww = webDB(), wv = wt.value.replace(/\r/g, '').trim(); if (!wx) return;
+      if (!wv || wv === wx.def) { if (ww.text[wx.key] == null) { wt.value = wx.def; return; } delete ww.text[wx.key]; log('Website wording put back to the original: "' + wx.def.slice(0, 60) + '"'); }
+      else { if (ww.text[wx.key] === wv) return; ww.text[wx.key] = wv; log('Website wording changed: "' + wv.slice(0, 60) + '"'); }
+      save(); var wy = window.scrollY; render(); window.scrollTo(0, wy); toast('Saved. The website shows it now.'); return;
+    }
+    if (wt.matches && wt.matches('[data-wkday]')) {
+      var wds = $$('[data-wkday]').filter(function (x) { return x.checked; }).map(function (x) { return +x.dataset.wkday; });
+      if (!wds.length) { toast('At least one night must cost the weekend rate'); render(); return; }
+      webDB().wkDays = wds.sort().join() === '5,6' ? null : wds; applyWk(); log('Weekend-rate nights changed'); save(); render(); toast('Saved. New bookings use it from now on.'); return;
+    }
+    if (wt.matches && wt.matches('[data-hero-file]')) {
+      var hf = wt.files && wt.files[0]; if (!hf) return;
+      resizeImg(hf, 2400, function (blob, iw) {
+        if (!blob) { toast('That photo could not be read. Try a JPG or PNG.'); return; }
+        K.files.put('home-hero', blob).then(function () { var hw = webDB(); hw.home.hero = 'own'; hw.home.heroName = hf.name; log('Home page header photo changed to ' + hf.name); save(); render(); toast(iw < 1600 ? 'Saved, but this photo is only ' + iw + ' pixels wide, so it may look soft on big screens.' : 'Saved. The home page shows your photo now.'); }).catch(function () { toast('The photo could not be saved in this browser.'); });
+      });
+      return;
+    }
+    if (wt.matches && wt.matches('[data-hero]')) {
+      var hw2 = webDB();
+      if (wt.value === 'own' && !hw2.home.heroName) { var fi = $('[data-hero-file]'); if (fi) fi.click(); render(); return; }
+      if (wt.value) hw2.home.hero = wt.value; else delete hw2.home.hero;
+      log('Home page header photo changed'); save(); render(); toast('Saved. The home page shows it now.'); return;
+    }
+    if (wt.matches && wt.matches('[data-ws]')) {
+      var sk = wt.dataset.ws, sv = wt.value.trim(), sw = webDB();
+      if (!sv || sv === wt.dataset.def) delete sw.settings[sk]; else sw.settings[sk] = sv;
+      log('Website contact details changed: ' + sk); save(); render(); toast('Saved. The website shows it now.'); return;
+    }
     var t = e.target;
     if (t.matches('[data-sig-who]')) { SIG_WHO = t.value; render(); return; }
     if (t.matches('[data-sig-chk]')) { sigData(SIG_WHO || ME.id)[t.dataset.sigChk] = t.checked; save(); render(); return; }
@@ -3246,7 +3456,7 @@
     window.addEventListener('hashchange', function () { document.body.classList.remove('nav-open'); if (!$('#modal').hidden) closeModal(true); if (drawerRef) closeDrawer(true); if (ME) { render(); window.scrollTo(0, 0); } });
     // pick up website demo bookings made in another tab
     window.addEventListener('storage', function (e) { if (e.key === WEB && ME && importWeb()) { render(); toast('New booking from the website'); } if (e.key === POPK && ME && importPop()) { render(); toast('Proof of payment uploaded on the website'); } });
-    Promise.all([K.prices(), K.stands()]).then(function (r) {
+    Promise.all([K.pricesFile ? K.pricesFile() : K.prices(), K.stands()]).then(function (r) {
       P = r[0]; ORIG_HOL = JSON.stringify(P.holidays); CONTENT_STANDS = r[1]; STANDS = r[1].slice(); loadDB();
       var id = null; try { id = sessionStorage.getItem(SESS); } catch (e) {}
       var s = STAFF.filter(function (x) { return x.id === id; })[0];

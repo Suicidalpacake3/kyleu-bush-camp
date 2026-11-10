@@ -38,15 +38,6 @@ size: 1.5 MB
 
 Dinokeng Game Reserve's own magazine is full of wildlife stories, conservation news and things to do in the reserve. Read every issue for free on Dinokeng's website. Reading it helps the reserve's conservation work.
 
-## DGR South cycling map
-type: Map or guide
-date: 2026-10-01
-image: assets/img/dinokeng/dgr-south-cycling-map.jpg
-file: assets/docs/dinokeng/dgr-south-cycling-map-2026.pdf
-size: 2.1 MB
-
-The cycling routes in the south of the reserve, about 126 km in all, with distances and where they start.
-
 <!-- TEMPLATE (copy from here)
 ## Heading
 type: Bush Telegraph

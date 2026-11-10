@@ -30,7 +30,7 @@ for name in ['index', 'stay', 'discover', 'dinokeng', 'news', 'contact', 'polici
     page = head + body + foot
     jsonld = []
     # FAQ structured data from <details>
-    faqs = re.findall(r'<details[^>]*><summary>(.*?)</summary><div class="ans">(.*?)</div></details>', body, re.S)
+    faqs = re.findall(r'<details[^>]*><summary[^>]*>(.*?)</summary><div class="ans">(.*?)</div></details>', body, re.S)
     if faqs:
         jsonld.append({"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
             {"@type": "Question", "name": strip(q), "acceptedAnswer": {"@type": "Answer", "text": strip(a)}} for q, a in faqs]})

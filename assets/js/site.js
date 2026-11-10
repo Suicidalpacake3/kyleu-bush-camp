@@ -148,7 +148,8 @@
     var slides = $$('.hero-slide');
     if (slides.length === 1) {
       // one photo that drifts slowly (no slideshow)
-      var small1 = window.matchMedia('(max-width: 700px)').matches, s1 = slides[0], u1 = (small1 && s1.dataset.bgM) || s1.dataset.bg;
+      // upright screens (phones, and tablets held upright) get the upright photo
+      var small1 = window.matchMedia('(max-aspect-ratio: 1/1)').matches, s1 = slides[0], u1 = (small1 && s1.dataset.bgM) || s1.dataset.bg;
       if (u1) s1.style.backgroundImage = "url('" + u1 + "')";
       s1.classList.add('on', 'single');
     } else if (slides.length) {

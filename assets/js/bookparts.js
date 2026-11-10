@@ -3,6 +3,7 @@
    "Change my booking" (manage.html):
    - K.carsEditor: one card per vehicle with registration, driver and passengers
    - K.shopItems / K.shopPicker: camp shop items to have waiting on arrival
+   - K.intlNote: the note for guests booking from outside South Africa
    ========================================================= */
 (function () {
   'use strict';
@@ -97,7 +98,7 @@
     var acc = 0;
     for (var d = p(ci), end = p(co); d < end; d.setDate(d.getDate() + 1)) {
       var dow = d.getDay(), nx = new Date(d); nx.setDate(nx.getDate() + 1);
-      var wk = dow === 5 || dow === 6 || !!P.holidays[iso(nx)], pens = (!wk && dow >= 1 && dow <= 4) ? R.pe : (wk ? R.wk : R.wd);
+      var wk = (P.wkDays ? P.wkDays.indexOf(dow) >= 0 : dow === 5 || dow === 6) || !!P.holidays[iso(nx)], pens = (!wk && dow >= 1 && dow <= 4) ? R.pe : (wk ? R.wk : R.wd);
       acc += g.adults * (wk ? R.wk : R.wd) + g.pens * pens + g.kids * R.kid;
     }
     return acc;
@@ -111,7 +112,7 @@
     var grp = { wk: [], wd: [] }, amt = { wk: 0, wd: 0 }, pensUsed = false, paying = g.adults + g.pens;
     for (var d = p(ci), end = p(co); d < end; d.setDate(d.getDate() + 1)) {
       var dow = d.getDay(), nx = new Date(d); nx.setDate(nx.getDate() + 1);
-      var wk = dow === 5 || dow === 6 || !!P.holidays[iso(nx)], k = wk ? 'wk' : 'wd';
+      var wk = (P.wkDays ? P.wkDays.indexOf(dow) >= 0 : dow === 5 || dow === 6) || !!P.holidays[iso(nx)], k = wk ? 'wk' : 'wd';
       var pr = (!wk && dow >= 1 && dow <= 4) ? R.pe : (wk ? R.wk : R.wd); if (g.pens && pr !== (wk ? R.wk : R.wd)) pensUsed = true;
       grp[k].push(new Date(d)); amt[k] += g.adults * (wk ? R.wk : R.wd) + g.pens * pr;
     }
@@ -152,4 +153,23 @@
     return { draw: draw };
   };
   K.shopTotal = function (items, qty) { return items.reduce(function (a, it) { return a + (qty[it.label] || 0) * it.each; }, 0); };
+
+  /* ---------- guests booking from outside South Africa ----------
+     A bank transfer from another country costs them a lot, so they WhatsApp Kyleu and pay by cash or card on arrival.
+     Shown where a guest is asked to pay by EFT (never as a "pay on arrival" choice for everyone).
+     Staff can change the heading and the text (data-edit); the WhatsApp number comes from the settings.
+     o: { ref: the booking reference once there is one, what: the stand and dates before there is one } */
+  var WA = '27604584478';
+  function waHref(msg) { return 'https://wa.me/' + WA + '?text=' + encodeURIComponent(msg); }
+  if (K.settings) K.settings().then(function (S) {
+    var n = S ? String(S.get('WhatsApp number', '') || '').replace(/\D/g, '') : ''; if (!n || n === WA) return;
+    WA = n; $$('a[data-intl-wa]').forEach(function (a) { a.href = waHref(a.getAttribute('data-intl-wa')); });
+  }).catch(function () {});
+  K.intlNote = function (o) {
+    o = o || {};
+    var msg = 'Hi Kyleu, I am booking from outside South Africa' + (o.ref ? ' (booking ' + o.ref + ')' : o.what ? ' (' + o.what + ')' : '') + ' and would like to pay on arrival.';
+    return '<div class="intl-note">' + svg('i-info') + '<div class="intl-body"><h3 data-edit="booking.intl.title">Booking from outside South Africa?</h3>' +
+      '<p data-edit="booking.intl.text">Bank transfers from other countries can be expensive. WhatsApp us and we will arrange for you to pay by cash or card when you arrive.</p>' +
+      '<a class="btn btn-green btn-sm" href="' + esc(waHref(msg)) + '" data-intl-wa="' + esc(msg) + '" target="_blank" rel="noopener">' + svg('i-wa') + 'WhatsApp Kyleu</a></div></div>';
+  };
 })();

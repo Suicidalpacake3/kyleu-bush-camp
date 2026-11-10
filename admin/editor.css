@@ -1,0 +1,193 @@
+/* =========================================================
+   Kyleu article writing tool: toolbar and frame (admin only).
+   The story itself is styled by assets/css/article.css.
+   ========================================================= */
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&display=swap');
+
+.kyed {
+  --kyed-line: var(--line, #eadfce);
+  --kyed-soft: var(--line-2, #f2eadd);
+  --kyed-card: var(--card, #fffdf9);
+  --kyed-ink: var(--ink, #2a1b12);
+  --kyed-ink2: var(--ink-2, #5d4838);
+  --kyed-muted: var(--muted, #8a7563);
+  --kyed-sun: var(--sun, #e8731c);
+  --kyed-sun-d: var(--sun-d, #c2590f);
+  --kyed-bad: var(--bad, #b23a2a);
+  position: relative; border: 1px solid var(--kyed-line); border-radius: 14px; background: #fff; color: var(--kyed-ink);
+  font: 15px/1.4 'Nunito Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; text-align: left;
+}
+.kyed *, .kyed *::before, .kyed *::after { box-sizing: border-box; }
+.kyed [hidden] { display: none !important; }
+.kyed:focus-within { border-color: var(--kyed-sun); box-shadow: 0 0 0 3px rgba(232, 115, 28, .14); }
+.kyed button { font: inherit; color: inherit; cursor: pointer; }
+
+/* ---------- toolbar ---------- */
+.kyed-bar {
+  position: sticky; top: var(--kyed-top, 0px); z-index: 6; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px;
+  padding: 8px; background: var(--kyed-card); border-bottom: 1px solid var(--kyed-line); border-radius: 13px 13px 0 0;
+}
+.kyed-g { display: flex; align-items: center; gap: 2px; padding-right: 6px; margin-right: 2px; border-right: 1px solid var(--kyed-line); }
+.kyed-g-last { border-right: 0; padding-right: 0; margin-right: 0; }
+.kyed-b[data-k="align"] { display: none; }
+.kyed-b {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 36px; height: 36px; padding: 0 8px;
+  border: 0; border-radius: 9px; background: transparent; color: var(--kyed-ink); font-weight: 700; font-size: .86rem; line-height: 1; white-space: nowrap;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.kyed-b:hover { background: var(--kyed-soft); }
+.kyed-b.on, .kyed-b.open { background: #fbe3cf; color: var(--kyed-sun-d); }
+.kyed-b:disabled { opacity: .32; cursor: default; background: transparent; }
+.kyed-b:focus-visible, .kyed-sb:focus-visible, .kyed-mi:focus-visible, .kyed-btn:focus-visible { outline: 3px solid #f4b740; outline-offset: 1px; }
+.kyed-ic { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.kyed-chev { width: 13px; height: 13px; opacity: .55; margin-left: -2px; }
+.kyed-dd { padding: 0 7px 0 10px; }
+.kyed-dd:not(.kyed-dd-i):not([data-k="box"]) { background: #fff; box-shadow: inset 0 0 0 1px var(--kyed-line); }
+.kyed-dd:not(.kyed-dd-i):not([data-k="box"]):hover { background: var(--kyed-soft); }
+.kyed-dd.open { background: #fbe3cf !important; }
+.kyed-dd > span { text-align: left; overflow: hidden; text-overflow: ellipsis; }
+.kyed-b[data-k="style"] > span { width: 106px; }
+.kyed-b[data-k="font"] > span { width: 86px; }
+.kyed-b[data-k="size"] > span { width: 74px; }
+.kyed-dd-i { padding: 0 4px 0 7px; gap: 2px; }
+.kyed-dd-i > span { display: none; }
+.kyed-ink { stroke: currentColor; }
+.kyed-ink-hl-gold .kyed-ink { stroke: #f4b740; }
+.kyed-ink-hl-orange .kyed-ink { stroke: #f59a2f; }
+.kyed-ink-hl-green .kyed-ink { stroke: #7e8c4e; }
+.kyed-ink-c-sun .kyed-ink { stroke: #e8731c; }
+.kyed-ink-c-ember .kyed-ink { stroke: #b8461a; }
+.kyed-ink-c-green .kyed-ink { stroke: #5b6a35; }
+.kyed-ink-c-brown .kyed-ink { stroke: #6b5544; }
+
+/* ---------- menus and the link box ---------- */
+.kyed-pop {
+  position: absolute; z-index: 20; min-width: 200px; max-width: calc(100% - 12px); padding: 6px; background: #fff;
+  border: 1px solid var(--kyed-line); border-radius: 12px; box-shadow: 0 16px 44px -14px rgba(42, 27, 18, .45);
+}
+.kyed-mi {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 7px 12px; border: 0; border-radius: 8px;
+  background: none; text-align: left; font-size: .95rem; font-weight: 600; line-height: 1.2; color: var(--kyed-ink);
+}
+.kyed-mi:hover, .kyed-mi:focus { background: var(--kyed-soft); }
+.kyed-mi.on { background: #fdf0e3; font-weight: 800; }
+.kyed-mi.on::after { content: ''; margin-left: auto; width: 6px; height: 11px; border: solid var(--kyed-sun-d); border-width: 0 2.5px 2.5px 0; transform: rotate(45deg) translateY(-2px); flex: none; }
+.kyed-st-h2 { font: 700 1.35rem/1.15 'Fraunces', Georgia, serif; }
+.kyed-st-h3 { font: 600 1.12rem/1.2 'Fraunces', Georgia, serif; }
+.kyed-st-intro { font-size: 1.08rem; color: var(--kyed-ink2); }
+.kyed-st-quote { font: italic 500 1.05rem/1.3 'Fraunces', Georgia, serif; border-left: 3px solid #f4b740; padding-left: 9px; }
+.kyed-f-display { font-family: 'Fraunces', Georgia, 'Times New Roman', serif; }
+.kyed-f-serif { font-family: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Times New Roman', serif; }
+.kyed-f-hand { font-family: 'Caveat', 'Segoe Print', 'Bradley Hand', cursive; font-size: 1.3em; line-height: 1; }
+.kyed-s-sm { font-size: .82em; }
+.kyed-s-lg { font-size: 1.18em; }
+.kyed-s-xl { font-size: 1.42em; }
+.kyed-sw { width: 28px; height: 17px; border-radius: 5px; flex: none; box-shadow: inset 0 0 0 1px rgba(42, 27, 18, .12); }
+.kyed-hl-gold { background: rgba(244, 183, 64, .75); }
+.kyed-hl-orange { background: rgba(245, 154, 47, .65); }
+.kyed-hl-green { background: rgba(126, 140, 78, .55); }
+.kyed-none { background: linear-gradient(to top right, #fff 44%, #b23a2a 45%, #b23a2a 55%, #fff 56%); }
+.kyed-dot { width: 18px; height: 18px; border-radius: 50%; }
+.kyed-c-def { background: #2a1b12; }
+.kyed-c-sun { background: #e8731c; }
+.kyed-c-ember { background: #b8461a; }
+.kyed-c-green { background: #5b6a35; }
+.kyed-c-brown { background: #6b5544; }
+.kyed-bx { border-left: 5px solid #f4b740; background: #fdf1d6; }
+.kyed-bx.kyed-box-green { border-left-color: #7e8c4e; background: #eef1e2; }
+.kyed-bx.kyed-box-sun { border-left-color: #e8731c; background: #fde9d7; }
+
+.kyed-linkpop { width: 330px; padding: 14px; }
+.kyed-fld { display: grid; gap: 5px; margin: 0 0 10px; }
+.kyed-fld > span, .kyed-altw > span { font-size: .78rem; font-weight: 800; color: var(--kyed-ink2); }
+.kyed-fld input { width: 100%; border: 1px solid var(--kyed-line); background: #fff; border-radius: 10px; padding: 10px 12px; font: inherit; font-size: .95rem; color: var(--kyed-ink); }
+.kyed-fld input:focus { outline: 0; border-color: var(--kyed-sun); box-shadow: 0 0 0 3px rgba(232, 115, 28, .18); }
+.kyed-chk { display: flex; align-items: center; gap: 9px; margin: 7px 0; font-size: .9rem; font-weight: 600; cursor: pointer; }
+.kyed-chk input { width: 17px; height: 17px; margin: 0; accent-color: var(--kyed-sun); }
+.kyed-err { margin: 8px 0 0; font-size: .85rem; font-weight: 700; color: var(--kyed-bad); }
+.kyed-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.kyed-btn { border: 0; border-radius: 10px; background: var(--kyed-sun); color: #fff !important; font-weight: 800; font-size: .88rem; padding: 9px 14px; }
+.kyed-btn:hover { background: var(--kyed-sun-d); }
+.kyed-btn.ghost { background: #fff; color: var(--kyed-ink) !important; box-shadow: inset 0 0 0 1px var(--kyed-line); }
+.kyed-btn.ghost:hover { background: var(--kyed-soft); }
+
+/* ---------- writing surface ---------- */
+.kyed-wrap { position: relative; background: #fff; }
+.kyed .kyed-surface {
+  min-height: var(--kyed-min, 340px); max-width: 808px; margin: 0 auto; padding: 26px 24px 44px; outline: none; cursor: text;
+  font-size: 1.08rem;            /* the same as the public page, whatever the admin's own text size is */
+}
+.kyed .kyed-surface:focus, .kyed .kyed-surface:focus-visible { outline: none; border-radius: 0; }
+.kyed-ph {
+  display: none; position: absolute; top: 26px; left: 0; right: 0; max-width: 808px; margin: 0 auto; padding: 0 24px; pointer-events: none;
+  font-size: 1.08rem; line-height: 1.7; color: var(--kyed-muted); opacity: .8;
+}
+.kyed-empty .kyed-ph { display: block; }
+.kyed-drop .kyed-surface { background: #fff8ef; box-shadow: inset 0 0 0 2px var(--kyed-sun); border-radius: 0 0 12px 12px; }
+.kyed-busy .kyed-surface { cursor: progress; }
+
+.kyed-surface figure { cursor: pointer; outline: 3px solid transparent; outline-offset: 4px; border-radius: 16px; transition: outline-color .12s; }
+.kyed-surface figure:hover { outline-color: rgba(232, 115, 28, .35); }
+.kyed-surface figure.kyed-sel { outline-color: var(--kyed-sun); }
+.kyed-surface figure img { pointer-events: none; }
+.kyed-surface figure::selection, .kyed-surface figure img::selection { background: transparent; }
+.kyed-surface figcaption { cursor: text; min-height: 1.5em; outline: none; }
+.kyed-surface figcaption:focus-visible { outline: none; }
+.kyed-surface figcaption:empty::before { content: 'Write a caption (optional)'; opacity: .55; }
+.kyed-surface a { cursor: text; }
+.kyed-surface .ky-box { outline: 1px dashed transparent; }
+.kyed-surface .ky-box:focus-within { outline-color: rgba(74, 52, 36, .22); outline-offset: 3px; }
+
+/* ---------- photo options (shown next to the selected photo) ---------- */
+.kyed-imgbar {
+  position: absolute; z-index: 4; display: grid; gap: 6px; width: max-content; padding: 8px; border-radius: 13px;
+  background: #2a1b12; color: #fff; box-shadow: 0 16px 40px -14px rgba(0, 0, 0, .6); font-size: .82rem;
+}
+.kyed-ib-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.kyed-seg { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 3px; border-radius: 9px; background: rgba(255, 255, 255, .09); }
+.kyed-seg-l { padding: 0 7px 0 6px; font-size: .68rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: #d9c7b2; }
+.kyed .kyed-sb { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 5px 9px; border: 0; border-radius: 7px; background: transparent; color: #fff; font-weight: 700; font-size: .82rem; white-space: nowrap; }
+.kyed-sb:hover { background: rgba(255, 255, 255, .16); }
+.kyed-sb.on { background: var(--kyed-sun); }
+.kyed-sb .kyed-ic { width: 16px; height: 16px; }
+.kyed-altw { display: grid; gap: 4px; }
+.kyed-altw > span { color: #d9c7b2; padding-left: 2px; }
+.kyed-alt { width: 100%; border: 0; border-radius: 8px; padding: 8px 10px; background: #fff; color: #2a1b12; font: inherit; font-size: .88rem; }
+.kyed-alt:focus { outline: 3px solid #f4b740; outline-offset: 0; }
+
+/* ---------- footer ---------- */
+.kyed-foot {
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 14px; padding: 8px 14px; border-top: 1px solid var(--kyed-line);
+  background: var(--kyed-card); border-radius: 0 0 13px 13px; font-size: .82rem; color: var(--kyed-muted);
+}
+.kyed-msg { font-weight: 700; color: var(--kyed-ink2); }
+.kyed-msg.bad { color: var(--kyed-bad); }
+.kyed-msg.busy { color: var(--kyed-sun-d); }
+.kyed-file { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+/* ---------- touch and phones ---------- */
+@media (pointer: coarse) {
+  .kyed-b { min-width: 40px; height: 40px; }
+  .kyed-dd-i { min-width: 50px; }
+  .kyed .kyed-sb { min-height: 38px; }
+}
+@media (max-width: 560px) {
+  /* buttons flow one by one so every row is full; the three text menus lead, undo and redo go last */
+  .kyed-bar { padding: 6px; gap: 3px 2px; }
+  .kyed-g { display: contents; }
+  .kyed-g1 > .kyed-b { order: 9; }
+  .kyed-b[data-k="left"], .kyed-b[data-k="centre"], .kyed-b[data-k="right"] { display: none; }
+  .kyed-b[data-k="align"] { display: inline-flex; }
+  .kyed-b[data-k="link"] > span, .kyed-b[data-k="button"] > span, .kyed-b[data-k="pair"] > span, .kyed-b[data-k="rule"] > span, .kyed-b[data-k="box"] > span { display: none; }
+  .kyed-b[data-k="box"] { padding: 0 4px 0 7px; gap: 2px; }
+  .kyed-b[data-k="style"] { flex: 1 1 36%; min-width: 0; }
+  .kyed-b[data-k="font"] { flex: 1 1 30%; min-width: 0; }
+  .kyed-b[data-k="size"] { flex: 1 1 26%; min-width: 0; }
+  .kyed-b[data-k="style"] > span, .kyed-b[data-k="font"] > span, .kyed-b[data-k="size"] > span { width: auto; flex: 1; }
+  .kyed-seg-l { display: none; }
+  .kyed .kyed-surface { padding: 18px 14px 36px; }
+  .kyed-ph { top: 18px; padding: 0 14px; }
+  .kyed-linkpop { width: calc(100% - 12px); }
+  .kyed-imgbar { width: auto; }
+  .kyed-alt { min-width: 0; }
+}

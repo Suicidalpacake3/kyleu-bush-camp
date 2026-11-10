@@ -63,6 +63,8 @@
   // what the document is called: a quotation until it is paid, then an invoice (a tax invoice when Kyleu is VAT registered)
   function kindName(inv) { return inv.kind === 'Quote' ? 'Quotation' : K.vatOn() ? 'Tax invoice' : 'Invoice'; }
   K.kindName = kindName;
+  // the same word inside a sentence or on a button: "quotation", "invoice" or "tax invoice"
+  K.docWord = function (inv) { return kindName(inv).toLowerCase(); };
   // how long a quotation holds the stand: until the deposit date; if the guest said they paid, one more day while Kyleu checks
   // o: { due (yyyy-mm-dd), paid, claimed, today (yyyy-mm-dd) }  ->  { state: 'paid' | 'held' | 'soft' | 'released', until }
   K.quoteHold = function (o) {
@@ -84,6 +86,7 @@
     if (inv.cancelled) return { k: 'cancel', t: 'This booking is cancelled', bal: bal };
     if (inv.kind === 'Quote') return { k: 'quote', t: 'Quotation' + (inv.validTo ? ', valid until ' + nice(inv.validTo) : ''), bal: bal, now: inv.payFull ? bal : inv.deposit };
     if (bal <= 0) return { k: 'paid', t: 'Paid in full. Thank you!', bal: 0 };
+    if (inv.onArrival) return { k: 'due', t: money(bal) + ' to pay on arrival (' + String(inv.onArrival).toLowerCase() + ')', bal: bal, now: bal, arr: true };
     if (!inv.paid && !inv.payFull) return { k: 'due', t: 'Deposit of ' + money(inv.deposit) + ' due by ' + nice(inv.depositDue), bal: bal, now: inv.deposit };
     if (!inv.paid) return { k: 'due', t: 'Full amount of ' + money(bal) + ' due by ' + nice(inv.depositDue), bal: bal, now: bal };
     return { k: 'due', t: 'Balance of ' + money(bal) + ' due by ' + nice(inv.balanceDue), bal: bal, now: bal };
@@ -91,6 +94,7 @@
   function schedule(inv) {
     var st = state(inv), rows = [];
     if (st.k === 'paid' || st.k === 'cancel') return rows;
+    if (st.arr) return [['Pay on arrival', money(st.bal), 'by arrangement, ' + (/card/i.test(inv.onArrival) ? 'by card' : 'in cash')]];
     if (!inv.paid && !inv.payFull) { rows.push(['Deposit (' + (inv.depPct || 50) + '%)', money(inv.deposit), 'by ' + nice(inv.depositDue)]); rows.push(['Balance', money(inv.total - inv.deposit), 'by ' + nice(inv.balanceDue)]); }
     else rows.push([inv.paid ? 'Balance' : 'Full amount', money(st.bal), 'by ' + nice(inv.paid ? inv.balanceDue : inv.depositDue)]);
     return rows;
@@ -103,7 +107,7 @@
   function totals(inv, st) {
     var r = [['Total', money(inv.total), 'total']], c = K.docCfg();
     if (c.vatOn) r.push(['Includes VAT at ' + (+c.vatRate || 15) + '%', money(inv.total * (+c.vatRate || 15) / (100 + (+c.vatRate || 15))), ''])
-    if (st.k === 'quote' || (!inv.paid && !inv.payFull && st.k === 'due')) r.push(['Deposit ' + (inv.depPct || 50) + '%', money(inv.deposit), '']);
+    if (st.k === 'quote' || (!inv.paid && !inv.payFull && st.k === 'due' && !st.arr)) r.push(['Deposit ' + (inv.depPct || 50) + '%', money(inv.deposit), '']);
     if (st.k !== 'quote') r.push(['Total payment received', (inv.paid ? '-' : '') + money(inv.paid || 0), '']);
     if (st.k !== 'quote' && st.k !== 'cancel') r.push([st.bal ? 'Balance due' : 'Balance', money(st.bal), 'due']);
     return r;
@@ -114,6 +118,7 @@
   K.bankRows = bankRows;
   K.invoiceName = function (inv) { return 'Kyleu ' + kindName(inv).toLowerCase() + ' ' + inv.no + '.pdf'; };
   function vatLine() { var c = K.docCfg(); return c.vatOn && c.vatNo ? 'VAT no. ' + c.vatNo : ''; }
+  var ARRTIP = 'As arranged with Kyleu, you pay when you arrive. No deposit is needed, and your stand is booked for you.';
   var PAIDTIP = 'Once payment has been made, upload your proof of payment directly to your booking: press I have paid on your booking page (the link is in your booking email), or upload it at kyleu.co.za/pop.html.';
   var DGR_TXT = 'Guests staying at this DGR CP campsite qualify for Conservation Fee Discount Vouchers: R85 instead of R100 per adult per night. We send you one voucher code per vehicle before your stay. Dinokeng Game Reserve fees are paid to the reserve, not to Kyleu.';
   K.invoiceNo = function (ref, kind, n) { return (kind === 'Quote' ? 'Q-' : 'INV-') + String(ref).replace(/^KY/i, '') + '-' + (n || 1); };
@@ -131,12 +136,12 @@
       inv.lines.map(function (l) { return '<tr>' + (hasQ ? '<td class="q">' + (l.q || '') + '</td>' : '') + '<td>' + esc(l.t) + '</td>' + (hasQ ? '<td class="u">' + (l.u != null && !l.free ? money(l.u) : '') + '</td>' : '') + '<td>' + (l.free ? 'Free' : (l.amt < 0 ? '&minus;' : '') + money(Math.abs(l.amt))) + '</td></tr>'; }).join('') + '</tbody>' +
       '<tfoot>' + totals(inv, st).map(function (r) { return '<tr class="inv-' + r[2] + '"><td colspan="' + (hasQ ? 3 : 1) + '">' + r[0] + '</td><td>' + r[1].replace(/^-/, '&minus;') + '</td></tr>'; }).join('') + '</tfoot></table>' +
       (st.k === 'due' || st.k === 'quote' ? '<div class="inv-pay"><div><h4>When to pay</h4>' + (rows.length ? '<ul>' + rows.map(function (r) { return '<li><span>' + esc(r[0]) + '<small>' + esc(r[2]) + '</small></span><b>' + esc(r[1]) + '</b></li>'; }).join('') + '</ul>' : '') +
-        '<p class="inv-paidtip">' + esc(PAIDTIP) + '</p></div>' +
+        '<p class="inv-paidtip">' + esc(st.arr ? ARRTIP : PAIDTIP) + '</p></div>' +
         '<div class="inv-bank"><h4>Our bank details</h4><dl>' + bankRows().map(function (r) { return '<dt>' + r[0] + '</dt><dd>' + esc(r[1]) + '</dd>'; }).join('') + '</dl><p class="inv-refbox">Use reference <b>' + esc(inv.ref) + '</b></p></div></div>' : '') +
       (inv.note ? '<p class="inv-note inv-own">' + esc(inv.note) + '</p>' : '') +
       '<div class="inv-notes"><h4>Please note</h4><ul>' + notes().map(function (n) { return '<li>' + esc(n).replace('AT YOUR OWN RISK', '<b>AT YOUR OWN RISK</b>') + '</li>'; }).join('') + '</ul></div>' +
       '<p class="inv-thanks">' + esc(THANKS) + '</p>' +
-      '<p class="inv-sign">Kind regards,<br><b>' + esc(BIZ.signer) + '</b> · ' + esc(BIZ.phone) + ' · ' + esc(BIZ.email) + '</p>' +
+      '<p class="inv-sign">Kind regards,<br><b>' + esc(BIZ.signer) + '</b></p>' +
       '<div class="inv-dgr"><img src="' + BASE + 'assets/img/dgr-certified-partner.png" alt="DGR Certified Partner logo"><p><b>Kyleu is a proud DGR CP member.</b> ' + esc(DGR_TXT) + '</p></div>' +
       '<footer class="inv-foot">' + esc(BIZ.name) + ' · Reg. ' + esc(BIZ.reg) + (vatLine() ? ' · ' + esc(vatLine()) : '') + ' · ' + esc(BIZ.addr) + ' · ' + esc(BIZ.phone) + ' · ' + esc(BIZ.email) + ' · ' + esc(BIZ.web) + '</footer></article>';
   };
@@ -221,7 +226,7 @@
       fill(C.sand); doc.roundedRect(L, bx, 88, bh, 2, 2, 'F'); doc.roundedRect(106, bx, 90, bh, 2, 2, 'F');
       font(7.5, true, C.soft); text('WHEN TO PAY', L + 4, bx + 6.5); text('OUR BANK DETAILS', 110, bx + 6.5);
       var ry = bx + 13; schedule(inv).forEach(function (r) { font(9.5, true); text(r[0], L + 4, ry); text(r[1], L + 84, ry, { align: 'right' }); font(8, false, C.soft); text(r[2], L + 4, ry + 4.2); ry += 10; });
-      font(7.4, false, C.soft); text(doc.splitTextToSize(clean(PAIDTIP), 80), L + 4, bx + 34);
+      font(7.4, false, C.soft); text(doc.splitTextToSize(clean(st.arr ? ARRTIP : PAIDTIP), 80), L + 4, bx + (st.arr ? 26 : 34));
       ry = bx + 11.5; bankRows().forEach(function (r) { font(8.3, false, C.soft); text(r[0], 110, ry); font(8.8, true); text(r[1], 138, ry); ry += 4; });
       fill(C.sun); doc.roundedRect(110, bx + bh - 8.5, 82, 5.5, 1, 1, 'F'); font(8.5, true, C.white); text('Use reference ' + inv.ref, 151, bx + bh - 4.6, { align: 'center' });
       y = bx + bh + 8;
@@ -235,7 +240,7 @@
     font(7.5, true, C.soft); text('PLEASE NOTE', L, y); y += 4.8;
     notes().forEach(function (n) { font(8.4, /OWN RISK/.test(n), /OWN RISK/.test(n) ? C.bark : C.soft); var ls = doc.splitTextToSize(clean(n), W - 5); fill(C.sun); doc.circle(L + 1.6, y - 1.1, .65, 'F'); text(ls, L + 5, y); y += ls.length * 3.7 + .2; });
     y += 4; font(8.6, true); var tl = doc.splitTextToSize(THANKS, W); text(tl, L, y); y += tl.length * 4.2 + 1;
-    font(8.6, false, C.soft); text('Kind regards, ' + BIZ.signer + ' · ' + BIZ.phone + ' · ' + BIZ.email, L, y); y += 4.5;
+    font(8.6, false, C.soft); text('Kind regards, ' + BIZ.signer, L, y); y += 4.5;
     // DGR CP: approved logo on a light background with clear space around it
     y = Math.max(y + DGR_GAP, BOTTOM - DGR_H);
     if (IMG.dgr) try { doc.addImage(IMG.dgr, 'JPEG', L, y, 29, 10.9); } catch (e) {}
@@ -262,7 +267,7 @@
     return Promise.all([K.needPdf(), K.invoiceAssets()]).then(function () {
       var f = K.invoicePDF(inv); if (!f) throw new Error('no pdf');
       var old = document.getElementById('inv-print-frame'); if (old) old.remove();
-      var fr = document.createElement('iframe'); fr.id = 'inv-print-frame'; fr.title = 'Invoice for printing';
+      var fr = document.createElement('iframe'); fr.id = 'inv-print-frame'; fr.title = kindName(inv) + ' for printing';
       fr.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none';
       fr.onload = function () { setTimeout(function () { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch (e) { window.open(f.url, '_blank'); } }, 300); };
       fr.src = f.url; document.body.appendChild(fr);

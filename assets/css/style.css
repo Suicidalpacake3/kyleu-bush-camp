@@ -190,7 +190,7 @@ input, select, textarea { font: inherit; color: inherit; }
    ========================================================= */
 .hero { position: relative; min-height: 100svh; display: flex; align-items: flex-end; color: #fff; overflow: hidden; background: var(--night); }
 .hero-slides { position: absolute; inset: 0; }
-.hero-slide { position: absolute; inset: -4%; background-size: cover; background-position: center; opacity: 0; transition: opacity 1.8s ease; transform: scale(1.08); }
+.hero-slide { position: absolute; inset: -2%; background-size: cover; background-position: var(--pos, center); opacity: 0; transition: opacity 1.8s ease; transform: scale(1.08); }
 .hero-slide.on { opacity: 1; animation: kenburns 9s linear forwards; }
 @keyframes kenburns { from { transform: scale(1.12) translate(1%, 1%); } to { transform: scale(1.0) translate(0, 0); } }
 .hero::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(18,10,4,.62) 0%, rgba(18,10,4,.35) 38%, rgba(18,10,4,0) 70%), linear-gradient(180deg, rgba(18,10,4,.55) 0%, rgba(18,10,4,.08) 30%, rgba(18,10,4,.35) 62%, rgba(18,10,4,.9) 100%); pointer-events: none; }
@@ -582,7 +582,9 @@ html { overflow-anchor: none; }
 /* ---------- client update (Nov 2026) ---------- */
 /* hero: a single photo drifting slowly */
 .hero-slide.single.on { opacity: 1; animation: drift 38s ease-in-out infinite alternate; }
-@keyframes drift { from { transform: scale(1.12) translate(1.5%, 1%); } to { transform: scale(1.02) translate(-1.5%, -1%); } }
+/* a gentle drift: the photo is hardly enlarged, so it stays sharp */
+@keyframes drift { from { transform: scale(1.05) translate(.8%, .5%); } to { transform: scale(1) translate(-.8%, -.5%); } }
+@media (max-aspect-ratio: 1/1) { .hero-slide { background-position: var(--pos-m, var(--pos, center)); } }
 .hero-tagline { color: var(--gold); font-size: 1.12rem; font-weight: 800; margin: 12px 0 0; letter-spacing: .01em; }
 .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 24px; }
 /* Dinokeng certified partner badge */
@@ -707,4 +709,24 @@ html:has(body.lock) { overflow: hidden; }
   .hero h1 { font-size: clamp(2.4rem, 4.6vw, 3.9rem); margin-bottom: .3em; }
   .hero .lead { font-size: 1.02rem; margin-bottom: 10px; }
   .hero-tagline { margin: 6px 0 14px; }
+}
+
+/* ---------- home page on phones: let the photo be seen ----------
+   The heading sits at the top over the sky and the buttons at the bottom, so the camp at sunset shows in between.
+   The long welcome paragraph moves under the photo. */
+.hero-intro-m { display: none; }
+@media (max-width: 700px) {
+  .page-index .hero .lead { display: none; }
+  .hero-intro-m { display: block; padding-top: 30px; }
+  .hero-intro-m .lead { font-size: 1.06rem; line-height: 1.65; color: var(--ink, #3b2a1e); margin: 0; }
+  .page-index .hero { align-items: stretch; }
+  .page-index .hero-content { display: flex; padding-top: calc(var(--header-h) + 14px); padding-bottom: 92px; }
+  .page-index .hero-content > .wrap { display: flex; flex-direction: column; align-items: flex-start; width: 100%; }
+  .page-index .hero h1 { margin-bottom: 0; text-shadow: 0 2px 18px rgba(0,0,0,.6), 0 1px 2px rgba(0,0,0,.55); }
+  .page-index .hero-tagline { margin-top: auto; padding-top: 30vh; }
+  .page-index .hero-actions { flex-wrap: nowrap; gap: 10px; width: 100%; margin-top: 16px; }
+  .page-index .hero-actions .btn { flex: 1 1 0; justify-content: center; padding: 14px 10px; font-size: .95rem; white-space: nowrap; }
+  .page-index .hero-actions .btn svg { display: none; }
+  .page-index .dgr-badge { margin-top: 16px; }
+  .page-index .hero::after { background: linear-gradient(180deg, rgba(18,10,4,.62) 0%, rgba(18,10,4,.34) 26%, rgba(18,10,4,.04) 40%, rgba(18,10,4,.08) 55%, rgba(18,10,4,.8) 72%, rgba(18,10,4,.94) 100%); }
 }

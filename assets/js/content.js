@@ -67,8 +67,26 @@
     return 'R' + s;
   }
 
+  // ---------- what staff change in the admin ----------
+  // Website wording, contact details, rate names and descriptions, prices and the homepage photo.
+  // Demo: the admin hands them to the website through this browser ("kyleu-web-content").
+  // Live: the server saves them and fills them in before the page is sent.
+  function webContent() { var x = null; try { x = JSON.parse(localStorage.getItem('kyleu-web-content') || 'null'); } catch (e) {} return x || {}; }
+  // wording typed in the admin: **bold**, *highlighted*, [a link](https://...) and line breaks
+  function editHtml(t) {
+    return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (_, a, u) { if (!/^(https?:|mailto:|tel:|#|[\w./-]+(\?|#|$))/i.test(u)) return a; var ext = /^https?:/i.test(u); return '<a href="' + u + '"' + (ext ? ' target="_blank" rel="noopener"' : '') + '>' + a + '</a>'; })
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\*([^*]+)\*/g, '<em>$1</em>').replace(/\n/g, '<br>');
+  }
+  function applyEdits(root) {
+    var T = webContent().text; if (!T) return;
+    var els = (root.querySelectorAll ? Array.prototype.slice.call(root.querySelectorAll('[data-edit]')) : []);
+    if (root.matches && root.matches('[data-edit]')) els.unshift(root);
+    els.forEach(function (el) { var v = T[el.getAttribute('data-edit')]; if (typeof v === 'string' && !el.hasAttribute('data-edited')) { el.setAttribute('data-edited', ''); var ico = el.hasAttribute('data-edit-icon') && el.firstElementChild && /^svg$/i.test(el.firstElementChild.tagName) ? el.firstElementChild.outerHTML : ''; el.innerHTML = ico + editHtml(v); } });
+  }
+
   // ---------- settings ----------
-  function parseSettings(md) {
+  function parseSettings(md, plain) {
     var map = {}, secs = {};
     sections(md).forEach(function (sec) {
       var items = bullets(sec.lines); if (sec.title) secs[norm(sec.title)] = items;
@@ -76,22 +94,28 @@
     });
     var so = socialLocal();
     if (so) { map.instagram = so.instagram || ''; map.facebook = so.facebook || ''; map.tiktok = so.tiktok || ''; if (so.hashtag) map.hashtag = so.hashtag; }
+    var ws = plain ? {} : webContent().settings || {}; Object.keys(ws).forEach(function (k) { map[norm(k)] = ws[k]; });   // contact details changed in the admin
     return { raw: map, list: function (title) { return secs[norm(title)] || []; }, get: function (k, d) { var v = map[norm(k)]; return (v === undefined || v === '') ? d : v; } };
   }
   // social media set on the admin's Social media page (demo: this browser; live: from the server)
   function socialLocal() { try { return JSON.parse(localStorage.getItem('kyleu-web-social') || 'null'); } catch (e) { return null; } }
 
   // ---------- prices ----------
-  function parsePrices(md) {
-    var secs = []; var year = '';
+  function parsePrices(md, plain) {
+    var secs = []; var year = '', W = plain ? {} : webContent(), over = W.prices || {};
     var ym = stripNotes(md).match(/Rates year:\s*(\d{4})/i); if (ym) year = ym[1];
     sections(md).forEach(function (sec) {
       if (!sec.title) return;
       var items = bullets(sec.lines).map(function (it) {
         var m = it.value.match(/^R?\s*([\d\s.,]+)\s*(?:[·|-]\s*)?(.*)$/i);
         var amount = m ? parseFloat(m[1].replace(/[\s,]/g, '')) : NaN;
-        return { label: it.label, amount: amount, note: m ? m[2].trim() : it.value, raw: it.value };
+        var row = { label: it.label, name: it.label, amount: amount, note: m ? m[2].trim() : it.value, raw: it.value };
+        var o = over[sec.title + '|' + it.label];   // a price, name or description changed on the admin's Rates page
+        if (o) { if (o.amount != null && !isNaN(o.amount)) row.amount = +o.amount; if (typeof o.note === 'string') row.note = o.note; if (o.name) row.name = o.name; }
+        return row;
       });
+      // the shop's products come from the admin's Products page once staff have changed them there
+      if (/shop/i.test(sec.title) && W.shop) items = W.shop.map(function (p) { return { label: p.label, name: p.label, amount: +p.amount, note: p.note || '', raw: '' }; });
       secs.push({ title: sec.title, items: items });
     });
     function find(secKey, labelKey) {
@@ -108,7 +132,10 @@
     var holSec = secs.filter(function (s) { return /holiday|long weekend/i.test(s.title); })[0];
     var holidays = {};
     if (holSec) holSec.items.forEach(function (it) { if (/^\d{4}-\d{2}-\d{2}$/.test(it.label)) holidays[it.label] = it.raw; });
-    return { year: year, sections: secs, find: find, num: num, holidays: holidays };
+    // nights charged at the weekend rate (0 = Sunday night ... 6 = Saturday night): Friday and Saturday unless staff change it in the admin
+    var wkDays = W.rules && W.rules.wkDays && W.rules.wkDays.length ? W.rules.wkDays.map(Number) : [5, 6];
+    if (W.hol) { Object.keys(W.hol.del || {}).forEach(function (d) { delete holidays[d]; }); Object.keys(W.hol.add || {}).forEach(function (d) { holidays[d] = W.hol.add[d]; }); }
+    return { year: year, sections: secs, find: find, num: num, holidays: holidays, wkDays: wkDays };
   }
 
   // ---------- stands ----------
@@ -173,7 +200,7 @@
     if (!x) return posts;
     var hide = Object.assign({}, x.hidden || {}, x.deleted || {}), own = (x.posts || []).filter(function (p) { return !p.draft && p.title && !hide[p.slug]; }), mine = {};
     own.forEach(function (p) { mine[p.slug] = 1; });
-    var out = posts.filter(function (p) { return !hide[p.slug] && !mine[p.slug]; }).concat(own.map(function (p) { return { title: p.title, slug: p.slug, date: p.date, image: p.image || '', summary: p.summary || '', tags: p.tags || [], body: p.body || '' }; }));
+    var out = posts.filter(function (p) { return !hide[p.slug] && !mine[p.slug]; }).concat(own.map(function (p) { return { title: p.title, slug: p.slug, date: p.date, image: p.image || '', summary: p.summary || '', tags: p.tags || [], body: p.body || '', html: !!p.html, front: !!p.front }; }));
     out.sort(function (a, b) { return a.date < b.date ? 1 : -1; });
     return out;
   }
@@ -215,8 +242,11 @@
     return '<span class="dual"><s class="dual-card" title="Card price">' + money(cardAmt) + '</s> <span class="dual-eft">' + money(eftAmt) + '</span>' + (tag === false ? '' : '<small class="dual-tag">EFT</small>') + '</span>';
   };
   K.dual = function (n, P, tag) { return K.dualPair(K.toCard(n, P), n, tag); };
-  K.settings = function () { return load('settings').then(parseSettings); };
-  K.prices = function () { return load('prices').then(parsePrices); };
+  K.settings = function () { return load('settings').then(function (md) { return parseSettings(md); }); };
+  K.prices = function () { return load('prices').then(function (md) { return parsePrices(md); }); };
+  K.pricesFile = function () { return load('prices').then(function (md) { return parsePrices(md, true); }); };   // prices.md only (the admin starts from this)
+  K.settingsFile = function () { return load('settings').then(function (md) { return parseSettings(md, true); }); };   // settings.md only
+  K.webContent = webContent; K.editHtml = editHtml; K.applyEdits = applyEdits;
   K.blogFile = function () { return load('blog').then(parseBlog); };   // blog.md only (the admin uses this)
 
   /* ---------- Dinokeng updates (content/dinokeng-updates.md + what staff add in the admin) ---------- */
@@ -263,6 +293,17 @@
     };
   })();
   K.slug = slug;
+  // Front page news: the camp news posts and Dinokeng news that staff marked "Show on the home page"
+  K.frontNews = function () {
+    return Promise.all([K.blog().catch(function () { return []; }), K.dgrUpdates().catch(function () { return []; })]).then(function (r) {
+      var out = r[0].filter(function (p) { return p.front; }).map(function (p) { return { kind: 'Camp news', title: p.title, summary: p.summary, image: p.image, date: p.date, href: 'news.html?post=' + encodeURIComponent(p.slug) }; });
+      r[1].filter(function (it) { return it.front && !it.hidden && it.title; }).forEach(function (it) {
+        var own = !!it.article, href = own ? 'news.html?dgr=' + encodeURIComponent(it.slug || it.id) : (it.link || it.file || 'dinokeng.html#reserve-news');
+        out.push({ kind: 'Dinokeng news', title: it.title, summary: (it.text || '').split(/\n\s*\n/)[0], image: it.image, date: it.date, href: href, ext: !own && /^(https?:|blob:)/.test(href) });
+      });
+      return out.sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+    });
+  };
   // Map layout from the admin map editor: moved stands, stands taken off the map and new campsites.
   // Demo: saved in this browser. Live: assets/js/campmap-layout.js.
   var AREA_PHOTO = { fenced: 'assets/img/photos/fenced-camp-lawn.jpg', unfenced: 'assets/img/photos/trailer-unfenced.jpg', 'self-sufficient': 'assets/img/wildlife/tree-sunset.jpg' };
@@ -298,6 +339,20 @@
       });
     });
   };
+
+  // ---------- wording and homepage details changed in the admin ----------
+  (function () {
+    var W = webContent(), ws = W.settings || {};
+    applyEdits(document);
+    if (W.text && window.MutationObserver) new MutationObserver(function (ms) { ms.forEach(function (m) { Array.prototype.forEach.call(m.addedNodes, function (n) { if (n.nodeType === 1) applyEdits(n); }); }); }).observe(document.documentElement, { childList: true, subtree: true });
+    // the home page's header photo picked in the admin (one of Kyleu's own, or an uploaded one)
+    var hs = document.querySelector('.hero-slide[data-bg]'), hh = (W.home || {}).hero, HERO = { tree: ['assets/img/hero/kyleu-camp.jpg', 'assets/img/hero/kyleu-camp-m.jpg', 'center', 'center'] };
+    if (hs && hh && HERO[hh]) { hs.setAttribute('data-bg', HERO[hh][0]); hs.setAttribute('data-bg-m', HERO[hh][1]); hs.style.setProperty('--pos', HERO[hh][2]); hs.style.setProperty('--pos-m', HERO[hh][3]); }
+    if (hs && hh === 'own') { var hd = [hs.getAttribute('data-bg'), hs.getAttribute('data-bg-m')]; hs.removeAttribute('data-bg-m'); hs.setAttribute('data-bg', ''); K.files.get('home-hero').then(function (b) { if (!b) { hs.style.backgroundImage = "url('" + (window.matchMedia('(max-aspect-ratio: 1/1)').matches ? hd[1] : hd[0]) + "')"; return; } hs.style.setProperty('--pos', 'center'); hs.style.setProperty('--pos-m', 'center'); hs.style.backgroundImage = "url('" + URL.createObjectURL(b) + "')"; hs.setAttribute('data-own', ''); }); }
+    // numbers in the "at a glance" strip that come from the contact details
+    Array.prototype.forEach.call(document.querySelectorAll('[data-setting-count]'), function (el) { var v = ws[norm(el.getAttribute('data-setting-count'))]; if (v && !isNaN(parseFloat(v))) { el.setAttribute('data-count', parseFloat(v)); el.textContent = parseFloat(v); } });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-setting-now]'), function (el) { var v = ws[norm(el.getAttribute('data-setting-now'))]; if (v) el.textContent = v; });
+  })();
 
   // ---------- auto-bind data-* attributes ----------
   // <span data-price="Ablution stands|Weekday per person per night">R160</span>

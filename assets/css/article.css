@@ -1,0 +1,163 @@
+/* =========================================================
+   Kyleu articles: how a story looks.
+   Everything sits under .ky-article. The same file is used on the
+   public news page and inside the admin writing tool, so what is
+   written is exactly what guests see.
+   Fonts needed on the page: Nunito Sans, Fraunces, Caveat.
+   ========================================================= */
+.ky-article {
+  --ky-bark: var(--bark, #2a1b12);
+  --ky-bark-2: var(--bark-2, #4a3424);
+  --ky-soft: var(--ink-soft, #6b5544);
+  --ky-sun: var(--sun, #e8731c);
+  --ky-sun-2: var(--sun-2, #f59a2f);
+  --ky-ember: var(--ember, #b8461a);
+  --ky-gold: var(--gold, #f4b740);
+  --ky-green: var(--acacia, #5b6a35);
+  --ky-green-2: var(--acacia-2, #7e8c4e);
+  --ky-rule: rgba(74, 52, 36, .16);
+  --ky-body: var(--font-body, 'Nunito Sans', system-ui, -apple-system, 'Segoe UI', sans-serif);
+  --ky-display: var(--font-display, 'Fraunces', Georgia, 'Times New Roman', serif);
+  --ky-hand: var(--font-hand, 'Caveat', 'Segoe Print', 'Bradley Hand', cursive);
+  --ky-serif: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Times New Roman', serif;
+  display: flow-root;
+  font-family: var(--ky-body);
+  font-size: 1.08rem;
+  line-height: 1.7;
+  font-weight: 400;
+  color: var(--ky-bark);
+  text-align: left;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+}
+.ky-article *, .ky-article *::before, .ky-article *::after { box-sizing: border-box; }
+.ky-article > :first-child { margin-top: 0; }
+.ky-article > :last-child { margin-bottom: 0; }
+
+/* ---------- text ---------- */
+.ky-article p { margin: 0 0 1em; font-size: 1em; }
+.ky-article p.ky-intro { font-size: 1.24em; line-height: 1.55; color: var(--ky-bark-2); margin-bottom: 1.1em; }
+.ky-article h2, .ky-article h3, .ky-article h4 {
+  font-family: var(--ky-display); font-weight: 600; line-height: 1.18; letter-spacing: -.01em;
+  color: var(--ky-bark); text-transform: none; clear: both;
+}
+.ky-article h2 { font-size: 1.75em; margin: 1.5em 0 .5em; }
+.ky-article h3 { font-size: 1.32em; margin: 1.5em 0 .45em; }
+.ky-article h4 { font-size: 1.1em; margin: 1.4em 0 .4em; }
+.ky-article strong, .ky-article b { font-weight: 800; }
+.ky-article h2 strong, .ky-article h3 strong, .ky-article h4 strong, .ky-article h2 b, .ky-article h3 b, .ky-article h4 b { font-weight: 700; }
+.ky-article em, .ky-article i { font-style: italic; }
+.ky-article u { text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+.ky-article s { text-decoration: line-through; }
+
+.ky-article blockquote {
+  clear: both; margin: 1.7em 0; padding: .15em 0 .15em 1.15em; border: 0; border-left: 4px solid var(--ky-gold);
+  font-family: var(--ky-display); font-style: italic; font-weight: 500; font-size: 1.3em; line-height: 1.42; color: var(--ky-bark-2);
+}
+.ky-article blockquote p { margin: 0 0 .5em; }
+.ky-article blockquote p:last-child { margin-bottom: 0; }
+
+.ky-article ul, .ky-article ol { margin: 0 0 1em; padding: 0 0 0 1.35em; }
+.ky-article ul { list-style: disc; }
+.ky-article ol { list-style: decimal; }
+.ky-article li { margin: 0 0 .4em; padding-left: .15em; }
+.ky-article li::marker { color: var(--ky-sun); }
+.ky-article ol > li::marker { font-weight: 800; }
+.ky-article li > ul, .ky-article li > ol { margin: .4em 0 0; }
+
+/* ---------- fonts, sizes, colours ---------- */
+.ky-article .ky-f-display { font-family: var(--ky-display); }
+.ky-article .ky-f-serif { font-family: var(--ky-serif); }
+.ky-article .ky-f-hand { font-family: var(--ky-hand); font-size: 1.32em; line-height: 1.25; font-weight: 500; letter-spacing: 0; }
+.ky-article h2.ky-f-hand, .ky-article h3.ky-f-hand, .ky-article h4.ky-f-hand,
+.ky-article h2 .ky-f-hand, .ky-article h3 .ky-f-hand, .ky-article h4 .ky-f-hand { font-weight: 700; }
+.ky-article h2.ky-f-hand { font-size: 2.2em; }
+.ky-article h3.ky-f-hand { font-size: 1.7em; }
+.ky-article h4.ky-f-hand { font-size: 1.4em; }
+.ky-article blockquote.ky-f-hand { font-size: 1.6em; font-style: normal; }
+.ky-article p.ky-intro.ky-f-hand { font-size: 1.6em; }
+.ky-article .ky-s-sm { font-size: .85em; }
+.ky-article .ky-s-lg { font-size: 1.25em; line-height: 1.5; }
+.ky-article .ky-s-xl { font-size: 1.6em; line-height: 1.3; }
+.ky-article .ky-f-hand.ky-s-sm { font-size: 1.12em; }
+.ky-article .ky-f-hand.ky-s-lg { font-size: 1.65em; }
+.ky-article .ky-f-hand.ky-s-xl { font-size: 2.1em; }
+.ky-article .ky-c-sun { color: var(--ky-sun); }
+.ky-article .ky-c-ember { color: var(--ky-ember); }
+.ky-article .ky-c-green { color: var(--ky-green); }
+.ky-article .ky-c-brown { color: var(--ky-soft); }
+
+/* marker pen */
+.ky-article mark {
+  color: inherit; padding: 0 .16em; margin: 0 -.04em; border-radius: .5em .2em .45em .25em;
+  background: linear-gradient(transparent 10%, rgba(244, 183, 64, .6) 10%, rgba(244, 183, 64, .6) 92%, transparent 92%);
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+}
+.ky-article mark.ky-hl-orange { background: linear-gradient(transparent 10%, rgba(245, 154, 47, .5) 10%, rgba(245, 154, 47, .5) 92%, transparent 92%); }
+.ky-article mark.ky-hl-green { background: linear-gradient(transparent 10%, rgba(126, 140, 78, .42) 10%, rgba(126, 140, 78, .42) 92%, transparent 92%); }
+
+/* alignment */
+.ky-article .ky-al-c { text-align: center; }
+.ky-article .ky-al-r { text-align: right; }
+
+/* ---------- links ---------- */
+.ky-article a { color: var(--ky-ember); font-weight: 700; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.ky-article a:hover { color: var(--ky-sun); }
+.ky-article a.ky-btn {
+  display: inline-block; background: var(--ky-sun); color: #fff; font-family: var(--ky-body); font-size: .96em; font-style: normal; font-weight: 800;
+  line-height: 1.2; text-decoration: none; padding: .72em 1.45em; border-radius: 999px; margin: .15em 0;
+  box-shadow: 0 8px 18px -10px rgba(184, 70, 26, .75); transition: background .15s, transform .15s;
+}
+.ky-article a.ky-btn:hover { background: var(--ky-ember); color: #fff; transform: translateY(-1px); }
+
+/* ---------- photos ---------- */
+.ky-article .ky-fig { clear: both; margin: 1.7em auto; padding: 0; width: 100%; max-width: 100%; }
+.ky-article .ky-fig img { display: block; width: 100%; max-width: 100%; height: auto; margin: 0; border-radius: 14px; background: rgba(74, 52, 36, .06); }
+.ky-article .ky-fig figcaption { margin: .6em 0 0; padding: 0 .4em; font-family: var(--ky-body); font-size: .86em; line-height: 1.45; font-style: italic; text-align: center; color: var(--ky-soft); }
+.ky-article .ky-fig.ky-w-sm { width: 46%; }
+.ky-article .ky-fig.ky-w-md { width: 72%; }
+.ky-article .ky-fig.ky-w-full { width: 100%; }
+/* left and right: the story wraps around the photo */
+.ky-article .ky-fig.ky-p-l { float: left; width: 48%; margin: .4em 1.6em .9em 0; }
+.ky-article .ky-fig.ky-p-r { float: right; width: 48%; margin: .4em 0 .9em 1.6em; }
+.ky-article .ky-fig.ky-p-l.ky-w-sm, .ky-article .ky-fig.ky-p-r.ky-w-sm { width: 33%; }
+
+/* two photos side by side */
+.ky-article .ky-pair { clear: both; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; margin: 1.7em 0; }
+.ky-article .ky-pair .ky-fig { float: none; width: 100%; margin: 0; }
+.ky-article .ky-pair .ky-fig img { aspect-ratio: 4 / 3; object-fit: cover; }
+
+/* ---------- highlight box and divider ---------- */
+.ky-article .ky-box {
+  clear: both; margin: 1.7em 0; padding: 1.05em 1.3em; border-radius: 14px;
+  background: #fdf1d6; border: 1px solid rgba(244, 183, 64, .55); border-left: 6px solid var(--ky-gold);
+}
+.ky-article .ky-box.ky-box-green { background: #eef1e2; border-color: rgba(126, 140, 78, .45); border-left-color: var(--ky-green-2); }
+.ky-article .ky-box.ky-box-sun { background: #fde9d7; border-color: rgba(232, 115, 28, .35); border-left-color: var(--ky-sun); }
+.ky-article .ky-box > :first-child { margin-top: 0; }
+.ky-article .ky-box > :last-child { margin-bottom: 0; }
+.ky-article .ky-box p { margin-bottom: .55em; }
+.ky-article .ky-box h2 { font-size: 1.4em; margin: .8em 0 .35em; }
+.ky-article .ky-box h3 { font-size: 1.2em; margin: .8em 0 .3em; }
+
+.ky-article hr {
+  clear: both; border: 0; height: 3px; width: min(220px, 55%); margin: 2.2em auto; border-radius: 3px; opacity: 1;
+  background: linear-gradient(90deg, rgba(244, 183, 64, 0), var(--ky-gold) 22%, var(--ky-sun) 50%, var(--ky-gold) 78%, rgba(244, 183, 64, 0));
+}
+
+/* ---------- phones ---------- */
+@media (max-width: 600px) {
+  .ky-article h2 { font-size: 1.55em; }
+  .ky-article blockquote { font-size: 1.18em; }
+  .ky-article .ky-fig, .ky-article .ky-fig.ky-w-sm, .ky-article .ky-fig.ky-w-md,
+  .ky-article .ky-fig.ky-p-l, .ky-article .ky-fig.ky-p-r,
+  .ky-article .ky-fig.ky-p-l.ky-w-sm, .ky-article .ky-fig.ky-p-r.ky-w-sm { float: none; width: 100%; margin: 1.4em 0; }
+  .ky-article .ky-pair { grid-template-columns: 1fr; gap: 1.2em; }
+  .ky-article .ky-pair .ky-fig { margin: 0; }
+  .ky-article .ky-pair .ky-fig img { aspect-ratio: auto; }
+  .ky-article .ky-box { padding: .95em 1.05em; }
+}
+@media print {
+  .ky-article a.ky-btn { box-shadow: none; }
+  .ky-article .ky-fig, .ky-article .ky-box { break-inside: avoid; }
+}

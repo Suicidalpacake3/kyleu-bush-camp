@@ -27,7 +27,7 @@
 
 ## Highlights
 > Shown in the "at a glance" strip on the home page.
-- Guest rating: 4.8
+- Guest rating: 4.9
 - Distance from Pretoria: 50 km
 - Reserve size: 21 000 ha
 

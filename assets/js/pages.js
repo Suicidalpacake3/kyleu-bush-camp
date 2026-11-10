@@ -10,8 +10,8 @@
 
   function fmtDate(iso) { if (!iso) return ''; var d = new Date(iso + 'T12:00:00'); return d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' }); }
   function postCard(p, feature) {
-    return '<a class="post-card' + (feature ? ' post-feature' : '') + '" href="news.html?post=' + p.slug + '" data-reveal>' +
-      '<div class="img">' + (p.image ? '<img src="' + p.image + '" alt="" loading="lazy">' : '') + '</div>' +
+    return '<a class="post-card' + (feature ? ' post-feature' : '') + (p.image ? '' : ' no-img') + '" href="news.html?post=' + p.slug + '" data-reveal>' +
+      (p.image ? '<div class="img"><img src="' + p.image + '" alt="" loading="lazy"></div>' : '') +   // no photo: no empty frame
       '<div class="body"><div class="post-meta"><span>' + fmtDate(p.date) + '</span>' + (p.tags.length ? '<span>· ' + K.esc(p.tags.slice(0, 2).join(', ')) + '</span>' : '') + '</div>' +
       '<h3>' + K.esc(p.title) + '</h3><p>' + K.esc(p.summary) + '</p><span class="link-arrow">Read more</span></div></a>';
   }
@@ -28,6 +28,21 @@
         }).join('') + '</dl></article>';
       }).join('');
       var wrap = t.closest('.table-scroll') || t; wrap.parentNode.insertBefore(box, wrap.nextSibling); wrap.classList.add('compare-wide');
+    });
+
+    /* ---------- home page: front page news (only there while staff have marked a story for it) ---------- */
+    $$('[data-front-news]').forEach(function (sec) {
+      if (!K.frontNews) return;
+      K.frontNews().then(function (list) {
+        if (!list.length) return;
+        var esc = K.esc, f = list[0], rest = list.slice(1, 3), att = function (x) { return x.ext ? ' target="_blank" rel="noopener"' : ''; };
+        $('[data-front-list]', sec).innerHTML =
+          '<a class="fp-card' + (f.image ? '' : ' no-img') + '" href="' + esc(f.href) + '"' + att(f) + ' data-reveal>' +
+            (f.image ? '<span class="fp-img"><img src="' + esc(f.image) + '" alt=""></span>' : '') +
+            '<span class="fp-body"><span class="fp-flag"><svg aria-hidden="true"><use href="#i-news"/></svg>Front page news</span><span class="fp-meta">' + esc(f.kind) + (f.date ? ' · ' + fmtDate(f.date) : '') + '</span><strong class="fp-title">' + esc(f.title) + '</strong>' + (f.summary ? '<span class="fp-sum">' + esc(f.summary) + '</span>' : '') + '<span class="btn">Read the full story <svg aria-hidden="true"><use href="#i-arrow"/></svg></span></span></a>' +
+          (rest.length ? '<div class="fp-more">' + rest.map(function (x) { return '<a class="fp-mini" href="' + esc(x.href) + '"' + att(x) + ' data-reveal>' + (x.image ? '<img src="' + esc(x.image) + '" alt="" loading="lazy">' : '') + '<span><small>' + esc(x.kind) + (x.date ? ' · ' + fmtDate(x.date) : '') + '</small><b>' + esc(x.title) + '</b></span></a>'; }).join('') + '</div>' : '');
+        sec.hidden = false; K.reveal(sec);
+      }).catch(function () {});
     });
 
     /* ---------- latest posts (Experience Kyleu): the section only shows when there is news ---------- */
@@ -48,13 +63,14 @@
       var fdate = function (d) { return d ? new Date(d + 'T12:00:00').toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' }) : ''; };
       var btns = function (it, big) {
         var b = [];
-        if (it.link) b.push('<a class="btn' + (big ? '' : ' btn-sm') + '" href="' + esc(it.link) + '" target="_blank" rel="noopener">' + esc(it.button || 'Open') + ' <svg><use href="#i-arrow"/></svg></a>');
+        if (it.article) b.push('<a class="btn' + (big ? '' : ' btn-sm') + '" href="news.html?dgr=' + encodeURIComponent(it.slug || it.id) + '">Read the story <svg><use href="#i-arrow"/></svg></a>');
+        if (it.link) b.push('<a class="btn' + (it.article ? ' btn-ghost' : '') + (big ? '' : ' btn-sm') + '" href="' + esc(it.link) + '" target="_blank" rel="noopener">' + esc(it.button || 'Open') + ' <svg><use href="#i-arrow"/></svg></a>');
         if (it.file) b.push('<a class="btn' + (it.link ? ' btn-ghost' : '') + (big ? '' : ' btn-sm') + '" href="' + esc(it.file) + '" target="_blank" rel="noopener"><svg><use href="#i-doc"/></svg>' + (it.link ? 'Poster (PDF)' : isMap(it) ? 'Open the map' : 'Read it') + (it.size ? ' <small>' + esc(it.size) + '</small>' : '') + '</a>');
         if (it.file && big) b.push('<a class="dgr-dl" href="' + esc(it.file) + '" download>Download</a>');
         return b.join('');
       };
-      var openUrl = function (it) { return it.link || it.file || '#'; };
-      var cover = function (it, cls) { return it.image ? '<a class="' + cls + '" href="' + esc(openUrl(it)) + '" target="_blank" rel="noopener" tabindex="-1" aria-hidden="true"><img src="' + esc(it.image) + '" alt="" loading="lazy"></a>' : '<span class="' + cls + ' none"><svg><use href="#i-news"/></svg></span>'; };
+      var openUrl = function (it) { return it.article ? 'news.html?dgr=' + encodeURIComponent(it.slug || it.id) : it.link || it.file || '#'; };
+      var cover = function (it, cls) { return it.image ? '<a class="' + cls + '" href="' + esc(openUrl(it)) + '"' + (it.article ? '' : ' target="_blank" rel="noopener"') + ' tabindex="-1" aria-hidden="true"><img src="' + esc(it.image) + '" alt="" loading="lazy"></a>' : '<span class="' + cls + ' none"><svg><use href="#i-news"/></svg></span>'; };
       var label = function (it) { return '<span class="dgr-lab">' + esc(it.type) + (it.date && !isMap(it) ? ' · ' + fdate(it.date) : '') + '</span>'; };
       var para = function (t) { return esc(t || '').split(/\n\s*\n/).map(function (x) { return '<p>' + x.trim().replace(/\n/g, '<br>') + '</p>'; }).join(''); };
       K.dgrUpdates().then(function (all) {
@@ -87,7 +103,10 @@
         var posts = so.posts ? so.posts.filter(function (x) { return x.show; }) : (S.list ? S.list('Guest stories') : []).filter(function (it) { return /^https?:/.test(it.value); }).map(function (it) { var pp = it.value.split(' · '); return { url: pp[0].trim(), title: it.label, by: (pp[1] || '').trim() }; });
         var igFeed = so.posts ? so.igFeed : S.get('Instagram feed ID', ''), igN = +(so.igCount || S.get('Instagram photos', 6)) || 6;
         var fbUrl = S.get('Facebook', ''), fbOn = so.posts ? so.fbFeed !== false : !/^off|no/i.test(S.get('Facebook feed', 'on'));
+        var ytId = function (u) { var m = String(u).match(/(?:youtu\.be\/|[?&]v=|\/(?:embed|shorts|live)\/)([\w-]{11})/); return /youtu/i.test(u) && m ? m[1] : ''; };
         var post = function (x) {
+          var yt = ytId(x.url);
+          if (yt) return '<figure class="soc-embed yt" data-reveal><button type="button" class="yt-lite" data-yt="' + yt + '" style="background-image:url(\'https://i.ytimg.com/vi/' + yt + '/hqdefault.jpg\')" aria-label="Play the video: ' + esc(x.title || 'YouTube video') + '"><span class="yt-play" aria-hidden="true"></span></button><figcaption>' + esc(x.title) + (x.by ? ' · ' + esc(x.by) : '') + '</figcaption></figure>';
           var u = x.url, ig = u.match(/instagram\.com\/(?:[\w.]+\/)?(p|reel|tv)\/([\w-]+)/i), host = u.replace(/^https?:\/\/(www\.)?/, '').split('/')[0];
           if (ig) return '<figure class="soc-embed ig" data-reveal><iframe data-url="' + esc(u) + '" src="https://www.instagram.com/' + ig[1] + '/' + ig[2] + '/embed/captioned/" title="' + esc(x.title || 'Instagram post') + '" loading="lazy" allowtransparency="true" scrolling="no"></iframe><figcaption>' + esc(x.title) + (x.by ? ' · ' + esc(x.by) : '') + '</figcaption></figure>';
           if (/facebook\.com\/.+\/(posts|videos|photos)|facebook\.com\/(permalink|photo|watch)|fb\.watch/i.test(u)) return '<figure class="soc-embed fb" data-reveal><iframe data-url="' + esc(u) + '" src="https://www.facebook.com/plugins/post.php?href=' + encodeURIComponent(u) + '&show_text=true&width=500" title="' + esc(x.title || 'Facebook post') + '" loading="lazy" scrolling="no" allow="encrypted-media"></iframe><figcaption>' + esc(x.title) + (x.by ? ' · ' + esc(x.by) : '') + '</figcaption></figure>';
@@ -96,12 +115,13 @@
         };
         var live = (igFeed ? '<div class="soc-live-ig"><h3><svg><use href="#i-ig"/></svg>Latest on Instagram</h3><div class="ig-grid" data-ig-grid><p class="muted">Loading photos…</p></div></div>' : '') +
           (fbOn && fbUrl ? '<div class="soc-live-fb"><h3><svg><use href="#i-fb"/></svg>On Facebook</h3><a class="fb-card" href="' + esc(fbUrl) + '" target="_blank" rel="noopener"><span class="fb-ic"><svg><use href="#i-fb"/></svg></span><span class="fb-txt"><b>Kyleu Bush Camp</b><small>Camp news, sightings and photos from our guests</small></span><span class="btn btn-sm">See our page</span></a></div>' : '');
-        var embeds = posts.filter(function (x) { return /instagram\.com\/(?:[\w.]+\/)?(p|reel|tv)\/|facebook\.com\/.+\/(posts|videos|photos)|facebook\.com\/(permalink|photo|watch)|fb\.watch/i.test(x.url); }), links = posts.filter(function (x) { return embeds.indexOf(x) < 0; });
+        var embeds = posts.filter(function (x) { return ytId(x.url) || /instagram\.com\/(?:[\w.]+\/)?(p|reel|tv)\/|facebook\.com\/.+\/(posts|videos|photos)|facebook\.com\/(permalink|photo|watch)|fb\.watch/i.test(x.url); }), links = posts.filter(function (x) { return embeds.indexOf(x) < 0; });
         el.innerHTML = (live ? '<div class="soc-live' + (igFeed && fbOn && fbUrl ? ' two' : '') + '">' + live + '</div>' : '') +
           (embeds.length ? '<div class="soc-embeds">' + embeds.map(post).join('') + '</div>' : '') +
           (links.length ? '<div class="stories">' + links.map(post).join('') + '</div>' : '') ||
           '<p class="muted">Guest stories will appear here.</p>';
         el.classList.remove('stories');
+        el.addEventListener('click', function (e) { var b = e.target.closest('[data-yt]'); if (!b) return; var fr = document.createElement('div'); fr.className = 'yt-frame'; fr.innerHTML = '<iframe src="https://www.youtube-nocookie.com/embed/' + b.dataset.yt + '?autoplay=1&rel=0" title="' + esc(b.getAttribute('aria-label') || 'YouTube video') + '" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>'; b.replaceWith(fr); });
         $$('.soc-embed iframe', el).forEach(function (fr) {
           var done = false; fr.addEventListener('load', function () { done = true; });
           setTimeout(function () { if (done) return; var fig = fr.closest('.soc-embed'), u = fr.getAttribute('data-url') || ''; if (fig) fig.outerHTML = '<a class="gstory" href="' + esc(u) + '" target="_blank" rel="noopener"><span class="story-ic ' + (/instagram/.test(u) ? 'ig' : 'fb') + '"><svg><use href="#' + (/instagram/.test(u) ? 'i-ig' : 'i-fb') + '"/></svg></span><span><b>' + esc(fr.title || 'See the post') + '</b><small>Open the post</small></span><span class="link-arrow">Open</span></a>'; }, 15000);
@@ -192,7 +212,7 @@
           return '<article class="rate-card ' + (dk ? 'dark' : (/self/i.test(s.title) ? 'green' : '')) + (wide ? ' rates-full' : '') + '" data-reveal>' +
             '<header><h3>' + K.esc(s.title) + '</h3>' + (dk ? '<p>Paid to Dinokeng Game Reserve at the gate or online, not part of your Kyleu booking.</p>' : '') + '</header>' +
             '<ul class="rate-list"' + (wide && mode !== 'dinokeng' ? ' style="columns:2;column-gap:40px"' : '') + '>' + s.items.map(function (it) {
-              return '<li style="break-inside:avoid"><span class="lbl"><b>' + K.esc(it.label) + '</b>' + (it.note ? '<small>' + K.esc(it.note) + '</small>' : '') + '</span><span class="amt">' + (isNaN(it.amount) ? '' : (it.amount === 0 ? 'Free' : dk ? K.money(it.amount) : K.dual(it.amount, P))) + '</span></li>';
+              return '<li style="break-inside:avoid"><span class="lbl"><b>' + K.esc(it.name || it.label) + '</b>' + (it.note ? '<small>' + K.esc(it.note) + '</small>' : '') + '</span><span class="amt">' + (isNaN(it.amount) ? '' : (it.amount === 0 ? 'Free' : dk ? K.money(it.amount) : K.dual(it.amount, P))) + '</span></li>';
             }).join('') + '</ul></article>';
         }).join('');
         box.innerHTML = html; K.reveal(box);
@@ -219,18 +239,27 @@
     var newsList = $('[data-news]');
     if (newsList) {
       var art = $('[data-article]'), filt = $('.tag-filter'), listWrap = $('[data-news-wrap]');
-      K.blog().then(function (posts) {
-        var q = new URLSearchParams(location.search).get('post');
+      var dq = new URLSearchParams(location.search).get('dgr');
+      (dq && K.dgrUpdates ? K.dgrUpdates().catch(function () { return []; }) : Promise.resolve([])).then(function (dgr) { return K.blog().then(function (posts) { return [posts, dgr]; }); }).then(function (rr) {
+        var posts = rr[0], q = new URLSearchParams(location.search).get('post');
         var post = q && posts.filter(function (p) { return p.slug === q; })[0];
+        // a story from the reserve, written in the admin: the same article page as camp news
+        var dit = dq && rr[1].filter(function (it) { return (it.slug || it.id) === dq && it.article && !it.hidden; })[0];
+        if (dit) { post = { title: dit.title, slug: dq, date: dit.date, image: dit.image, summary: (dit.text || '').split(/\n\s*\n/)[0], tags: [dit.type || 'Dinokeng news'], body: dit.article, html: true, dgr: dit }; }
         if (post) {
           listWrap.hidden = true; art.hidden = false;
           document.title = post.title + ' | Kyleu Bush Camp';
           $('[data-a-title]').textContent = post.title;
           $('[data-a-meta]').textContent = fmtDate(post.date) + (post.tags.length ? ' · ' + post.tags.join(', ') : '');
+          if (post.dgr) { var cl = $('.crumbs a[href="news.html"]'); if (cl) { cl.textContent = 'Dinokeng'; cl.href = 'dinokeng.html#reserve-news'; } var back = art.querySelector('.link-arrow[href="news.html"]'); if (back) { back.textContent = 'All news from the reserve'; back.href = 'dinokeng.html#reserve-news'; } }
           var crumb = $('[data-a-crumb]'); if (crumb) { crumb.textContent = post.title; var sep = $('[data-a-crumb-sep]'); if (sep) sep.hidden = false; }
           $('[data-a-lead]').textContent = post.summary;
-          art.querySelector('.cover').innerHTML = post.image ? '<img src="' + post.image + '" alt="">' : '';
-          art.querySelector('.prose').innerHTML = post.html ? post.body : K.markdown(post.body);
+          var cov = art.querySelector('.cover'); cov.innerHTML = post.image ? '<img src="' + post.image + '" alt="">' : ''; cov.hidden = !post.image;   // no photo: no empty frame
+          var prose = art.querySelector('.prose, .ky-article');
+          // written with the admin's writing tool: cleaned first, then its photos are fetched
+          if (post.html && K.articleClean) { prose.className = 'ky-article'; prose.innerHTML = K.articleClean(post.body); if (K.articleShow) K.articleShow(prose); }
+          else prose.innerHTML = post.html ? post.body : K.markdown(post.body);
+          if (post.dgr) { var acts = []; if (post.dgr.link) acts.push('<a class="btn btn-sm" href="' + K.esc(post.dgr.link) + '" target="_blank" rel="noopener">' + K.esc(post.dgr.button || 'Open the link') + '</a>'); if (post.dgr.file) acts.push('<a class="btn btn-sm btn-ghost" href="' + K.esc(post.dgr.file) + '" target="_blank" rel="noopener">Open the PDF' + (post.dgr.size ? ' (' + K.esc(post.dgr.size) + ')' : '') + '</a>'); if (acts.length) prose.insertAdjacentHTML('beforeend', '<p class="dgr-article-acts">' + acts.join(' ') + '</p>'); prose.insertAdjacentHTML('beforeend', '<p class="dgr-credit">News from Dinokeng Game Reserve, shared by Kyleu, a proud DGR CP member.</p>'); }
           var more = posts.filter(function (p) { return p !== post; }).slice(0, 3);
           $('[data-more]').innerHTML = more.map(function (p) { return postCard(p); }).join('');
           K.reveal(art);
