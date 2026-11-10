@@ -1223,3 +1223,9 @@ body.header-hidden .searchbar-wrap, body.header-hidden .subnav { top: 0; }
 .post-card.no-img { border-top: 5px solid var(--sun, #e8731c); }
 
 .post-feature.no-img { grid-template-columns: 1fr; }
+a.yt-lite { text-decoration: none; }
+.yt-out { position: absolute; left: 10px; bottom: 10px; background: rgba(20, 12, 6, .82); color: #fff; font-size: .78rem; font-weight: 800; padding: 5px 10px; border-radius: 999px; }
+/* videos get a little more room than photo posts */
+.soc-embeds:has(.soc-embed.yt) { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+.soc-embed.yt figcaption { padding: 10px 14px; font-size: .92rem; font-weight: 700; color: var(--bark, #2a1b12); }
+

@@ -1326,7 +1326,7 @@
       DB.social = { instagram: '', facebook: '', tiktok: '', hashtag: '#KyleuBushCamp', igFeed: '', igCount: 6, fbFeed: true, posts: [] };
       if (K.settings) K.settings().then(function (S) {   // start from content/settings.md
         var so = DB.social; so.instagram = S.get('Instagram', ''); so.facebook = S.get('Facebook', ''); so.tiktok = S.get('TikTok', ''); so.hashtag = S.get('Hashtag', so.hashtag);
-        so.posts = (S.list('Guest stories') || []).filter(function (it) { return /^https?:/.test(it.value); }).map(function (it) { var pp = it.value.split(' · '); return { id: uid('sp'), url: pp[0].trim(), title: it.label, by: (pp[1] || '').trim(), show: true }; });
+        so.posts = (S.list('Guest stories') || []).filter(function (it) { return /^https?:/.test(it.value); }).map(function (it) { var pp = it.value.split(' · '); return { id: uid('sp'), url: pp[0].trim(), title: it.label, by: (pp[1] || '').trim(), out: /youtube|opens/i.test(pp[2] || ''), show: true }; });
         socSave(); if (route() === 'social') render();
       }).catch(function () {});
     }
@@ -1366,11 +1366,12 @@
     var so = socDB(), x = id ? so.posts.filter(function (p) { return p.id === id; })[0] : null, d = x || { url: '', title: '', by: '' };
     modal(x ? 'Edit post' : 'Add a post', '<label class="fld"><span>Link to the post</span><input name="url" value="' + esc(d.url) + '" placeholder="https://www.instagram.com/p/..." autocomplete="off"></label>' +
       '<div class="grid2"><label class="fld"><span>Title</span><input name="title" value="' + esc(d.title) + '" placeholder="e.g. Sunrise from Stand 4"></label><label class="fld"><span>By (optional)</span><input name="by" value="' + esc(d.by) + '" placeholder="e.g. @campwiththeventers"></label></div>' +
-      '<p class="hint">' + ic('info') + ' Instagram and Facebook posts show as the post itself; anything else shows as a link card. The post must be public, and it is polite to ask the guest first.</p>',
+      '<label class="check"><input type="checkbox" name="out"' + (d.out ? ' checked' : '') + '><span>YouTube only: this video will not play on other websites, so open it on YouTube instead</span></label>' +
+      '<p class="hint">' + ic('info') + ' Instagram and Facebook posts show as the post itself, YouTube videos play right on the page, and anything else shows as a link card. If a YouTube video shows "Video unavailable" on the website, its owner has switched off playing on other websites: tick the box above. The post must be public, and it is polite to ask the guest first.</p>',
       x ? 'Save' : 'Add post', function (f) {
         var url = fval(f, 'url');
         if (!/^https?:\/\/\S+\.\S+/.test(url)) { toast('Paste the full link, starting with https://'); return false; }
-        var row = { url: url, title: fval(f, 'title') || SOC_KIND[socKind(url)], by: fval(f, 'by') };
+        var row = { url: url, title: fval(f, 'title') || SOC_KIND[socKind(url)], by: fval(f, 'by'), out: !!fval(f, 'out') && socKind(url) === 'yt' };
         if (x) Object.assign(x, row); else so.posts.unshift(Object.assign({ id: uid('sp'), show: true }, row));
         log((x ? 'Updated' : 'Added') + ' social post: ' + row.title); socSave(); render(); toast(x ? 'Post saved' : 'Post added. It shows on the website now.');
       });
@@ -3260,7 +3261,7 @@
       socSave(); render(); return;
     }
     if (act === 'soc-md') {
-      var sm = socDB(), md = '## Links\n- Facebook: ' + sm.facebook + '\n- Instagram: ' + sm.instagram + '\n- TikTok: ' + sm.tiktok + '\n- Hashtag: ' + sm.hashtag + '\n- Instagram feed ID: ' + sm.igFeed + '\n- Instagram photos: ' + sm.igCount + '\n- Facebook feed: ' + (sm.fbFeed ? 'on' : 'off') + '\n\n## Guest stories\n' + sm.posts.filter(function (x) { return x.show; }).map(function (x) { return '- ' + x.title + ': ' + x.url + (x.by ? ' · ' + x.by : ''); }).join('\n');
+      var sm = socDB(), md = '## Links\n- Facebook: ' + sm.facebook + '\n- Instagram: ' + sm.instagram + '\n- TikTok: ' + sm.tiktok + '\n- Hashtag: ' + sm.hashtag + '\n- Instagram feed ID: ' + sm.igFeed + '\n- Instagram photos: ' + sm.igCount + '\n- Facebook feed: ' + (sm.fbFeed ? 'on' : 'off') + '\n\n## Guest stories\n' + sm.posts.filter(function (x) { return x.show; }).map(function (x) { return '- ' + String(x.title).replace(/:/g, ',') + ': ' + x.url + (x.by || x.out ? ' · ' + (x.by || 'YouTube') : '') + (x.out ? ' · opens on YouTube' : ''); }).join('\n');
       modal('Text for content/settings.md', '<p class="muted small">Replace these two parts of content/settings.md with this text to publish the social media settings for every visitor.</p><textarea rows="14" readonly style="width:100%;font-family:monospace;font-size:.82rem">' + esc(md) + '</textarea>', null, null, { wide: true });
       return;
     }

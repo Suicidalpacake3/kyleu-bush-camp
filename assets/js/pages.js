@@ -100,12 +100,14 @@
     $$('[data-guest-stories]').forEach(function (el) {
       K.settings().then(function (S) {
         var so = K.social() || {}, esc = K.esc;
-        var posts = so.posts ? so.posts.filter(function (x) { return x.show; }) : (S.list ? S.list('Guest stories') : []).filter(function (it) { return /^https?:/.test(it.value); }).map(function (it) { var pp = it.value.split(' · '); return { url: pp[0].trim(), title: it.label, by: (pp[1] || '').trim() }; });
+        var posts = so.posts ? so.posts.filter(function (x) { return x.show; }) : (S.list ? S.list('Guest stories') : []).filter(function (it) { return /^https?:/.test(it.value); }).map(function (it) { var pp = it.value.split(' · '); return { url: pp[0].trim(), title: it.label, by: (pp[1] || '').trim(), out: /youtube|opens/i.test(pp[2] || '') }; });
         var igFeed = so.posts ? so.igFeed : S.get('Instagram feed ID', ''), igN = +(so.igCount || S.get('Instagram photos', 6)) || 6;
         var fbUrl = S.get('Facebook', ''), fbOn = so.posts ? so.fbFeed !== false : !/^off|no/i.test(S.get('Facebook feed', 'on'));
         var ytId = function (u) { var m = String(u).match(/(?:youtu\.be\/|[?&]v=|\/(?:embed|shorts|live)\/)([\w-]{11})/); return /youtu/i.test(u) && m ? m[1] : ''; };
         var post = function (x) {
           var yt = ytId(x.url);
+          // the owner switched off playing on other websites: the picture opens the video on YouTube instead
+          if (yt && x.out) return '<figure class="soc-embed yt" data-reveal><a class="yt-lite" href="' + esc(x.url) + '" target="_blank" rel="noopener" style="background-image:url(\'https://i.ytimg.com/vi/' + yt + '/hqdefault.jpg\')" aria-label="Watch on YouTube: ' + esc(x.title || 'YouTube video') + '"><span class="yt-play" aria-hidden="true"></span><span class="yt-out">Watch on YouTube</span></a><figcaption>' + esc(x.title) + (x.by ? ' · ' + esc(x.by) : '') + '</figcaption></figure>';
           if (yt) return '<figure class="soc-embed yt" data-reveal><button type="button" class="yt-lite" data-yt="' + yt + '" style="background-image:url(\'https://i.ytimg.com/vi/' + yt + '/hqdefault.jpg\')" aria-label="Play the video: ' + esc(x.title || 'YouTube video') + '"><span class="yt-play" aria-hidden="true"></span></button><figcaption>' + esc(x.title) + (x.by ? ' · ' + esc(x.by) : '') + '</figcaption></figure>';
           var u = x.url, ig = u.match(/instagram\.com\/(?:[\w.]+\/)?(p|reel|tv)\/([\w-]+)/i), host = u.replace(/^https?:\/\/(www\.)?/, '').split('/')[0];
           if (ig) return '<figure class="soc-embed ig" data-reveal><iframe data-url="' + esc(u) + '" src="https://www.instagram.com/' + ig[1] + '/' + ig[2] + '/embed/captioned/" title="' + esc(x.title || 'Instagram post') + '" loading="lazy" allowtransparency="true" scrolling="no"></iframe><figcaption>' + esc(x.title) + (x.by ? ' · ' + esc(x.by) : '') + '</figcaption></figure>';
