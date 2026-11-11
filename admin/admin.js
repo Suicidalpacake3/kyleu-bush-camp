@@ -465,9 +465,9 @@
     { id: 'leuan', name: 'Leuan', role: 'Front desk', email: 'leuan@kyleu.co.za' }
   ];
   var ROLES = {
-    Owner: ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'rates', 'settings', 'news', 'dgrnews', 'social', 'webtext'],
-    Manager: ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'news', 'dgrnews', 'social', 'webtext'],
-    'Front desk': ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'shop', 'drives', 'news', 'dgrnews', 'social']
+    Owner: ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'indemnities', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'rates', 'settings', 'news', 'dgrnews', 'social', 'webtext'],
+    Manager: ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'indemnities', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'news', 'dgrnews', 'social', 'webtext'],
+    'Front desk': ['dashboard', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'indemnities', 'shop', 'drives', 'news', 'dgrnews', 'social']
   };
   var NAV = [
     { id: 'dashboard', t: 'Dashboard', i: 'home', g: '' },
@@ -476,6 +476,7 @@
     { id: 'enquiries', t: 'Inbox', i: 'mail', g: 'Front desk' },
     { id: 'clients', t: 'Clients', i: 'users', g: 'Front desk' },
     { id: 'vouchers', t: 'Dinokeng vouchers', i: 'gift', g: 'Front desk' },
+    { id: 'indemnities', t: 'Indemnities', i: 'shield', g: 'Front desk' },
     { id: 'eft', t: 'EFT payments', i: 'bank', g: 'Money' },
     { id: 'payments', t: 'Payments', i: 'card', g: 'Money' },
     { id: 'reports', t: 'Reports', i: 'chart', g: 'Money' },
@@ -569,7 +570,7 @@
       : b.status !== 'pending' ? '' : b.softHold ? '<b>Soft hold until ' + (b.softHold === TODAY ? 'tonight' : fd(b.softHold)) + '.</b> Confirm the payment, or the stand is released automatically.'
       : 'Quotation valid until <b>' + fd(depositDue(b), { weekday: 'short', day: 'numeric', month: 'short' }) + '</b> (' + rel(depositDue(b)) + '). ' + (payFullOf(b) ? 'The full amount' : 'A deposit of') + ' <b>' + money(deposit(b)) + '</b> secures the stand.';
     var nCars = cs0.length, nNotes = (b.notes || []).length + DB.threads.filter(function (t) { return t.ref === b.ref || t.email === b.guest.email; }).length;
-    var TABS = [['overview', 'Overview'], ['vehicles', 'Vehicles' + (nCars ? ' (' + nCars + ')' : '')], ['money', 'Money'], ['notes', 'Messages & notes' + (nNotes ? ' (' + nNotes + ')' : '')]];
+    var TABS = [['overview', 'Overview'], ['vehicles', 'Vehicles & indemnity'], ['money', 'Money'], ['notes', 'Messages & notes' + (nNotes ? ' (' + nNotes + ')' : '')]];
     if (cancelled && PTAB === 'vehicles') PTAB = 'overview';
     var head = '<div class="dh-bar"><span class="dh-ref"><span class="muted">Booking</span> <b>' + esc(b.ref) + '</b><button type="button" class="icon-btn sm" data-copy="' + esc(b.ref) + '" aria-label="Copy the booking reference" title="Copy reference">' + ic('note') + '</button></span>' +
         '<span class="dh-pills">' + pill(s) + (b.pop && b.status === 'pending' ? ' <span class="pill info">' + ic('note') + 'Proof in</span>' : '') + '</span><button class="icon-btn" data-dclose aria-label="Close">' + ic('x') + '</button></div>' +
@@ -603,11 +604,12 @@
         '<dt>Guests</dt><dd>' + people + (b.kids ? ' <span class="muted">(children under 12)</span>' : '') + '</dd>' +
         '<dt>Vehicles</dt><dd>' + (b.vehTbc ? '<span class="warn-t">Not sure yet</span>' : b.vehicles + ' vehicle' + (b.vehicles > 1 ? 's' : '')) + (b.setup ? ' · ' + esc(b.setup) : '') + '</dd>' +
         '<dt>Arrival time</dt><dd>' + (b.eta ? 'Around ' + esc(b.eta) : '<span class="muted">Not given yet</span>') + '</dd>' +
+        (live(b) ? '<dt>Indemnity</dt><dd>' + indPill(b) + ' <button type="button" class="link-btn" data-ptab="vehicles">See' + ic('chev-r') + '</button></dd>' : '') +
         '<dt>Booked</dt><dd>' + fd(b.created.slice(0, 10), { day: 'numeric', month: 'short', year: 'numeric' }) + ' via ' + esc(b.source) + '</dd></dl></section>' +
         linkSec(b) +
         ((b.notes || []).length ? '<section class="d-sec"><h4 class="h4-row">Latest note<button type="button" class="link-btn" data-ptab="notes">All notes' + ic('chev-r') + '</button></h4>' + noteItem(b, b.notes.length - 1, b.notes[b.notes.length - 1]) + '</section>' : '');
     } else if (PTAB === 'vehicles') {
-      body = carsHTML(b) + dgrHTML(b);
+      body = carsHTML(b) + indHTML(b) + dgrHTML(b);
     } else if (PTAB === 'money') {
       var sd0 = b.method === 'card' ? null : stayDetail(b), qs = q.lines.slice();
       if (sd0 && Math.round(sd0.reduce(function (a, x) { return a + x.amt; }, 0)) === Math.round(q.lines[0].e)) qs = sd0.map(function (x) { return { t: x.t, e: x.amt, c: x.amt, free: x.free }; }).concat(q.lines.slice(1));
@@ -700,21 +702,21 @@
   var TEMPLATES = {
     eft: { t: 'EFT deposit reminder', s: 'Your Kyleu booking: deposit reminder', b: function (b) { return 'Hi {first},\n\nThank you for booking {stand} from {ci} to {co}. To secure your stand please pay the deposit of {deposit} using reference {ref}. Your quotation is valid for {qdays}; after that the stand is released.\n\nBank: {bank}\n\nUpload your proof of payment at www.kyleu.co.za/pop.html, or reply to this email with it attached.\n\nSee you in the bush!\nThe Kyleu team'; } },
     balance: { t: 'Balance reminder', s: 'Your Kyleu stay is coming up', b: function (b) { return 'Hi {first},\n\nYour stay at {stand} starts on {ci}. The balance of {balance} is due by {baldue}. Pay by EFT with reference {ref}, or reply and we will send a card payment link.\n\nThe Kyleu team'; } },
-    arrival: { t: 'Pre-arrival information', s: 'Getting to Kyleu Bush Camp', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}.\n\nDirections: enter Dinokeng at Tau Gate, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km.\n\nKyleu is a proud DGR CP member, so we send you a Conservation Fee Discount Voucher code for each vehicle. Enter it when you buy your conservation fees at https://dinokeng.plnktn.io to pay R85 instead of R100 per adult per night. To use the self-drive route, each vehicle also needs a Self Drive Permit (R250 once off).\n\nEvery adult signs an indemnity form when you arrive. Let us know roughly when you will arrive and we will have your stand ready. Gate questions: 060 458 4478.\n\nThe Kyleu team'; } },
+    arrival: { t: 'Pre-arrival information', s: 'Getting to Kyleu Bush Camp', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}.\n\nDirections: enter Dinokeng at Tau Gate, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km.\n\nKyleu is a proud DGR CP member, so we send you a Conservation Fee Discount Voucher code for each vehicle. Enter it when you buy your conservation fees at https://dinokeng.plnktn.io to pay R85 instead of R100 per adult per night. To use the self-drive route, each vehicle also needs a Self Drive Permit (R250 once off).\n\nEveryone in your group signs our indemnity online before arriving (each adult for themselves, a parent or guardian for anyone under 18). If not everyone has signed yet, here is the link: {signlink}\n\nLet us know roughly when you will arrive and we will have your stand ready. Gate questions: 060 458 4478.\n\nThe Kyleu team'; } },
     thanks: { t: 'Thank you & review', s: 'Thanks for staying at Kyleu', b: function (b) { return 'Hi {first},\n\nThank you for camping with us at {stand}. We hope you loved the bush! If you have a minute, a Google review helps our small family camp a lot.\n\nThe Kyleu team'; } },
     invoice: { t: 'Quotation or invoice', s: 'Your Kyleu reservation {ref} ({doc})', b: function (b) { return b && b.payments && paid(b) > 0 ? 'Hi {first},\n\nPlease find your invoice for {stand}, {ci} to {co}, attached.\n\nTotal {total}, paid so far {paid}, balance {balance}. Pay by EFT using reference {ref}.\n\nThe Kyleu team'
       : 'Hi {first},\n\nThank you for booking {stand}, {ci} to {co}. Please find your quotation attached, with our bank details and your booking reference {ref}.\n\nThis quotation is valid for {qdays}. After that the stand is released. To secure your stand, please pay {deposit} using reference {ref}.\n\nOnce payment has been made, upload your proof of payment directly to your booking:\n{link}\n\nThe Kyleu team'; } },
-    indemnity: { t: 'Indemnity form', s: 'Kyleu indemnity form for {ref}', b: function (b) { return 'Hi {first},\n\nPlease find the Kyleu indemnity form attached, one page per vehicle. Every adult signs it when you arrive. You are welcome to print it and fill it in before you come, which makes check-in quicker.\n\nSee you on {ci}!\nThe Kyleu team'; } },
+    indemnity: { t: 'Sign the indemnity (link)', s: 'Please sign the Kyleu indemnity for {ref}', b: function (b) { return 'Hi {first},\n\nKyleu is inside the Dinokeng Big 5 Game Reserve, so everyone in your group signs our indemnity before arriving: each adult for themselves, and a parent or guardian for anyone under 18. It takes about a minute per person:\n{signlink}\n\nYou can sign for everyone who is with you on one phone, or forward the link so each person signs on their own phone. Everyone gets a copy of what they signed.\n\nSee you on {ci}!\nThe Kyleu team'; } },
     update: { t: 'Booking updated', s: 'Your Kyleu booking {ref} has been updated', b: function (b) { return 'Hi {first},\n\nWe have updated your booking {ref}: {stand}, {ci} to {co}.\nTotal {total}, paid {paid}, balance {balance}.\n\nIf anything looks wrong, just reply to this email.\n\nThe Kyleu team'; } },
     extra: { t: 'Extra amount to pay', s: 'Your updated Kyleu invoice {ref}', b: function (b) { return 'Hi {first},\n\nThank you for letting us know about the change to your booking {ref}. Your new total is {total}. You have already paid {paid}, so {balance} is still to pay.\n\nThe updated invoice is attached. Please pay the {balance} by EFT using reference {ref} before you arrive on {ci}.\n\nThe Kyleu team'; } },
-    finalise: { t: 'Finalise your booking (link)', s: 'Finalise your Kyleu booking {ref}', b: function (b) { return 'Hi {first},\n\nThank you, your booking {ref} for {stand}, {ci} to {co}, is paid in full.\n\nPlease finalise it here: tell us your vehicles and who is in each one, roughly when you arrive, and anything you want waiting from the camp shop.\n{link}\n\nRather not use the website? Just reply with the details and we will add them for you.\n\nThe Kyleu team'; } },
+    finalise: { t: 'Finalise your booking (link)', s: 'Finalise your Kyleu booking {ref}', b: function (b) { return 'Hi {first},\n\nThank you, your booking {ref} for {stand}, {ci} to {co}, is paid in full.\n\nPlease finalise it here: tell us your vehicles and who is in each one, sign the indemnity, roughly when you arrive, and anything you want waiting from the camp shop.\n{link}\n\nRather not use the website? Just reply with the details and we will add them for you.\n\nThe Kyleu team'; } },
     link: { t: 'Link to the booking', s: 'Your Kyleu booking {ref}', b: function (b) { return 'Hi {first},\n\nHere is the link to your booking {ref} ({stand}, {ci} to {co}):\n{link}\n\nUse it to tell us when you have paid, or to change the number of guests or your contact details. Once your booking is paid in full, the same link lets you finalise it: vehicles, passengers and arrival time.\n\nThe Kyleu team'; } },
-    details: { t: 'Ask for vehicle details', s: 'Your Kyleu stay: vehicle details please', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}. Before you arrive, please send us each vehicle\'s registration, the driver and everyone travelling in it. Everyone signs an indemnity form at the gate and we send one Dinokeng Conservation Fee Discount Voucher per vehicle, so this makes your arrival much quicker.\n\nYou can add them yourself here: {link}\nOr simply reply to this message.\n\nThe Kyleu team'; } },
+    details: { t: 'Ask for vehicle details', s: 'Your Kyleu stay: vehicle details please', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}. Before you arrive, please send us each vehicle\'s registration, the driver and everyone travelling in it. Everyone also signs our indemnity online, and we send one Dinokeng Conservation Fee Discount Voucher per vehicle, so this makes your arrival much quicker.\n\nYou can add them yourself here: {link}\nOr simply reply to this message.\n\nThe Kyleu team'; } },
     confirm: { t: 'Booking confirmation', s: 'Booking confirmed: {ref}', b: function (b) { return 'Hi {first},\n\nYour booking {ref} is confirmed: {stand}, {ci} to {co}.\nTotal {total}, paid {paid}, balance {balance} due by {baldue}.\n\nThe Kyleu team'; } }
   };
   function fill(t, b) {
     var dcodes = (b.cars || []).map(function (c) { return c.dgr; }).filter(Boolean);
-    var map = { qdays: validDays(String(b.created || TODAY).slice(0, 10), depositDue(b)), doc: b && b.payments && paid(b) > 0 ? 'invoice' : 'quotation', bank: bankLine(), qvalid: fd(depositDue(b), { weekday: 'long', day: 'numeric', month: 'long' }), link: bookingLink(b), voucher: dcodes.length ? dcodes.join(', ') : 'the codes we send you', first: b.guest.first, stand: standById(b.stand).name, ci: fd(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }), co: fd(b.co, { weekday: 'long', day: 'numeric', month: 'long' }), deposit: money(deposit(b)), depdue: fd(depositDue(b), { day: 'numeric', month: 'long' }), ref: b.ref, balance: money(balance(b)), baldue: fd(balanceDue(b), { day: 'numeric', month: 'long' }), total: money(b.total), paid: money(paid(b)) };
+    var map = { qdays: validDays(String(b.created || TODAY).slice(0, 10), depositDue(b)), doc: b && b.payments && paid(b) > 0 ? 'invoice' : 'quotation', bank: bankLine(), qvalid: fd(depositDue(b), { weekday: 'long', day: 'numeric', month: 'long' }), link: bookingLink(b), signlink: signLink(b), voucher: dcodes.length ? dcodes.join(', ') : 'the codes we send you', first: b.guest.first, stand: standById(b.stand).name, ci: fd(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }), co: fd(b.co, { weekday: 'long', day: 'numeric', month: 'long' }), deposit: money(deposit(b)), depdue: fd(depositDue(b), { day: 'numeric', month: 'long' }), ref: b.ref, balance: money(balance(b)), baldue: fd(balanceDue(b), { day: 'numeric', month: 'long' }), total: money(b.total), paid: money(paid(b)) };
     return t.replace(/\{(\w+)\}/g, function (_, k) { return map[k] != null ? map[k] : _; });
   }
   function actRemind(ref) { var b = byRef(ref); sendTemplate(b, defaultTemplate(b)); }
@@ -974,12 +976,12 @@
         var sub = [c.driver ? 'Driver ' + c.driver : '', c.people ? c.people + (c.people === 1 ? ' person' : ' people') : ''].filter(Boolean).join(' · ');
         return '<div class="car"><span class="car-i">' + ic('car') + '</span><div class="car-b"><b>' + esc(carLabel(c, i)) + '</b><small>' + esc(sub || 'Details are added at check-in') + '</small>' + ((c.guests || []).length ? '<small class="car-pass">Passengers: ' + esc(c.guests.join(', ')) + '</small>' : '') + '<div class="car-p">' +
           (c.st === 'in' ? '<span class="pill ok"><i></i>In since ' + whenShort(c.inAt) + '</span>' : c.st === 'out' ? '<span class="pill muted"><i></i>Left ' + whenShort(c.outAt) + '</span>' : '<span class="pill muted"><i></i>Expected</span>') +
-          (c.ind ? '<span class="pill ok">' + ic('check') + 'Indemnity signed</span>' : c.st === 'due' ? '<span class="pill muted">Indemnity at check-in</span>' : '<span class="pill bad">' + ic('alert') + 'Indemnity not signed</span>') +
+          (c.ind ? '<span class="pill ok">' + ic('check') + 'Indemnity signed</span>' : carSigned(b, c) ? '<span class="pill ok">' + ic('check') + 'Signed online</span>' : c.st === 'due' ? '<span class="pill muted">Indemnity not signed yet</span>' : '<span class="pill bad">' + ic('alert') + 'Indemnity not signed</span>') +
           (c.dgrSent ? '<span class="pill ok">' + ic('gift') + 'Dinokeng code sent</span>' : '') +
           (t.total ? '<span class="pill ' + (t.owing ? 'warn' : 'ok') + '">Tab ' + money(t.total) + (t.owing ? ', ' + money(t.owing) + ' owing' : ', paid') + '</span>' : '') +
           '</div></div><div class="car-a">' + acts.join('') + '</div></div>';
       }).join('') + (b.status === 'pending' ? '<p class="muted small">Vehicles can check in once the deposit is paid.</p>' : '') +
-      '<div class="row-btns car-docs">' + (missing && paidUp(b) && b.status !== 'out' && b.status !== 'in' ? '<button type="button" class="btn ghost sm" data-act="send-doc" data-ref="' + b.ref + '|finalise">' + ic('send') + 'Send the finalise link</button>' : '') + '<button type="button" class="btn ghost sm" data-act="send-doc" data-ref="' + b.ref + '|indemnity">' + ic('send') + 'Send indemnity form</button><button type="button" class="btn ghost sm" data-act="ind-print" data-ref="' + b.ref + '|">' + ic('note') + 'Print it</button></div></section>';
+      '<div class="row-btns car-docs">' + (missing && paidUp(b) && b.status !== 'out' && b.status !== 'in' ? '<button type="button" class="btn ghost sm" data-act="send-doc" data-ref="' + b.ref + '|finalise">' + ic('send') + 'Send the finalise link</button>' : '') + '</div></section>';
   }
   function carForm(c) {
     return '<div class="grid2"><label class="fld"><span>Registration</span><input name="reg" value="' + esc(c.reg) + '" placeholder="e.g. CA 123-456" autocomplete="off" style="text-transform:uppercase"></label><label class="fld"><span>People in this vehicle</span><input type="number" min="1" max="12" name="people" value="' + (c.people || 1) + '"></label></div>' +
@@ -987,7 +989,12 @@
       '<label class="fld"><span>Passengers, one name per line (everyone else in the vehicle)</span><textarea name="guests" rows="3">' + esc((c.guests || []).join('\n')) + '</textarea></label>';
   }
   function readCar(f, c) { c.reg = fval(f, 'reg').toUpperCase(); c.driver = fval(f, 'driver'); c.phone = fval(f, 'phone'); c.guests = fval(f, 'guests').split(/\n/).map(function (x) { return x.trim(); }).filter(Boolean); c.people = Math.max(1, +fval(f, 'people') || 1, (c.driver ? 1 : 0) + c.guests.length); }
-  function indBox(k, on) { return '<div class="ind-box"><label class="check"><input type="checkbox" name="ind"' + (on ? ' checked' : '') + '><span><b>Indemnity forms signed</b> by every adult in this vehicle</span></label><button type="button" class="link-btn" data-act="ind-print" data-ref="' + k + '">' + ic('note') + 'Print the form</button></div>'; }
+  function indBox(k, on) {
+    var o = carOf(k), names = o.c ? [o.c.driver].concat(o.c.guests || []).filter(Boolean) : [], cov = o.b ? K.ind.status(o.b.ref, people(o.b)).cov : {};
+    var done = names.filter(function (n) { return cov[K.ind.nkey(n)]; }), all = names.length && done.length === names.length;
+    return '<div class="ind-box"><label class="check"><input type="checkbox" name="ind"' + (on || all ? ' checked' : '') + '><span><b>' + (all ? 'Everyone in this vehicle signed online' : 'Indemnity signed') + '</b> ' + (all ? '(' + esc(done.join(', ')) + ')' : done.length ? 'online by ' + esc(done.join(', ')) + '. The others sign at reception or on paper.' : 'by every adult in this vehicle, online or on paper') + '</span></label>' +
+      (all ? '' : '<button type="button" class="link-btn" data-act="ind-print" data-ref="' + k + '">' + ic('note') + 'Print the paper form</button>') + '</div>';
+  }
   function actCarIn(key) {
     var o = carOf(key), b = o.b, c = o.c, i = o.i; if (!c) return; var cs = b.cars, bal = balance(b);
     modal('Check in ' + esc(carLabel(c, i)), '<p class="muted small">' + esc(guestName(b)) + ' · ' + esc(b.ref) + ' · ' + esc(standById(b.stand).name) + (cs.length > 1 ? ' · vehicle ' + (i + 1) + ' of ' + cs.length : '') + '</p>' + carForm(c) + indBox(key, !!c.ind) +
@@ -1031,8 +1038,10 @@
       log('Vehicle details updated on ' + b.ref, b.ref); save(); refresh(); toast(namedIn(b) > people(b) ? 'Saved, but ' + namedIn(b) + ' people are now named and the booking is for ' + people(b) : 'Vehicle saved');
     });
   }
-  var IND_DEFAULT = 'Kyleu Bush Camp is inside the Dinokeng Big 5 Game Reserve. Dangerous wild animals, including lion, leopard, elephant, rhino and buffalo, roam freely through the reserve and the unfenced parts of the camp.\n\nI enter the reserve, camp and drive at my own risk. I accept responsibility for myself, the people in my vehicle and any children in my care, and for keeping children supervised at all times, including at the pool.\n\nI release Kyleu Bush Camp, its owners and staff from any claim for injury, illness, death, loss or damage to property, however it is caused, except where the law does not allow it.\n\nI will follow the camp rules and the Dinokeng reserve rules: stay in my vehicle outside the camp, keep to the speed limits, never feed or approach animals, and only make fires in the boma or braai provided.';
-  function indText() { return (DB.settings && DB.settings.indemnity) || IND_DEFAULT; }
+  var IND_OLD = 'Kyleu Bush Camp is inside the Dinokeng Big 5 Game Reserve. Dangerous wild animals, including lion, leopard, elephant, rhino and buffalo, roam freely through the reserve and the unfenced parts of the camp.\n\nI enter the reserve, camp and drive at my own risk. I accept responsibility for myself, the people in my vehicle and any children in my care, and for keeping children supervised at all times, including at the pool.\n\nI release Kyleu Bush Camp, its owners and staff from any claim for injury, illness, death, loss or damage to property, however it is caused, except where the law does not allow it.\n\nI will follow the camp rules and the Dinokeng reserve rules: stay in my vehicle outside the camp, keep to the speed limits, never feed or approach animals, and only make fires in the boma or braai provided.';
+  // the old example wording is replaced by Kyleu's own indemnity (K.ind.DEFAULT) unless someone changed it
+  function indText() { var t = DB.settings && DB.settings.indemnity; return t && t !== IND_OLD ? t : K.ind.DEFAULT; }
+  if (K.ind) K.ind.override = function () { return DB ? indText() : ''; };
   function printIndemnity(ref, cid) {
     var b = ref ? byRef(ref) : null, c = b && cid ? (b.cars || []).filter(function (x) { return x.id === cid; })[0] : null, rows = Math.max(4, c && c.people ? c.people : b ? people(b) : 6);
     var w = window.open('', '_blank'); if (!w) { toast('Allow pop-ups to print the form'); return; }
@@ -1040,7 +1049,7 @@
     w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Indemnity form' + (b ? ' ' + esc(b.ref) : '') + '</title><style>body{font:14px/1.5 Arial,sans-serif;color:#222;max-width:760px;margin:30px auto;padding:0 20px}h1{font-size:22px;margin:0 0 4px}.sub{color:#666;margin:0 0 18px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;margin:0 0 18px}.f{display:flex;gap:8px;border-bottom:1px solid #999;padding:4px 0}.f span{color:#666;white-space:nowrap}.txt p{margin:0 0 10px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #999;padding:10px 8px;text-align:left}th{background:#f2f2f2;font-size:12px}td{height:26px}.note{font-size:12px;color:#666;margin-top:12px}</style></head><body>' +
       '<h1>Kyleu Bush Camp: indemnity</h1><p class="sub">Dinokeng Big 5 Game Reserve · every adult signs before entering the camp</p>' +
       '<div class="grid">' + line('Booking', b ? b.ref : '') + line('Stand', b ? standById(b.stand).name : '') + line('Arrive', b ? fd(b.ci, dt) : '') + line('Depart', b ? fd(b.co, dt) : '') + line('Vehicle registration', c ? c.reg : '') + line('Driver', c ? c.driver : '') + '</div>' +
-      '<div class="txt">' + indText().split(/\n\s*\n/).map(function (p) { return '<p>' + esc(p.trim()).replace(/\n/g, '<br>') + '</p>'; }).join('') + '</div>' +
+      '<div class="txt">' + K.ind.html(indText()) + '</div>' +
       '<table><thead><tr><th style="width:30%">Full name</th><th style="width:22%">ID or passport number</th><th>Signature</th><th style="width:14%">Date</th></tr></thead><tbody>' + (c ? [c.driver].concat(c.guests || []).filter(Boolean) : []).map(function (nm) { return '<tr><td>' + esc(nm) + '</td><td></td><td></td><td></td></tr>'; }).join('') + new Array(Math.max(1, rows - (c ? [c.driver].concat(c.guests || []).filter(Boolean).length : 0)) + 1).join('<tr><td></td><td></td><td></td><td></td></tr>') + '</tbody></table>' +
       '<p class="note">A parent or guardian signs for children under 18.</p><script>window.onload=function(){window.print()}<\/script></body></html>');
     w.document.close();
@@ -1111,7 +1120,7 @@
     var w = webDB(), prices = {};
     Object.keys(DB.rates || {}).forEach(function (k) { prices[k] = { amount: DB.rates[k] }; });
     Object.keys(w.rateText).forEach(function (k) { prices[k] = Object.assign(prices[k] || {}, w.rateText[k]); });
-    var out = { prices: prices, text: w.text, settings: w.settings, hol: DB.hol || null, home: w.home, rules: { wkDays: w.wkDays && w.wkDays.length ? w.wkDays : null } };
+    var out = { prices: prices, text: w.text, settings: w.settings, hol: DB.hol || null, home: w.home, rules: { wkDays: w.wkDays && w.wkDays.length ? w.wkDays : null }, indemnity: indText() };
     if (DB.products) out.shop = DB.products.filter(function (p) { return p.active !== false; }).map(function (p) { return { label: p.label, amount: p.amount, note: p.note || '', img: p.img || '', cat: p.cat || '' }; });
     try { localStorage.setItem(WEBK, JSON.stringify(out)); } catch (e) {}
   }
@@ -1566,6 +1575,7 @@
     var noTime = DB.bookings.filter(function (b) { return live(b) && b.extras && b.extras.gd && !b.drive && b.co >= TODAY && diff(TODAY, b.ci) <= 7; }); if (noTime.length) attention.push({ i: 'car', tone: 'warn', t: noTime.length + ' game drive' + (noTime.length > 1 ? 's' : '') + ' this week still need a time', go: 'drives', o: 5 });
     DB.bookings.forEach(function (b) {
       if (live(b) && b.status !== 'out' && b.ci >= TODAY && diff(TODAY, b.ci) <= 7 && codesTodo(b)) { var nc = ensureCars(b).length, nt = codesTodo(b); attention.push({ i: 'gift', tone: 'warn', t: 'Send Dinokeng codes to <b>' + esc(guestName(b)) + '</b> (' + fdw(b.ci) + ', ' + (nt === nc ? nc + ' vehicle' + (nc === 1 ? '' : 's') : nt + ' of ' + nc + ' vehicles still to send') + ')', ref: b.ref, o: 4 }); }
+      if (live(b) && b.status !== 'in' && b.status !== 'out' && b.status !== 'pending' && b.ci >= TODAY && diff(TODAY, b.ci) <= 2) { var is = K.ind.status(b.ref, people(b)); if (!is.done) attention.push({ i: 'shield', tone: 'warn', t: 'Indemnity: <b>' + esc(guestName(b)) + '</b> arrives ' + (b.ci === TODAY ? 'today' : fdw(b.ci)) + ', ' + Math.min(is.covered, is.total) + ' of ' + is.total + ' signed for', ref: b.ref, o: 3 }); }
       if (b.status === 'in') (b.cars || []).forEach(function (c, i) { if (c.st === 'in' && !c.ind) attention.push({ i: 'alert', tone: 'bad', t: 'Indemnity not signed: <b>' + esc(carLabel(c, i)) + '</b> at ' + esc(standById(b.stand).name), ref: b.ref, o: 2 }); });
     });
     var nAge = can('news') ? newsAge() : null; if (nAge !== null && nAge > 14) attention.push({ i: 'note', tone: 'muted', t: nAge === 999 ? 'No camp news posted yet. A short post makes the news page feel alive.' : 'No camp news for ' + nAge + ' days. A short post keeps the news page fresh.', go: 'news', o: 7 });
@@ -2188,7 +2198,7 @@
         if (i) { doc.addPage(); k.y(18); }
         k.head('Indemnity', 'Vehicle ' + (i + 1) + ' of ' + cs.length);
         k.pairs([['Booking', b.ref], ['Stand', standById(b.stand).name], ['Arrive', fd(b.ci, LONGD)], ['Depart', fd(b.co, LONGD)], ['Vehicle', c.reg || '________________'], ['Driver', c.driver || '________________']]);
-        k.para(indText(), 9.2);
+        k.para(K.ind.plain(indText()), 9.2);
         var names = [c.driver].concat(c.guests || []).filter(Boolean);
         k.table(['Full name', 'ID or passport number', 'Signature', 'Date'], [56, 44, 52, 22], names.map(function (nm) { return [nm, '', '', '']; }), Math.min(12, Math.max(4, names.length + 1, c.people || 0)));
         k.para('Every adult in the vehicle signs. A parent or guardian signs for children under 18.', 8.5);
@@ -2266,7 +2276,7 @@
       } });
   }
   // messages from the template list, each with the documents that belong to it
-  var SEND_DOCS = { extra: ['Invoice'], eft: ['Invoice'], balance: ['Invoice'], invoice: ['Invoice'], confirm: ['Booking confirmation'], update: ['Booking confirmation'], indemnity: ['indemnity'], arrival: ['indemnity', 'codes'] };
+  var SEND_DOCS = { extra: ['Invoice'], eft: ['Invoice'], balance: ['Invoice'], invoice: ['Invoice'], confirm: ['Booking confirmation'], update: ['Booking confirmation'], arrival: ['codes'] };
   function sendTemplate(b, key) {
     sendBox({ b: b, title: 'Send to ' + guestName(b), value: key, choices: Object.keys(TEMPLATES).map(function (k) { return [k, TEMPLATES[k].t]; }),
       load: function (k) {
@@ -3110,7 +3120,7 @@
     if (SET === 'emails') body = '<div class="tpl-grid">' + Object.keys(TEMPLATES).map(function (k) { var t = TEMPLATES[k]; return '<section class="card"><header class="card-h"><h3>' + t.t + '</h3><span class="muted small">' + ({ confirm: 'Sent when a booking is made', eft: 'Sent 3 days after an unpaid quotation', balance: 'Sent 10 days before arrival', arrival: 'Sent 3 days before arrival', thanks: 'Sent the day after departure' })[k] + '</span></header><p class="small"><b>' + esc(t.s) + '</b></p><pre class="tpl">' + esc(t.b({})) + '</pre></section>'; }).join('') + '</div><p class="demo-note">' + ic('info') + 'Words in {curly brackets} are filled in for each guest. In the live version these send automatically.</p>';
     if (SET === 'maps') body = '<p class="muted small me-intro">Move campsites, text and buildings, draw roads and footpaths, add new campsites, and change the game drive route and story of the "A day at Kyleu" scroll map. Press Save in the editor when you are done.</p><div class="me-wrap"><iframe class="me-frame" src="map-editor.html" title="Map editor"></iframe></div><div class="row-btns"><a class="btn ghost sm" href="map-editor.html" target="_blank" rel="noopener">' + ic('ext') + 'Open the editor full screen</a></div><p class="demo-note">' + ic('info') + 'Demo: Save updates the website maps in this browser. For the live site, press "Download map file" in the editor and replace assets/js/campmap-layout.js with it (or the live version saves it on the server).</p>';
     if (SET === 'sig') body = sigPage();
-    if (SET === 'camp') body = '<div class="cols"><section class="card"><header class="card-h"><h3>Indemnity form</h3><button class="btn ghost sm" data-act="ind-print" data-ref="">' + ic('note') + 'Print a blank form</button></header><p class="muted small">Every adult signs it when their vehicle checks in, and staff tick it off per vehicle. The printed form has the booking and vehicle filled in.</p><label class="fld"><span>Wording</span><textarea data-indemnity rows="11">' + esc(indText()) + '</textarea></label><p class="hint">' + ic('alert') + ' This is example wording. Replace it with Kyleu\'s own indemnity, checked by a lawyer.</p></section>' +
+    if (SET === 'camp') body = '<div class="cols"><section class="card"><header class="card-h"><h3>Indemnity</h3><button class="btn ghost sm" data-act="ind-print" data-ref="">' + ic('note') + 'Print a blank paper form</button></header><p class="muted small">Guests sign this online when they finalise their booking, or with the signing link, or here at reception. Every signed form keeps its own copy of the exact wording that was signed, so changing it here only affects new signatures. See them all under <a href="#/indemnities">Indemnities</a>.</p><label class="fld"><span>Wording</span><textarea data-indemnity rows="14">' + esc(indText()) + '</textarea></label><p class="hint">' + ic('info') + ' Start a line with <b>##</b> for a heading and <b>-</b> for a bullet; put <b>**</b> around words to make them bold. Have Kyleu\'s lawyer or insurer check the wording.</p></section>' +
       '<section class="card"><header class="card-h"><h3>Dinokeng discount vouchers (DGR CP)</h3></header><p class="small">Kyleu is a proud DGR CP member, allowed to issue Conservation Fee Discount Vouchers. For each booking, staff make one code per vehicle on the Dinokeng partner site, paste the codes on the booking and send them to the client from here, by WhatsApp or email. Dinokeng does not send the codes.</p><p class="small">The guest enters the code when they buy conservation fees on Dinokeng\'s permit site (dinokeng.plnktn.io) and pays the partner rate: R85 instead of R100 per adult per night. Children, pensioners and international guests pay the same either way. Each vehicle that uses the self-drive route also needs a Self Drive Permit, R250 once off.</p><label class="fld"><span>Link to Dinokeng\'s partner site</span><input data-dgrlink value="' + esc(dgrLink()) + '" placeholder="https://"></label><p class="hint">Paste the link you use to request codes. The booking panel opens it for you.</p></section></div>';
     if (SET === 'data') body = '<div class="cols"><section class="card"><header class="card-h"><h3>Privacy (POPIA)</h3></header><p class="small">Guest details are only used to manage bookings. Guests can ask for their details to be removed; deleting a guest keeps the booking for tax records but removes their contact details.</p><p class="small">Only staff with an account can open this admin, and every change is logged.</p></section>' +
       '<section class="card"><header class="card-h"><h3>Demo data</h3></header><p class="small">Everything in this admin is made-up demo data kept only in this browser. Bookings you make on the website demo show up here too.</p><div class="row-btns"><button class="btn ghost" data-act="export-json">' + ic('download') + 'Download a backup</button><button class="btn ghost danger-t" data-act="reset">Reset demo data</button></div></section></div>' +
@@ -3119,6 +3129,129 @@
   }
 
 
+
+  /* ---------- the indemnity: signed online by every guest (see assets/js/indemnity.js) ----------
+     Guests sign while finalising their booking, with the signing link, or here at reception.
+     Signed forms are read from this browser in the demo ("kyleu-indemnities"). */
+  // demo only: signed forms for guests who are in camp, have left or arrive soon, so the Indemnities page has something to filter.
+  // Passport numbers start with DEMO and the signatures are typed names. Reset demo data makes them again.
+  function seedInd(force) {
+    var FLAG = 'kyleu-ind-demo';
+    try { if (!force && localStorage.getItem(FLAG)) return; } catch (e) { return; }
+    var out = force ? [] : K.ind.all(), seedN = 7, rnd = function () { seedN = (seedN * 16807) % 2147483647; return seedN / 2147483647; };
+    var cv = document.createElement('canvas'); cv.width = 300; cv.height = 64; var g = cv.getContext('2d'), n = 0, ver = K.ind.version(indText());
+    var sigOf = function (name) { g.clearRect(0, 0, 300, 64); g.fillStyle = '#1d1410'; g.font = '30px "Segoe Print", "Bradley Hand", cursive'; g.textBaseline = 'middle'; g.fillText(name, 8, 34); return cv.toDataURL('image/png'); };
+    var pick = DB.bookings.filter(function (b) { return live(b) && (b.status === 'in' || b.status === 'out' || (b.status === 'confirmed' && paidUp(b) && b.ci >= TODAY && diff(TODAY, b.ci) <= 6)); }).slice(-45);
+    pick.forEach(function (b) {
+      if (b.status === 'confirmed' && rnd() < .45) return;
+      var st = standById(b.stand), names = indNames(b), adults = Math.max(1, b.adults + b.pens), signers = names.slice(0, adults), kids = names.slice(adults), via = rnd(), r0 = via < .6 ? 'Online' : via < .85 ? 'Signing link' : 'At reception';
+      if (b.status === 'confirmed') signers = signers.slice(0, Math.max(1, Math.round(signers.length * rnd())));
+      signers.forEach(function (p, i) {
+        var at = r0 === 'At reception' ? b.ci + ' 13:' + String(10 + Math.floor(rnd() * 49)) : add(b.ci, -1 - Math.floor(rnd() * 6)) + ' ' + String(8 + Math.floor(rnd() * 12)).padStart(2, '0') + ':' + String(Math.floor(rnd() * 60)).padStart(2, '0');
+        if (at.slice(0, 10) > TODAY) at = TODAY + ' 08:15';
+        n++; out.push({ id: 'inddemo' + n, no: 'IND-' + String(b.ref).replace(/[^A-Z0-9]/gi, '').toUpperCase() + '-' + (i + 1), ref: b.ref, stand: b.stand, standName: st.name, area: st.area, ci: b.ci, co: b.co, eta: b.eta || '',
+          name: p.name, idNo: 'DEMO' + (10000 + n * 37), idKind: 'Passport', dob: (1958 + Math.floor(rnd() * 40)) + '-0' + (1 + Math.floor(rnd() * 9)) + '-1' + Math.floor(rnd() * 9), phone: i ? '' : b.guest.phone, email: i ? '' : b.guest.email,
+          reg: p.reg || '', role: p.role || '', minors: i ? [] : kids.map(function (k) { return k.name; }), bookedBy: guestName(b), sig: sigOf(p.name), sigW: 300, sigH: 64, typed: true,
+          at: at, via: r0, by: r0 === 'At reception' ? 'Front desk' : '', textV: ver, text: '', demo: true });
+      });
+    });
+    try { localStorage.setItem('kyleu-indemnities', JSON.stringify(out)); localStorage.setItem(FLAG, '1'); } catch (e) {}
+    save();
+  }
+  function signLink(b) { if (!b.key) { b.key = newKey(); save(); } return new URL(K.ind.signUrl(b.ref, b.key, '../'), location.href).href; }
+  function indRec(id) { return K.ind.all().filter(function (r) { return r.id === id; })[0] || null; }
+  function indNames(b) { var out = []; ensureCars(b).forEach(function (c, i) { if (c.driver) out.push({ name: c.driver, reg: c.reg, car: 'Vehicle ' + (i + 1), role: 'Driver' }); (c.guests || []).filter(Boolean).forEach(function (n) { out.push({ name: n, reg: c.reg, car: 'Vehicle ' + (i + 1), role: 'Passenger' }); }); }); if (!out.some(function (p) { return K.ind.nkey(p.name) === K.ind.nkey(guestName(b)); })) out.unshift({ name: guestName(b), reg: '', car: '', role: '' }); return out; }
+  function carSigned(b, c) { var ns = [c.driver].concat(c.guests || []).filter(Boolean), cov = K.ind.status(b.ref, people(b)).cov; return ns.length > 0 && ns.every(function (n) { return cov[K.ind.nkey(n)]; }); }
+  function indPill(b) { var s = K.ind.status(b.ref, people(b)); return '<span class="pill ' + (s.done ? 'ok' : s.covered ? 'warn' : 'muted') + '">' + (s.done ? ic('check') + 'Everyone signed for' : Math.min(s.covered, s.total) + ' of ' + s.total + ' signed for') + '</span>'; }
+  function indHTML(b) {
+    if (b.status === 'cancelled') return '';
+    var s = K.ind.status(b.ref, people(b)), left = indNames(b).filter(function (p) { return !s.cov[K.ind.nkey(p.name)]; }), unnamed = Math.max(0, s.total - s.covered - left.length);
+    return '<section class="d-sec ind-sec"><h4 class="h4-row">Indemnity' + indPill(b) + '</h4>' +
+      (s.recs.length ? '<div class="ind-recs">' + s.recs.map(function (r) {
+        return '<div class="ind-rec"><span class="ind-rec-i">' + ic('shield') + '</span><span class="ind-rec-b"><b>' + esc(r.name) + '</b><small>' + esc(r.idKind) + ' ' + esc(K.ind.maskId(r.idNo)) + ' · signed ' + whenShort(r.at) + (/reception/i.test(r.via) ? ' at reception' : /link/i.test(r.via) ? ' with the link' : ' online') + ((r.minors || []).length ? ' · also for ' + esc(r.minors.join(', ')) : '') + '</small></span>' +
+          '<button type="button" class="btn ghost sm" data-act="ind-view" data-ref="' + r.id + '">View</button><button type="button" class="icon-btn sm" data-act="ind-pdf" data-ref="' + r.id + '" aria-label="Download the signed form" title="Download PDF">' + ic('download') + '</button></div>';
+      }).join('') + '</div>' : '<p class="muted small">Nobody has signed yet. Guests sign online when they finalise the booking, or you can send them the signing link.</p>') +
+      (left.length || unnamed ? '<p class="small ind-left">' + ic('info') + ' Still to sign: ' + esc(left.map(function (p) { return p.name; }).join(', ')) + (unnamed ? (left.length ? ' and ' : '') + unnamed + ' ' + (unnamed === 1 ? 'person' : 'people') + ' not named yet' : '') + '</p>' : '') +
+      '<div class="row-btns ind-acts-a">' + (s.done ? '' : '<button type="button" class="btn sm" data-act="ind-sign" data-ref="' + b.ref + '">' + ic('edit') + 'Sign here at reception</button><button type="button" class="btn ghost sm" data-act="send-doc" data-ref="' + b.ref + '|indemnity">' + ic('send') + 'Send the signing link</button><button type="button" class="btn ghost sm" data-act="ind-link" data-ref="' + b.ref + '">' + ic('clip') + 'Copy link</button>') +
+      (s.recs.length > 1 ? '<button type="button" class="btn ghost sm" data-act="ind-pdf-ref" data-ref="' + b.ref + '">' + ic('download') + 'All ' + s.recs.length + ' forms (PDF)</button>' : '') + '<button type="button" class="btn ghost sm" data-act="ind-print" data-ref="' + b.ref + '|">' + ic('note') + 'Paper form</button></div></section>';
+  }
+  // a guest signs on this device, at reception
+  function actIndSign(ref) {
+    var b = byRef(ref); if (!b) return; var st = standById(b.stand);
+    modal('Indemnity for ' + esc(guestName(b)), '<p class="muted small">' + esc(b.ref) + ' · ' + esc(st.name) + ' · ' + fd(b.ci) + ' to ' + fd(b.co) + '. Hand the device to the guest: they read the risks, then sign.</p>' + K.ind.statusHTML(b.ref, people(b), indNames(b)) + K.ind.risksHTML(st.area, { standName: st.name, title: 'What the guest agrees to' }) + '<div data-ind-form></div>', null, null, { wide: true, noFocus: true,
+      onOpen: function (f) {
+        // the signing form is its own form: move it out of the modal's form so Enter does not submit the modal
+        var box = $('[data-ind-form]', f);
+        K.ind.form(box, { ref: b.ref, key: b.key, stand: b.stand, standName: st.name, area: st.area, ci: b.ci, co: b.co, eta: b.eta, booker: { name: guestName(b), phone: b.guest.phone, email: b.guest.email }, people: indNames(b), cars: ensureCars(b).map(function (c, i) { return { label: 'Vehicle ' + (i + 1), reg: c.reg }; }), total: people(b), via: 'At reception', by: ME.name, staff: true }, function (rec) {
+          log('Indemnity signed at reception by ' + rec.name + (rec.minors.length ? ' (also for ' + rec.minors.join(', ') + ')' : ''), b.ref); save(); closeModal(); refresh();
+          toast('Signed and saved: ' + esc(rec.name) + (K.ind.status(b.ref, people(b)).done ? '. Everyone is signed for.' : ''));
+        });
+      } });
+  }
+  function actIndView(id) {
+    var r = indRec(id); if (!r) return;
+    var row = function (a, v) { return v ? '<dt>' + a + '</dt><dd>' + v + '</dd>' : ''; };
+    modal('Signed indemnity', '<div class="ind-view"><dl class="kv">' + row('Name', '<b>' + esc(r.name) + '</b>') + row(esc(r.idKind === 'SA ID' ? 'SA ID number' : 'Passport number'), esc(r.idNo)) + row('Date of birth', fd(r.dob, { day: 'numeric', month: 'long', year: 'numeric' })) + row('Mobile', esc(r.phone)) + row('Email', esc(r.email)) +
+      row('Signs for (under 18)', esc((r.minors || []).join(', '))) + row('Booking', '<button type="button" class="link-btn" data-open="' + esc(r.ref) + '">' + esc(r.ref) + '</button>') + row('Stand', esc(r.standName) + ' · ' + esc(K.ind.AREA_NAME[r.area] || '')) + row('Stay', fd(r.ci) + ' to ' + fd(r.co)) + row('Vehicle', esc(r.reg ? r.reg + (r.role ? ' (' + r.role.toLowerCase() + ')' : '') : 'Not given')) +
+      row('Signed', esc(K.ind.when(r))) + row('How', esc(K.ind.viaText(r))) + row('Form number', esc(r.no)) + '</dl>' +
+      '<div class="ind-sigv"><img src="' + r.sig + '" alt="Signature of ' + esc(r.name) + '"><small>Signature of ' + esc(r.name) + (r.typed ? ' (typed)' : '') + '</small></div>' +
+      '<details class="ind-full"><summary>The wording ' + esc(r.name.split(' ')[0]) + ' signed</summary><div class="ind-text">' + K.ind.html(r.text || indText()) + '</div></details>' +
+      '<div class="row-btns"><button type="button" class="btn" data-act="ind-pdf" data-ref="' + r.id + '">' + ic('download') + 'Download PDF</button></div></div>', null, null, { wide: true, noFocus: true });
+  }
+
+  /* ---------- Indemnities page: every signed form, filtered for the insurer ---------- */
+  var INDF = { tab: 'signed', q: '', stand: '', area: '', from: '', to: '', via: '' };
+  function indFiltered() {
+    var q = INDF.q.toLowerCase().trim();
+    return K.ind.all().filter(function (r) {
+      if (r.voided) return false;
+      if (INDF.stand && r.stand !== INDF.stand) return false;
+      if (INDF.area && r.area !== INDF.area) return false;
+      if (INDF.from && r.co < INDF.from) return false;
+      if (INDF.to && r.ci > INDF.to) return false;
+      if (INDF.via && (INDF.via === 'reception' ? !/reception/i.test(r.via) : INDF.via === 'link' ? !/link/i.test(r.via) : /reception|link/i.test(r.via))) return false;
+      if (q && [r.name, r.idNo, r.ref, r.reg, r.phone, r.email, r.standName, (r.minors || []).join(' ')].join(' ').toLowerCase().indexOf(q) < 0) return false;
+      return true;
+    }).sort(function (a, b) { return a.at < b.at ? 1 : -1; });
+  }
+  function indFilterText() {
+    var t = [];
+    if (INDF.from || INDF.to) t.push('stays ' + (INDF.from ? 'from ' + fd(INDF.from, { day: 'numeric', month: 'short', year: 'numeric' }) : '') + (INDF.to ? ' to ' + fd(INDF.to, { day: 'numeric', month: 'short', year: 'numeric' }) : ''));
+    if (INDF.stand) t.push(standById(INDF.stand).name); else if (INDF.area) t.push(K.ind.AREA_NAME[INDF.area]);
+    if (INDF.via) t.push({ online: 'signed online', link: 'signed with the link', reception: 'signed at reception' }[INDF.via]);
+    if (INDF.q) t.push('search "' + INDF.q + '"');
+    return t.join(', ');
+  }
+  function vIndemnities() {
+    var all = K.ind.all().filter(function (r) { return !r.voided; }), month = TODAY.slice(0, 7);
+    var soon = DB.bookings.filter(function (b) { return live(b) && b.status !== 'out' && b.status !== 'pending' && b.co >= TODAY && diff(TODAY, b.ci) <= 30; }).sort(function (a, b) { return a.ci < b.ci ? -1 : 1; });
+    var todo = soon.filter(function (b) { return !K.ind.status(b.ref, people(b)).done; }), week = todo.filter(function (b) { return diff(TODAY, b.ci) <= 7; });
+    var online = all.filter(function (r) { return !/reception/i.test(r.via); }).length;
+    var head = '<div class="page-h"><div><h1>Indemnities</h1><p class="muted">Every guest signs Kyleu\'s indemnity before arriving: online when they finalise the booking, with the signing link, or here at reception. Each signed form keeps the exact wording, the signature, and the date and time. Filter below and download the forms for the insurer.</p></div>' +
+      '<div class="ph-act"><button class="btn ghost" data-act="ind-csv">' + ic('download') + 'Spreadsheet</button><button class="btn" data-act="ind-pdf-all">' + ic('download') + 'Download PDF</button></div></div>' +
+      '<div class="kpis">' + tile('Arriving this week, not all signed', week.length, week.length ? 'Send them the signing link' : 'Everyone arriving is signed for', null, week.length ? 'warn' : 'ok') + tile('Signed this month', all.filter(function (r) { return r.at.slice(0, 7) === month; }).length, 'forms') + tile('Signed before arriving', all.length ? Math.round(online / all.length * 100) + '%' : '-', online + ' of ' + all.length + ' online') + tile('Forms on record', all.length, 'kept for the insurer') + '</div>' +
+      '<div class="chips">' + [['signed', 'Signed forms', all.length], ['todo', 'Still to sign', todo.length]].map(function (x) { return '<button class="chip' + (INDF.tab === x[0] ? ' on' : '') + '" data-indtab="' + x[0] + '">' + x[1] + ' <span>' + x[2] + '</span></button>'; }).join('') + '</div>';
+    if (INDF.tab === 'todo') {
+      var row = function (b) {
+        var s = K.ind.status(b.ref, people(b));
+        return '<div class="brow vrow"><span class="brow-st">' + fd(b.ci) + '</span><span class="brow-g" data-open="' + b.ref + '"><b>' + esc(guestName(b)) + '</b><small>' + esc(standById(b.stand).name) + ' · ' + esc(b.ref) + ' · ' + (paidUp(b) || b.onArrival ? 'finalising is open' : 'not paid in full yet') + '</small></span>' + indPill(b) +
+          '<span class="row-btns"><button class="btn sm ghost" data-act="send-doc" data-ref="' + b.ref + '|indemnity">' + ic('send') + 'Send link</button><button class="btn sm ghost" data-act="ind-sign" data-ref="' + b.ref + '">' + ic('edit') + 'Sign here</button></span></div>';
+      };
+      return head + '<section class="card"><header class="card-h"><h3>Arriving in the next 30 days, not everyone signed</h3><span class="count">' + todo.length + '</span></header>' + (todo.length ? todo.map(row).join('') : '<p class="empty">Everyone arriving in the next 30 days is signed for.</p>') + '</section>';
+    }
+    var list = indFiltered(), areas = [['', 'All areas']].concat(Object.keys(K.ind.AREA_NAME).map(function (k) { return [k, { fenced: 'Fenced camp', unfenced: 'Open camp', 'self-sufficient': 'Self-sufficient' }[k]]; }));
+    return head + '<div class="filters">' + fsearch('INDF:q', INDF.q, 'Search name, ID, booking or vehicle') +
+      fsel('INDF:area', INDF.area, areas, 'Area') + fsel('INDF:stand', INDF.stand, [['', 'All stands']].concat(STANDS.filter(function (x) { return !INDF.area || x.area === INDF.area; }).map(function (x) { return [x.id, x.name]; })), 'Stand') +
+      '<label class="fld-inline">Stays from <input type="date" data-fk="INDF:from" value="' + esc(INDF.from) + '"' + (INDF.from ? ' class="on"' : '') + '></label><label class="fld-inline">to <input type="date" data-fk="INDF:to" value="' + esc(INDF.to) + '"' + (INDF.to ? ' class="on"' : '') + '></label>' +
+      fsel('INDF:via', INDF.via, [['', 'Signed anywhere'], ['online', 'Online, finalising'], ['link', 'With the link'], ['reception', 'At reception']], 'How signed') + fclear('INDF', ['q', 'area', 'stand', 'from', 'to', 'via']) + '</div>' +
+      '<div class="card flush">' + (list.length ? '<table class="tbl" data-sort-key="ind"><thead><tr><th>Signed</th><th>Name</th><th>ID or passport</th><th>Booking</th><th>Stand</th><th>Stay</th><th>Vehicle</th><th>How</th><th class="r"></th></tr></thead><tbody>' +
+        list.map(function (r) {
+          return '<tr><td data-s="' + esc(r.at) + '">' + whenShort(r.at) + '<small class="muted"> ' + (r.at.slice(0, 10) === TODAY ? '' : r.at.slice(0, 4)) + '</small></td><td><button type="button" class="link-btn" data-act="ind-view" data-ref="' + r.id + '"><b>' + esc(r.name) + '</b></button>' + ((r.minors || []).length ? '<small class="muted"> +' + r.minors.length + ' under 18</small>' : '') + '</td>' +
+            '<td>' + esc(K.ind.maskId(r.idNo)) + '</td><td><button type="button" class="link-btn" data-open="' + esc(r.ref) + '">' + esc(r.ref) + '</button></td><td>' + esc(r.standName) + '</td><td data-s="' + esc(r.ci) + '">' + fd(r.ci) + ' to ' + fd(r.co) + '</td><td>' + esc(r.reg || '') + '</td>' +
+            '<td>' + (/reception/i.test(r.via) ? 'Reception' : /link/i.test(r.via) ? 'Link' : 'Online') + '</td><td class="r"><button type="button" class="icon-btn sm" data-act="ind-pdf" data-ref="' + r.id + '" aria-label="Download PDF" title="Download PDF">' + ic('download') + '</button></td></tr>';
+        }).join('') + '</tbody></table>' : '<p class="empty">' + (all.length ? 'No signed forms with these filters.' : 'No signed forms yet. They appear here as soon as a guest signs.') + '</p>') + '</div>' +
+      '<p class="muted small" style="margin-top:12px">' + ic('info') + ' ID numbers are partly hidden here; the full number is on the signed form. Download PDF makes one file with a register page and every form that matches the filters.</p>';
+  }
 
   /* ---------- Dinokeng codes page: arrivals and which codes are still to send ---------- */
   // who has paid: codes usually go to guests who have paid in full
@@ -3153,7 +3286,7 @@
      25 rows a page. Filters: <select data-fk="OBJ:key">, <input data-q="OBJ:key">
      ========================================================= */
   var SORT = {}, TPG = {}, PG_SIZE = 25;
-  function FO(n) { return { F: F, IN: IN, GF: GF, SHOP: SHOP, PROD: PROD, CAL: CAL, STF: STF, GD: GD, LOGF: LOGF, PAYF: PAYF }[n]; }
+  function FO(n) { return { INDF: INDF, F: F, IN: IN, GF: GF, SHOP: SHOP, PROD: PROD, CAL: CAL, STF: STF, GD: GD, LOGF: LOGF, PAYF: PAYF }[n]; }
   function fsel(fk, cur, opts, label) { return '<select data-fk="' + fk + '" aria-label="' + esc(label || opts[0][1]) + '"' + (cur ? ' class="on"' : '') + '>' + opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (String(o[0]) === String(cur) ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select>'; }
   function fsearch(fk, cur, ph) { return '<label class="search">' + ic('search') + '<input type="search" data-q="' + fk + '" placeholder="' + esc(ph) + '" value="' + esc(cur) + '" aria-label="' + esc(ph) + '"></label>'; }
   function fclear(obj, keys) { var n = keys.filter(function (k) { return FO(obj)[k]; }).length; return n ? '<button class="btn ghost sm" data-fclear="' + obj + ':' + keys.join(',') + '">' + ic('x') + 'Clear ' + n + ' filter' + (n > 1 ? 's' : '') + '</button>' : ''; }
@@ -3202,7 +3335,7 @@
     return { items: list.slice(p * size, p * size + size), bar: pages > 1 ? '<div class="pager"><span>' + (p * size + 1) + ' to ' + Math.min(list.length, p * size + size) + ' of ' + list.length + '</span><button class="icon-btn sm" data-pg="' + key + '|-1"' + (p ? '' : ' disabled') + ' aria-label="Previous page">' + ic('chev-l') + '</button><button class="icon-btn sm" data-pg="' + key + '|1"' + (p < pages - 1 ? '' : ' disabled') + ' aria-label="Next page">' + ic('chev-r') + '</button></div>' : '' };
   }
 
-  var VIEWS = { webtext: vWeb, dgrnews: vDgr, social: vSocial, dashboard: vDashboard, bookings: vBookings, eft: vEft, calendar: vCalendar, clients: vClients, payments: vPayments, shop: vShop, drives: vDrives, products: vProducts, vouchers: vVouchers, enquiries: vEnquiries, stands: vStands, rates: vRates, reports: vReports, news: vNews, settings: vSettings };
+  var VIEWS = { webtext: vWeb, dgrnews: vDgr, social: vSocial, dashboard: vDashboard, bookings: vBookings, eft: vEft, calendar: vCalendar, clients: vClients, payments: vPayments, shop: vShop, drives: vDrives, products: vProducts, vouchers: vVouchers, indemnities: vIndemnities, enquiries: vEnquiries, stands: vStands, rates: vRates, reports: vReports, news: vNews, settings: vSettings };
   function route() { var v = (location.hash.match(/^#\/(\w+)/) || [])[1] || 'dashboard'; if (v === 'guests') v = 'clients'; return VIEWS[v] && can(v) ? v : 'dashboard'; }
 
   /* ---------- shell ---------- */
@@ -3273,6 +3406,7 @@
     var dtab = t.closest('[data-dtab]'); if (dtab) { DP.tab = dtab.dataset.dtab; render(); return; }
     var gtag = t.closest('[data-gtag]'); if (gtag) { GF.tag = gtag.dataset.gtag; render(); return; }
     var vpy = t.closest('[data-vpay]'); if (vpy) { VF.pay = vpy.dataset.vpay; render(); return; }
+    var itb = t.closest('[data-indtab]'); if (itb) { INDF.tab = itb.dataset.indtab; render(); return; }
     var fcl = t.closest('[data-fclear]'); if (fcl) { var fc = fcl.dataset.fclear.split(':'); fc[1].split(',').forEach(function (k) { FO(fc[0])[k] = ''; }); resetPages(); render(); return; }
     var th = t.closest('[data-thread]'); if (th) { IN.id = th.dataset.thread || null; CMP_ATT = []; var tt = IN.id && thrById(IN.id); if (tt && tt.unread) { tt.unread = false; save(); } render(); window.scrollTo(0, 0); return; }
     var tg = t.closest('[data-thread-go]'); if (tg) { IN.id = tg.dataset.threadGo; IN.box = 'all'; closeDrawer(); if (!$('#modal').hidden) closeModal(); location.hash = '#/enquiries'; render(); return; }
@@ -3379,6 +3513,13 @@
     if (act === 'car-del') { var dc = carOf(ref); if (!dc.c) return; dc.b.cars.splice(dc.i, 1); dc.b.vehicles = dc.b.cars.length; save(); refresh(); toast('Vehicle removed'); return; }
     if (act === 'car-tab') { SHOP.who = ref; SHOP.tab = 'till'; closeDrawer(); location.hash = '#/shop'; render(); return; }
     if (act === 'ind-print') { var ip = (ref || '').split('|'); printIndemnity(ip[0], ip[1]); return; }
+    if (act === 'ind-sign') { actIndSign(ref); return; }
+    if (act === 'ind-view') { actIndView(ref); return; }
+    if (act === 'ind-pdf') { var r1 = indRec(ref); if (r1) K.ind.pdf([r1]).catch(function () { toast('The PDF could not be made. Check the internet connection.'); }); return; }
+    if (act === 'ind-pdf-ref') { var rr = K.ind.forRef(ref); if (rr.length) K.ind.pdf(rr, { name: 'Kyleu indemnities ' + ref + '.pdf' }).catch(function () { toast('The PDF could not be made. Check the internet connection.'); }); return; }
+    if (act === 'ind-pdf-all') { var ra = indFiltered(); if (!ra.length) { toast('No signed forms with these filters'); return; } toast('Making the PDF of ' + ra.length + ' form' + (ra.length === 1 ? '' : 's') + '…'); K.ind.pdf(ra, { register: true, filters: indFilterText() }).catch(function () { toast('The PDF could not be made. Check the internet connection.'); }); return; }
+    if (act === 'ind-csv') { var rc = indFiltered(); if (!rc.length) { toast('No signed forms with these filters'); return; } K.ind.csv(rc); return; }
+    if (act === 'ind-link') { var lb = byRef(ref), lu = signLink(lb); (navigator.clipboard ? navigator.clipboard.writeText(lu) : Promise.reject()).then(function () { toast('Signing link copied'); }).catch(function () { window.prompt('Copy the signing link', lu); }); return; }
     if (act === 'client-edit') return actClient(ref);
     if (act === 'client-book') { closeModal(); return actNew({ cid: ref }); }
     if (act === 'client-mail') { var mc = clientById(ref); closeModal(); actNewMail(); var mf = $('#modal form'); if (mf && mc) mf.elements.to.value = mc.email; return; }
@@ -3431,7 +3572,7 @@
     if (act === 'invite') { modal('Invite a staff member', '<label class="fld"><span>Name</span><input name="n"></label><label class="fld"><span>Email</span><input name="e" type="email"></label><label class="fld"><span>Role</span><select name="r">' + Object.keys(ROLES).map(function (r) { return '<option>' + r + '</option>'; }).join('') + '</select></label>', 'Send invite', function () { toast('Invite sent (demo)'); }); return; }
     if (act === 'connect') { modal('Connect ' + esc(ref), '<p>In the live version you would sign in to your ' + esc(ref) + ' account here. Guests then pay on ' + esc(ref) + '\'s secure page and the booking is confirmed by itself the moment the payment goes through.</p><p class="muted small">Card numbers never touch the Kyleu website.</p>', null); return; }
     if (act === 'export-json') { var bl = document.createElement('a'); bl.href = URL.createObjectURL(new Blob([JSON.stringify(DB, null, 1)], { type: 'application/json' })); bl.download = 'kyleu-admin-backup.json'; bl.click(); return; }
-    if (act === 'reset') { modal('Reset demo data?', '<p>All demo bookings, payments and notes go back to the start. Bookings made on the website demo are removed too.</p>', 'Reset', function () { try { localStorage.removeItem(KEY); localStorage.removeItem(WEB); localStorage.removeItem('kyleu-web-news'); localStorage.removeItem(WEBK); localStorage.removeItem(POPK); } catch (x) {} STANDS = CONTENT_STANDS.slice(); P.holidays = JSON.parse(ORIG_HOL); CART = {}; IN.id = null; DB = null; P.wkDays = [5, 6, 0]; DB = seed(); migrate(); save(); render(); toast('Demo data reset'); }, { danger: true }); return; }
+    if (act === 'reset') { modal('Reset demo data?', '<p>All demo bookings, payments and notes go back to the start. Bookings made on the website demo are removed too.</p>', 'Reset', function () { try { localStorage.removeItem(KEY); localStorage.removeItem(WEB); localStorage.removeItem('kyleu-web-news'); localStorage.removeItem(WEBK); localStorage.removeItem(POPK); localStorage.removeItem('kyleu-indemnities'); } catch (x) {} STANDS = CONTENT_STANDS.slice(); P.holidays = JSON.parse(ORIG_HOL); CART = {}; IN.id = null; DB = null; P.wkDays = [5, 6, 0]; DB = seed(); migrate(); save(); seedInd(true); render(); toast('Demo data reset'); }, { danger: true }); return; }
   }
   function onInput(e) {
     var t = e.target;
@@ -3565,7 +3706,7 @@
     // pick up website demo bookings made in another tab
     window.addEventListener('storage', function (e) { if (e.key === WEB && ME && importWeb()) { render(); toast('New booking from the website'); } if (e.key === POPK && ME && importPop()) { render(); toast('Proof of payment uploaded on the website'); } });
     Promise.all([K.pricesFile ? K.pricesFile() : K.prices(), K.stands()]).then(function (r) {
-      P = r[0]; ORIG_HOL = JSON.stringify(P.holidays); CONTENT_STANDS = r[1]; STANDS = r[1].slice(); loadDB();
+      P = r[0]; ORIG_HOL = JSON.stringify(P.holidays); CONTENT_STANDS = r[1]; STANDS = r[1].slice(); loadDB(); seedInd();
       var id = null; try { id = sessionStorage.getItem(SESS); } catch (e) {}
       var s = STAFF.filter(function (x) { return x.id === id; })[0];
       if (s) start(s); else login();

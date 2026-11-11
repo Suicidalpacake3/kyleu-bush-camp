@@ -1512,3 +1512,24 @@ html:has(body.lock) { overflow: hidden; }
   .vrow .vp { margin-left: 86px; }
   .vrow .vsent, .vrow .btn { margin-left: auto; }
 }
+
+/* Indemnities: the booking panel, the page filters and one signed form */
+.ind-recs { display: grid; margin: 4px 0 8px; }
+.ind-rec { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line-2); }
+.ind-rec:last-child { border-bottom: 0; }
+.ind-rec-i { width: 32px; height: 32px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--ok-bg); color: var(--ok); }
+.ind-rec-b { flex: 1; min-width: 0; }
+.ind-rec-b b { display: block; }
+.ind-rec-b small { display: block; color: var(--muted); }
+.ind-left { display: flex; gap: 6px; align-items: flex-start; color: var(--warn); margin: 6px 0 10px; }
+.ind-acts-a { flex-wrap: wrap; }
+.fld-inline { display: inline-flex; align-items: center; gap: 6px; font-size: .88rem; color: var(--ink-2); }
+.fld-inline input { padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--card); font: inherit; color: inherit; }
+.fld-inline input.on { border-color: var(--sun); background: #fff7ef; }
+.ind-view .kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0 0 14px; }
+.ind-view .kv dt { color: var(--muted); }
+.ind-view .kv dd { margin: 0; }
+.ind-sigv { display: grid; justify-items: start; gap: 4px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-sm); background: #fff; margin: 0 0 12px; }
+.ind-sigv img { max-width: min(320px, 100%); height: auto; }
+.ind-sigv small { color: var(--muted); border-top: 1px solid var(--line); padding-top: 4px; min-width: 220px; }
+.m-card .ind-risks, .m-card .ind-status { margin-top: 12px; }

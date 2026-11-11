@@ -52,7 +52,8 @@
     if (v.total + diff < v.paid) return { mode: 'request', diff: diff };
     return { mode: 'direct', diff: diff, extra: paidFull(v) && diff > 0 };
   }
-  function finalMode(v) { return paidFull(v); }
+  // finalise once paid in full, or straight away when Kyleu arranged payment on arrival
+  function finalMode(v) { return paidFull(v) || !!v.onArrival; }
   function waLink(v, what) { return 'https://wa.me/27604584478?text=' + encodeURIComponent('Hi Kyleu, my booking reference is ' + v.ref + '. I would like to change ' + what + '.'); }
   function callUs(v, what) { return '<div class="row-btns mg-callus"><a class="btn btn-green btn-sm" href="' + waLink(v, what) + '" target="_blank" rel="noopener">' + svg('i-wa') + 'WhatsApp us</a><a class="btn btn-ghost btn-sm" href="tel:+27604584478">' + svg('i-phone') + 'Call 060 458 4478</a></div>'; }
 
@@ -193,10 +194,11 @@
     eta: { id: 'eta', ic: 'i-clock', t: 'Arrival time' },
     shop: { id: 'shop', ic: 'i-bag', t: 'Camp shop order' },
     guests: { id: 'guests', ic: 'i-users', t: 'Number of guests' },
+    indemnity: { id: 'indemnity', ic: 'i-shield', t: 'Indemnity: everyone signs before arriving' },
     note: { id: 'note', ic: 'i-mail', t: 'A message for the Kyleu team' }
   };
   var SECS = [];
-  function secsFor(v) { return (finalMode(v) ? ['cars', 'eta', 'shop', 'note', 'guests', 'details'] : ['guests', 'shop', 'note', 'details']).map(function (k) { return ALL[k]; }); }
+  function secsFor(v) { return (finalMode(v) ? ['cars', 'indemnity', 'eta', 'shop', 'note', 'guests', 'details'] : ['guests', 'shop', 'note', 'details']).map(function (k) { return ALL[k]; }); }
   function carsText(v) {
     if (!v.vehicles) return 'Not sure yet how many vehicles';
     var named = v.cars.slice(0, v.vehicles).reduce(function (a, c) { return a + (c.driver ? 1 : 0) + c.guests.length; }, 0), regs = v.cars.slice(0, v.vehicles).filter(function (c) { return c.reg; }).length;
@@ -210,6 +212,7 @@
     if (id === 'guests') return esc(peopleText(draftG())) + (draft.guests ? ' · <b class="mg-asked">' + (plan(draft.guests).mode === 'direct' ? 'Changed' : 'You are asking for a change') + '</b>' : '') + (locked(base) ? ' · <b class="mg-asked">Call or WhatsApp us to change</b>' : '');
     if (id === 'dates') return esc(nice(v.ci) + ' to ' + nice(v.co) + ' · ' + stand(v.stand).name) + (draft.request ? ' · <b class="mg-asked">You are asking for a change</b>' : base.request ? ' · <b class="mg-asked">Change asked for, waiting for Kyleu</b>' : '') + (locked(base) ? ' · <b class="mg-asked">Call or WhatsApp us to change</b>' : '');
     if (id === 'note') return draft.note ? esc(draft.note.length > 80 ? draft.note.slice(0, 80) + '…' : draft.note) : 'Anything else you want to tell us';
+    if (id === 'indemnity') { var s = indStatus(); return s.done ? '<b class="mg-ok-t">Everyone is signed for</b> · ' + s.signed + ' signature' + (s.signed === 1 ? '' : 's') : s.covered ? s.covered + ' of ' + s.total + ' people signed for · <b class="mg-asked">' + (s.total - s.covered) + ' still to sign</b>' : 'Not signed yet · about a minute per person'; }
     return '';
   }
   function changed(id) {
@@ -259,7 +262,7 @@
       '<div class="grid-2"><div class="field"><label for="e-email">Email</label><input id="e-email" name="email" type="email" value="' + esc(d.email) + '" autocomplete="email"></div><div class="field"><label for="e-phone">Mobile number</label><input id="e-phone" name="phone" type="tel" value="' + esc(d.phone) + '" autocomplete="tel"></div></div>';
     if (id === 'cars') {
       var opts = ''; for (var i = 1; i <= 10; i++) opts += '<option value="' + i + '"' + (d.vehicles === i ? ' selected' : '') + '>' + i + ' vehicle' + (i === 1 ? '' : 's') + '</option>';
-      return '<p class="mg-help-t">For each vehicle, give the <b>registration</b>, the <b>driver</b> and <b>everyone else in it</b>. Every person in a vehicle signs an indemnity form at the gate, and we send one Dinokeng Conservation Fee Discount Voucher per vehicle, so this makes your arrival much quicker. Fill in what you know; you can come back and add the rest later.</p>' +
+      return '<p class="mg-help-t">For each vehicle, give the <b>registration</b>, the <b>driver</b> and <b>everyone else in it</b>. Everyone then signs the Kyleu indemnity online (the next part), and we send one Dinokeng Conservation Fee Discount Voucher per vehicle, so this makes your arrival much quicker. Fill in what you know; you can come back and add the rest later.</p>' +
         '<div class="field"><label for="e-veh">How many vehicles are coming?</label><select id="e-veh" name="veh">' + opts + '<option value="0"' + (!d.vehicles ? ' selected' : '') + '>Not sure yet, I\'ll tell you later</option></select></div><div class="cars-list" data-cars></div>';
     }
     if (id === 'eta') return '<p class="mg-help-t">Times are flexible, so arrive when it suits you. Knowing roughly when you arrive helps us have your stand, firewood and ice ready.</p>' +
@@ -281,6 +284,7 @@
         '<div class="bw-date"><label for="e-co"><span class="bw-dn">B</span><span><b>Leaving</b><small>Now: ' + esc(nice(base.co)) + '</small></span></label><input id="e-co" type="date" name="co" min="' + today() + '" value="' + esc(r.co || base.co) + '"></div></div>' +
         '<div class="field"><label for="e-msg">Anything else about the change? <span class="opt">(optional)</span></label><textarea id="e-msg" name="msg" rows="3" placeholder="e.g. We would like a stand closer to the pool">' + esc(r.msg || '') + '</textarea></div>';
     }
+    if (id === 'indemnity') return indPanel();
     if (id === 'note') return '<p class="mg-help-t">Anything else we should know? A note about your shop order (for example one bag of ice per day), celebrating something, a question, or a porta potty (only for the self-sufficient (R) stands)? Write it here and the team will see it on your booking.</p><div class="field"><label for="e-note">Your message</label><textarea id="e-note" name="note" rows="4">' + esc(d.note || '') + '</textarea></div>';
     return '';
   }
@@ -290,18 +294,19 @@
     if (started(base)) {
       var inCamp = base.status === 'in';
       pane.innerHTML = '<p class="bw-of">Your booking</p><h2>' + (inCamp ? 'Enjoy your stay!' : 'Your stay starts today') + '</h2>' + bookingCard(base) +
-        '<div class="mg-callout">' + svg('i-info') + '<p><b>' + (inCamp ? 'You are in camp now, so your booking cannot be changed here any more.' : 'Your stay starts today, so your booking cannot be changed here any more.') + '</b> Need to add someone, change your stay or anything else? Please WhatsApp or call us' + (inCamp ? ', or pop in at reception' : '') + '.</p></div>' + callUs(base, 'something on my booking');
+        '<div class="mg-callout">' + svg('i-info') + '<p><b>' + (inCamp ? 'You are in camp now, so your booking cannot be changed here any more.' : 'Your stay starts today, so your booking cannot be changed here any more.') + '</b> Need to add someone, change your stay or anything else? Please WhatsApp or call us' + (inCamp ? ', or pop in at reception' : '') + '.</p></div>' + callUs(base, 'something on my booking') +
+        (indStatus().done ? '' : '<div class="mg-callout">' + svg('i-shield') + '<p><b>Not everyone has signed the indemnity yet.</b> Sign it here now, before you reach the camp. <button type="button" class="link-btn" data-ind-open>Sign the indemnity</button></p></div>');
       return;
     }
     pane.innerHTML = '<p class="bw-of">Step 2 of 4</p><h2>' + (fin ? 'Finalise your booking' : 'Amend your booking') + '</h2>' +
-      (fin ? '<p class="bw-lead">Your booking is <b>paid in full</b>. Thank you! Now tell us your <b>vehicles and who is in each one</b>, roughly <b>when you arrive</b>, and anything you want waiting from the <b>camp shop</b>. Press <b>Change</b> next to each part; nothing is saved until the last step.' + (base.finalised ? ' <b>You finalised it on ' + esc(nice(base.finalised.at.slice(0, 10))) + '</b>; you can still change anything.' : '') + '</p>'
+      (fin ? '<p class="bw-lead">' + (paidFull(base) ? 'Your booking is <b>paid in full</b>. Thank you!' : 'Your booking is <b>confirmed</b>, and you pay when you arrive, as arranged with Kyleu.') + ' Now tell us your <b>vehicles and who is in each one</b>, <b>sign the indemnity</b>, roughly <b>when you arrive</b>, and anything you want waiting from the <b>camp shop</b>. Press <b>Change</b> next to each part; nothing is saved until the last step.' + (base.finalised ? ' <b>You finalised it on ' + esc(nice(base.finalised.at.slice(0, 10))) + '</b>; you can still change anything.' : '') + '</p>'
         : '<p class="bw-lead">Your booking is <b>not paid in full yet</b>. Here you can tell us you have paid (<b>I have paid</b>), change the <b>number of guests</b>, add to your <b>camp shop order</b> or change your <b>contact details</b>. Once it is paid in full, this same page lets you <b>finalise</b> it: vehicles, passengers and arrival time, and you can still add camp shop items.</p>') +
       bookingCard(base) +
       '<div class="mg-secs">' + SECS.map(function (s) {
         var on = openSec === s.id, ch = changed(s.id);
         return '<section class="mg-sec' + (on ? ' open' : '') + (ch ? ' changed' : '') + '" data-sec="' + s.id + '"><div class="mg-sec-h"><span class="mg-ic">' + svg(s.ic) + '</span><div class="mg-sec-t"><b>' + s.t + '</b><small>' + summary(s.id, draft) + '</small></div>' +
-          (ch && !on ? '<span class="mg-tag">' + svg('i-check') + 'Changed</span>' : '') + (on ? '' : '<button type="button" class="btn btn-ghost btn-sm" data-sec-edit="' + s.id + '">' + svg('i-edit') + (ch ? 'Change again' : 'Change') + '</button>') + '</div>' +
-          (on ? '<div class="mg-ed" data-ed>' + editor(s.id) + '<div class="mg-ed-acts">' + ((s.id === 'guests' || s.id === 'dates') && locked(base) ? '<button type="button" class="btn" data-cancel>Close</button>'
+          (ch && !on ? '<span class="mg-tag">' + svg('i-check') + 'Changed</span>' : '') + (s.id === 'indemnity' && !on && indStatus().done ? '<span class="mg-tag">' + svg('i-check') + 'Signed</span>' : '') + (on ? '' : '<button type="button" class="btn btn-ghost btn-sm" data-sec-edit="' + s.id + '">' + svg(s.id === 'indemnity' ? 'i-shield' : 'i-edit') + (s.id === 'indemnity' ? (indStatus().done ? 'View' : 'Sign') : ch ? 'Change again' : 'Change') + '</button>') + '</div>' +
+          (on ? '<div class="mg-ed" data-ed>' + editor(s.id) + '<div class="mg-ed-acts">' + (((s.id === 'guests' || s.id === 'dates') && locked(base)) || s.id === 'indemnity' ? '<button type="button" class="btn' + (s.id === 'indemnity' ? ' btn-ghost' : '') + '" data-cancel>Close</button>'
             : (ch ? '<button type="button" class="btn btn-ghost btn-sm" data-undo>Undo my changes here</button>' : '<button type="button" class="btn btn-ghost btn-sm" data-cancel>Close without changing</button>') + '<button type="button" class="btn" data-done>' + svg('i-check') + 'Done with this</button>') + '</div></div>' : '') + '</section>';
       }).join('') + '</div>' +
       '<p class="mg-nochange" data-nochange hidden role="status">' + svg('i-info') + 'You have not changed anything yet. Press <b>Change</b> next to what you want to update.</p>' +
@@ -318,6 +323,7 @@
       carsEd = K.carsEditor($('[data-cars]', ed), { count: startN, cars: startCars, total: people(draftG()), overText: 'Remove a name, or change the number of guests under "Number of guests" further down.', later: '<b>No problem.</b> Come back here and add them when you know, any time before you arrive. We will remind you closer to the time.' });
       $('[name=veh]', ed).addEventListener('change', function () { carsEd.setCount(+this.value); });
     }
+    if (openSec === 'indemnity') wireInd($('[data-ind-form]', ed));
     if (openSec === 'shop') {
       shopQty = clone(draft.shop);
       var tot = function () { var was = shopSum(base.shop), now = shopSum(shopQty), d = price(base, now - was); $('[data-shop-tot]', ed).innerHTML = 'Your shop order: <b>' + K.money(price(base, now)) + '</b>' + (d ? ' <span class="' + (d > 0 ? 'up' : 'down') + '">(' + (d > 0 ? '+' : '&minus;') + K.money(Math.abs(d)) + ' on your ' + docWord(base) + ')</span>' : ''); };
@@ -383,6 +389,64 @@
     if (id === 'note') draft.note = '';
   }
   function scrollToSec(id) { var el = $('[data-sec="' + id + '"]'); if (el) { var r = el.getBoundingClientRect(); if (r.top < 80 || r.top > window.innerHeight - 120) window.scrollTo({ top: r.top + window.scrollY - 100, behavior: 'smooth' }); } }
+
+  /* ---------- the indemnity: signed online, one person at a time, saved as soon as they sign ---------- */
+  var indJust = null, signedNow = 0, signOnly = false;
+  function indPeople() {
+    var out = [];
+    (draft.cars || []).slice(0, draft.vehicles || 0).forEach(function (c, i) {
+      var lab = 'Vehicle ' + (i + 1);
+      if (c.driver) out.push({ name: c.driver, reg: c.reg || '', car: lab, role: 'Driver' });
+      (c.guests || []).filter(Boolean).forEach(function (n) { out.push({ name: n, reg: c.reg || '', car: lab, role: 'Passenger' }); });
+    });
+    var me = (base.first + ' ' + base.last).trim();
+    if (me && !out.some(function (p) { return K.ind.nkey(p.name) === K.ind.nkey(me); })) out.unshift({ name: me, reg: '', car: '', role: '' });
+    return out;
+  }
+  function indCtx() {
+    var st = stand(base.stand);
+    return { ref: base.ref, key: base.key, stand: base.stand, standName: st.name, area: st.area, ci: base.ci, co: base.co, eta: draft.eta || base.eta,
+      booker: { name: (base.first + ' ' + base.last).trim(), phone: base.phone, email: base.email }, people: indPeople(),
+      cars: (draft.cars || []).slice(0, draft.vehicles || 0).map(function (c, i) { return { label: 'Vehicle ' + (i + 1), reg: c.reg }; }),
+      total: people(draftG()), via: signOnly ? 'Signing link' : 'Online' };
+  }
+  function indStatus() { return K.ind ? K.ind.status(base.ref, people(draftG())) : { done: false, covered: 0, total: people(draftG()), signed: 0 }; }
+  function signLink() { return new URL(K.ind.signUrl(base.ref, base.key), location.href).href; }
+  function indThanks(r) {
+    var s = indStatus();
+    return '<div class="ind-thanks" role="status">' + K.ind.ic('check') + '<div><h4>Thank you, ' + esc(r.name.split(' ')[0]) + '. Signed and saved.</h4><p>' + (s.done ? '<b>Everyone on the booking is now signed for.</b> ' : 'Still to sign: <b>' + (s.total - s.covered) + ' more ' + (s.total - s.covered === 1 ? 'person' : 'people') + '</b>. ') + 'Your copy has the full wording, your signature and the date.</p>' +
+      '<div class="ind-acts"><button type="button" class="ind-btn ghost sm" data-ind-pdf>' + K.ind.ic('down') + 'Download my signed copy (PDF)</button>' + (s.done ? '' : '<button type="button" class="ind-btn sm" data-ind-next>' + K.ind.ic('pen') + 'Next person signs</button>') + '</div></div></div>';
+  }
+  function indPanel() {
+    var c = indCtx(), s = indStatus(), wa = 'https://wa.me/?text=' + encodeURIComponent('Please sign the Kyleu Bush Camp indemnity for our stay (' + nice(base.ci) + ' to ' + nice(base.co) + '). It takes about a minute: ' + signLink());
+    return '<p class="mg-help-t">Kyleu is inside the Dinokeng Big 5 reserve, so <b>everyone on your booking is signed for before you arrive</b>: each adult signs for themselves, and a parent or guardian signs for anyone under 18. We filled in what we already know. It takes about a minute per person and is <b>saved as soon as each person signs</b>.</p>' +
+      (indJust ? indThanks(indJust) : '') + K.ind.statusHTML(base.ref, c.total, c.people) +
+      (s.done || indJust ? '' : K.ind.risksHTML(c.area, { standName: c.standName }) + '<h4 class="ind-step-h">' + K.ind.ic('pen') + 'Sign now</h4><div data-ind-form></div>') +
+      (s.done ? '' : '<div class="ind-share"><p><b>Someone not with you right now?</b> Send them the signing link. It opens only the indemnity, not your booking.</p><div class="ind-acts"><a class="ind-btn ghost sm" href="' + wa + '" target="_blank" rel="noopener">' + K.ind.ic('chat') + 'Send by WhatsApp</a><button type="button" class="ind-btn ghost sm" data-ind-copy>' + K.ind.ic('link') + 'Copy the link</button></div></div>');
+  }
+  function wireInd(box) {
+    if (!box) return;
+    K.ind.form(box, indCtx(), function (rec) {
+      indJust = rec; signedNow++;
+      if (signOnly) drawSign(); else { drawSecs(); scrollToSec('indemnity'); }
+      K.toast('Signed and saved. Thank you, ' + rec.name.split(' ')[0] + '!');
+    });
+  }
+  // the signing link (manage.html?sign=REF&t=...): only the indemnity, nothing else of the booking
+  function openSign(v) {
+    base = v; draft = Object.assign(clone(v), { note: '', request: null, guests: null }); signOnly = true; indJust = null;
+    drawSign(); go(2);
+  }
+  function drawSign() {
+    var pane = $('[data-pane="2"]'), st = stand(base.stand), s = indStatus();
+    $('.mg-steps').hidden = $('[data-mg-bar]').parentNode.hidden = true;
+    pane.innerHTML = '<p class="bw-of">Kyleu indemnity</p><h2>' + (s.done && !indJust ? 'Everyone is signed for' : 'Sign the indemnity') + '</h2>' +
+      '<p class="bw-lead"><b>' + esc(st.name) + '</b>, ' + esc(nice(base.ci, true)) + ' to ' + esc(nice(base.co, true)) + ' · booking ' + esc(base.ref) + ', booked by ' + esc(base.first) + '. Each adult signs for themselves; a parent or guardian signs for anyone under 18. It takes about a minute.</p>' +
+      (indJust ? indThanks(indJust) : '') + K.ind.statusHTML(base.ref, people(base), indPeople()) +
+      (s.done ? '<p class="mg-small">' + svg('i-info') + 'Need to change something? WhatsApp us on <a href="https://wa.me/27604584478" target="_blank" rel="noopener">060 458 4478</a>.</p>' : (indJust ? '' : K.ind.risksHTML(st.area, { standName: st.name }) + '<h4 class="ind-step-h">' + K.ind.ic('pen') + 'Sign now</h4><div data-ind-form></div>')) +
+      '<div class="demo-flag" style="margin:22px 0 0;text-align:left">' + svg('i-info') + '<span>Demo mode: nothing was sent anywhere. Signed forms stay in this browser, where the admin demo shows them under Indemnities.</span></div>';
+    wireInd($('[data-ind-form]', pane));
+  }
 
   /* ---------- step 3: check ---------- */
   function row(label, was, now) { return '<div class="mg-row"><span class="mg-rl">' + label + '</span><span class="mg-was">' + (was || '<i>empty</i>') + '</span>' + svg('i-arrow') + '<span class="mg-now">' + (now || '<i>empty</i>') + '</span></div>'; }
@@ -450,6 +514,7 @@
         if (named0 < tot0) missing.push('the name' + (tot0 - named0 === 1 ? '' : 's') + ' of ' + (tot0 - named0) + ' more ' + (tot0 - named0 === 1 ? 'person' : 'people'));
       }
       if (!base.eta) missing.push('roughly when you arrive');
+      var is0 = indStatus(); if (!is0.done) missing.push('the indemnity for ' + (is0.total - is0.covered) + ' more ' + (is0.total - is0.covered === 1 ? 'person' : 'people'));
     }
     if (missing.length) steps.push('<b>Still to add before you arrive:</b> ' + esc(missing.length > 1 ? missing.slice(0, -1).join(', ') + ' and ' + missing[missing.length - 1] : missing[0]) + '. Come back with the link to your booking any time before ' + esc(nice(base.ci)) + '.');
     if (a.guests && a.guests.extra) steps.unshift('<b>Your booking is waiting for payment again:</b> ' + K.money(base.total - base.paid) + ' is owing for the added guests. Once it is paid, you can finalise the rest of your booking here.');
@@ -482,7 +547,13 @@
     go(1); window.scrollTo(0, 0);
     Promise.all([K.stands().catch(function () { return []; }), K.prices()]).then(function (r) {
       STANDS = r[0]; P = r[1]; SHOP = K.shopItems(P); demoChips();
-      var q = new URLSearchParams(location.search), b = q.get('b'), k = q.get('k');
+      var q = new URLSearchParams(location.search), b = q.get('b'), k = q.get('k'), sg = q.get('sign');
+      if (sg && K.ind) {
+        var sv = allBookings()[key(sg)], le0 = $('[data-link-err]');
+        if (!sv || q.get('t') !== K.ind.token(sv.ref, sv.key)) { le0.hidden = false; le0.innerHTML = svg('i-info') + '<span>That signing link does not work. Please ask the person who booked to send it again, or <a href="https://wa.me/27604584478" target="_blank" rel="noopener">WhatsApp us</a>.</span>'; return; }
+        if (sv.status === 'cancelled' || sv.co < today() || sv.status === 'out') { le0.hidden = false; le0.innerHTML = svg('i-info') + '<span>Booking <b>' + esc(sv.ref) + '</b> ' + (sv.status === 'cancelled' ? 'was cancelled' : 'is over') + ', so there is nothing to sign.</span>'; return; }
+        document.title = 'Sign the indemnity | Kyleu Bush Camp'; openSign(sv); return;
+      }
       if (!b) return;
       var v = allBookings()[key(b)], le = $('[data-link-err]');
       if (!v || !v.key || v.key !== k) { le.hidden = false; le.innerHTML = svg('i-info') + '<span>That link to your booking does not work. Type your reference and email or mobile below, or <a href="https://wa.me/27604584478" target="_blank" rel="noopener">WhatsApp us</a>.</span>'; f.elements.ref.value = String(b).toUpperCase(); return; }
@@ -511,11 +582,15 @@
       if (t.closest('[data-done]')) { var was = openSec; if (!takeEditor()) return; openSec = ''; drawSecs(); scrollToSec(was); if (changed(was)) K.toast('Got it. You can change something else, or press Next at the bottom.'); return; }
       if (t.closest('[data-cancel]')) { var c0 = openSec; openSec = ''; drawSecs(); scrollToSec(c0); return; }
       if (t.closest('[data-undo]')) { var u = openSec; undo(u); openSec = ''; drawSecs(); scrollToSec(u); K.toast('Put back the way it was'); return; }
+      if (t.closest('[data-ind-pdf]')) { var rp = indJust; if (rp) K.ind.pdf([rp]).catch(function () { K.toast('The PDF could not be made. Check your internet connection.'); }); return; }
+      if (t.closest('[data-ind-next]')) { indJust = null; if (signOnly) drawSign(); else { drawSecs(); scrollToSec('indemnity'); } return; }
+      var cp = t.closest('[data-ind-copy]'); if (cp) { var u = signLink(); (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(function () { K.toast('Link copied. Paste it in a message to them.'); }).catch(function () { window.prompt('Copy this link', u); }); return; }
       var io_ = t.closest('[data-inv-open]'); if (io_) { var vv = clone(base); vv._paid = io_.dataset.invOpen === 'paid'; vv.claim = base.claim; invModal(vv); return; }
+      if (t.closest('[data-ind-open]')) { openSign(base); return; }
       if (t.closest('[data-back1]')) { go(1); return; }
       if (t.closest('[data-next3]')) {
         if (openSec) { if (!takeEditor()) { scrollToSec(openSec); return; } openSec = ''; drawSecs(); }
-        if (!anyChange()) { var n = $('[data-nochange]'); n.hidden = false; n.classList.remove('shake'); void n.offsetWidth; n.classList.add('shake'); return; }
+        if (!anyChange()) { var n = $('[data-nochange]'); if (signedNow) n.innerHTML = svg('i-check') + '<span>Your indemnity signatures are <b>already saved</b>. You have not changed anything else, so there is nothing more to save.</span>'; n.hidden = false; n.classList.remove('shake'); void n.offsetWidth; n.classList.add('shake'); return; }
         drawCheck(); go(3); return;
       }
       if (t.closest('[data-back2]')) { drawSecs(); go(2); return; }
