@@ -36,10 +36,12 @@
       K.frontNews().then(function (list) {
         if (!list.length) return;
         var esc = K.esc, f = list[0], rest = list.slice(1, 3), att = function (x) { return x.ext ? ' target="_blank" rel="noopener"' : ''; };
+        // a round "hot off the press" stamp whose words slowly turn
+        var stamp = '<span class="fp-stamp" aria-hidden="true"><svg viewBox="0 0 120 120"><defs><path id="fp-ring" d="M60 60m-42 0a42 42 0 1 1 84 0a42 42 0 1 1-84 0"/></defs><g class="fp-ring"><text><textPath href="#fp-ring" textLength="262">HOT OFF THE PRESS · KYLEU NEWS ·</textPath></text></g><circle cx="60" cy="60" r="27"/><use href="#i-news" x="46" y="46" width="28" height="28"/></svg></span>';
         $('[data-front-list]', sec).innerHTML =
           '<a class="fp-card' + (f.image ? '' : ' no-img') + '" href="' + esc(f.href) + '"' + att(f) + ' data-reveal>' +
-            (f.image ? '<span class="fp-img"><img src="' + esc(f.image) + '" alt=""></span>' : '') +
-            '<span class="fp-body"><span class="fp-flag"><svg aria-hidden="true"><use href="#i-news"/></svg>Front page news</span><span class="fp-meta">' + esc(f.kind) + (f.date ? ' · ' + fmtDate(f.date) : '') + '</span><strong class="fp-title">' + esc(f.title) + '</strong>' + (f.summary ? '<span class="fp-sum">' + esc(f.summary) + '</span>' : '') + '<span class="btn">Read the full story <svg aria-hidden="true"><use href="#i-arrow"/></svg></span></span></a>' +
+            (f.image ? '<span class="fp-photo"><span class="fp-pol"><span class="tape" aria-hidden="true"></span><img src="' + esc(f.image) + '" alt=""><span class="fp-cap">' + esc(f.kind) + '</span></span>' + stamp + '</span>' : '') +
+            '<span class="fp-body"><span class="eyebrow">Front page news</span><strong class="fp-title">' + esc(f.title) + '</strong><span class="fp-meta">' + esc(f.kind) + (f.date ? ' · ' + fmtDate(f.date) : '') + '</span>' + (f.summary ? '<span class="fp-sum">' + esc(f.summary) + '</span>' : '') + '<span class="btn">Read the full story <svg aria-hidden="true"><use href="#i-arrow"/></svg></span></span>' + (f.image ? '' : stamp) + '</a>' +
           (rest.length ? '<div class="fp-more">' + rest.map(function (x) { return '<a class="fp-mini" href="' + esc(x.href) + '"' + att(x) + ' data-reveal>' + (x.image ? '<img src="' + esc(x.image) + '" alt="" loading="lazy">' : '') + '<span><small>' + esc(x.kind) + (x.date ? ' · ' + fmtDate(x.date) : '') + '</small><b>' + esc(x.title) + '</b></span></a>'; }).join('') + '</div>' : '');
         sec.hidden = false; K.reveal(sec);
       }).catch(function () {});
@@ -325,12 +327,18 @@
     }
 
     /* ---------- Contact: map tabs + form ---------- */
+    // "Our map" is the drawn route map; Google Maps and Satellite load Google's map only when picked
     $$('.map-tabs button').forEach(function (b) {
       b.addEventListener('click', function () {
-        $$('.map-tabs button').forEach(function (x) { x.classList.toggle('on', x === b); });
-        $('.map-wrap iframe').src = b.dataset.src;
+        $$('.map-tabs button').forEach(function (x) { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', x === b ? 'true' : 'false'); });
+        var fr = $('.map-wrap iframe'), fm = $('[data-fmap]'), live = !!b.dataset.src;
+        if (live && fr.getAttribute('src') !== b.dataset.src) fr.src = b.dataset.src;
+        fr.hidden = !live; if (fm) fm.hidden = live;
+        b.closest('.map-wrap').classList.toggle('is-live', live);
       });
     });
+    // no moving car for people who prefer less motion
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) $$('.fm-car animateMotion').forEach(function (a) { a.parentNode.style.display = 'none'; a.remove(); });
     $$('form[data-demo-form]').forEach(function (f) {
       f.addEventListener('submit', function (e) {
         e.preventDefault();

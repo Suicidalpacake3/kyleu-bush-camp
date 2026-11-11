@@ -242,13 +242,36 @@
       });
     }
 
+    /* ---------- a small campfire at the bottom of the "the fire's waiting" panels ---------- */
+    var FIRE = '<div class="campfire" aria-hidden="true"><svg viewBox="0 0 240 150">' +
+      '<ellipse class="cf-pool" cx="120" cy="134" rx="112" ry="15"/>' +
+      '<g class="cf-flames">' +
+        '<path class="cf-f cf-side cf-l" d="M96 128C80 118 74 100 82 80C86 96 94 102 100 104C98 112 98 120 96 128Z"/>' +
+        '<path class="cf-f cf-side cf-r" d="M144 128C160 118 166 98 156 76C153 92 146 100 140 103C142 112 142 120 144 128Z"/>' +
+        '<path class="cf-f cf-outer" d="M120 18C128 44 152 58 151 92C150 116 137 130 120 130C103 130 89 116 89 94C89 70 106 62 109 40C113 52 117 56 120 58C122 46 122 32 120 18Z"/>' +
+        '<path class="cf-f cf-mid" d="M121 48C127 66 142 78 140 100C139 118 131 128 120 128C109 128 100 118 100 104C100 86 112 80 114 66C117 74 119 76 121 78C123 68 123 58 121 48Z"/>' +
+        '<path class="cf-f cf-core" d="M120 80C124 92 131 100 130 112C129 122 125 127 120 127C115 127 110 122 110 114C110 104 117 98 120 80Z"/>' +
+      '</g>' +
+      '<g class="cf-logs"><rect x="58" y="120" width="124" height="15" rx="7.5" transform="rotate(-11 120 128)"/><rect x="58" y="120" width="124" height="15" rx="7.5" transform="rotate(11 120 128)"/>' +
+        '<circle cx="66" cy="115.5" r="6.2" class="cf-end"/><circle cx="174" cy="115.5" r="6.2" class="cf-end"/></g>' +
+      '<g class="cf-stones"><ellipse cx="44" cy="136" rx="13" ry="7"/><ellipse cx="72" cy="140" rx="12" ry="6.5"/><ellipse cx="168" cy="140" rx="12" ry="6.5"/><ellipse cx="196" cy="136" rx="13" ry="7"/></g>' +
+      '</svg></div>';
+    $$('.cta-fire').forEach(function (s) { if (!s.querySelector('.campfire')) { s.insertAdjacentHTML('beforeend', FIRE); s.classList.add('has-fire'); } });
+
     /* ---------- campfire embers ---------- */
     $$('canvas[data-embers]').forEach(function (c) {
       if (reduce) return;
       var ctx = c.getContext('2d'), parts = [], w, h, dpr = Math.min(2, window.devicePixelRatio || 1), running = false;
       function size() { w = c.clientWidth; h = c.clientHeight; c.width = w * dpr; c.height = h * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
       size(); window.addEventListener('resize', size);
-      function spawn() { return { x: w / 2 + (Math.random() - .5) * Math.min(420, w * .5), y: h + 10, vx: (Math.random() - .5) * .5, vy: -(0.6 + Math.random() * 1.6), r: .8 + Math.random() * 2.2, life: 0, max: 200 + Math.random() * 260, hue: 22 + Math.random() * 22 }; }
+      var fireEl = c.parentNode.querySelector('.campfire');
+      function spawn() {
+        if (fireEl && Math.random() < .8) {   // most sparks leave the flames
+          var fr = fireEl.getBoundingClientRect(), cr = c.getBoundingClientRect();
+          return { x: fr.left - cr.left + fr.width / 2 + (Math.random() - .5) * fr.width * .28, y: fr.top - cr.top + fr.height * .35, vx: (Math.random() - .5) * .7, vy: -(0.7 + Math.random() * 1.5), r: .7 + Math.random() * 1.9, life: 0, max: 160 + Math.random() * 240, hue: 24 + Math.random() * 22 };
+        }
+        return { x: w / 2 + (Math.random() - .5) * Math.min(420, w * .5), y: h + 10, vx: (Math.random() - .5) * .5, vy: -(0.6 + Math.random() * 1.6), r: .8 + Math.random() * 2.2, life: 0, max: 200 + Math.random() * 260, hue: 22 + Math.random() * 22 };
+      }
       for (var n = 0; n < 70; n++) { var p = spawn(); p.y = Math.random() * h; p.life = Math.random() * p.max; parts.push(p); }
       function frame() {
         if (!running) return;
