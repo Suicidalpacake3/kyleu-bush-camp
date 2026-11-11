@@ -64,7 +64,7 @@
       vehicles: b.vehTbc ? 0 : (cs.length || b.vehicles || 1), cars: cs.map(function (c) { return { reg: c.reg || '', driver: c.driver || '', guests: (c.guests || []).slice() }; }),
       eta: b.eta || '', shop: pre && pre.items ? clone(pre.items) : {}, total: b.total || 0, paid: (b.payments || []).reduce(function (a, p) { return a + p.amt; }, 0), method: b.method || 'eft',
       request: b.changeReq && !b.changeReq.done ? b.changeReq : null, invoice: (b.invoices || []).slice(-1)[0] || null,
-      claim: b.paidClaim && !b.paidClaim.done ? b.paidClaim : null, created: (b.created || '').slice(0, 10), key: b.key || '', finalised: b.finalised || null, onArrival: b.onArrival || null };
+      claim: b.paidClaim && !b.paidClaim.done ? b.paidClaim : null, popAt: ((b.pops || []).map(function (p) { return p.at || ''; }).filter(Boolean).sort()[0] || '').slice(0, 10), created: (b.created || '').slice(0, 10), key: b.key || '', finalised: b.finalised || null, onArrival: b.onArrival || null };
   }
   function fromWeb(w) {
     var card = w.pay === 'deposit' || w.pay === 'full', shop = {};
@@ -230,12 +230,15 @@
   // what the guest's document is called right now: "quotation" until something is paid, then "invoice"
   // guests see one word, "reservation", whether the document is still a quotation or already an invoice
   function docWord(v) { return 'reservation'; }
-  // an unpaid quotation holds the stand for 5 days (a day longer while Kyleu checks a payment the guest told us about)
+  // an unpaid quotation holds the stand for 5 days. While Kyleu checks a payment the guest told us about, the stand is kept
+  // longer, but the guest is not told for how long: only that we are checking and keeping it.
   function holdOf(v) {
     if (v.paid || v.onArrival || !K.quoteHold) return { state: 'paid' };   // paid, or paying on arrival as arranged with Kyleu: the stand is not on hold
     var pops = []; try { pops = JSON.parse(localStorage.getItem('kyleu-web-pop') || '[]'); } catch (e) {}
-    var claimed = !!v.claim || pops.some(function (x) { return key(x.ref) === key(v.ref); });
-    var h = K.quoteHold({ due: (v.invoice && v.invoice.validTo) || depDueOf(v), paid: 0, claimed: claimed, today: today() });
+    var mine = pops.filter(function (x) { return key(x.ref) === key(v.ref) && x.at; }).map(function (x) { return String(x.at).slice(0, 10); }).concat(v.popAt ? [v.popAt] : []).sort();
+    var claimed = !!v.claim || !!mine.length;
+    var h = K.quoteHold({ due: (v.invoice && v.invoice.validTo) || depDueOf(v), paid: 0, claimed: claimed, popAt: mine[0] || '', today: today(), hol: P && P.holidays });
+    h.pop = !!mine.length;
     if (v.status === 'cancelled') h.state = 'released';
     return h;
   }
@@ -246,10 +249,11 @@
       '<h3>' + esc(st.name) + '</h3><p>' + svg('i-cal') + '<span><b>' + esc(nice(v.ci, true)) + '</b> to <b>' + esc(nice(v.co, true)) + '</b> (' + nights(v.ci, v.co) + ' night' + (nights(v.ci, v.co) === 1 ? '' : 's') + ')</span></p>' +
       '<p>' + svg('i-users') + '<span>' + esc(peopleText(v)) + '</span></p>' +
       '<p class="mg-money">Total <b>' + K.money(v.total) + '</b> · Paid <b>' + K.money(v.paid) + '</b>' + (v.claim ? ' (plus ' + K.money(v.claim.amt) + ' we are checking)' : '') + ' · Still to pay <b>' + K.money(bal) + '</b></p>' +
-      (hold.state === 'held' ? '<p class="mg-claim">' + svg('i-clock') + '<span>Your quotation is valid until <b>' + esc(nice(hold.until, true)) + '</b>. Your stand is held until then.</span></p>'
-        : hold.state === 'soft' ? '<p class="mg-claim">' + svg('i-clock') + '<span>We are checking your payment. Your stand is held until <b>' + esc(nice(hold.until, true)) + '</b>.</span></p>'
-        : hold.state === 'released' ? '<p class="mg-claim bad">' + svg('i-info') + '<span>This quotation expired on <b>' + esc(nice(hold.until || v.ci, true)) + '</b> and the stand was released. WhatsApp or email us and we will help you book again.</span></p>' : '') +
-      (v.claim ? '<p class="mg-claim">' + svg('i-clock') + '<span>You told us you paid <b>' + K.money(v.claim.amt) + '</b> on ' + esc(nice(v.claim.date)) + '. We are checking the bank.</span></p>' : '') +
+      (hold.state === 'released' ? '<p class="mg-claim bad">' + svg('i-info') + '<span>This quotation expired on <b>' + esc(nice(hold.due || v.ci, true)) + '</b> and the stand was released. WhatsApp or email us and we will help you book again.</span></p>'
+        : v.claim ? '<p class="mg-claim">' + svg('i-clock') + '<span>You told us you paid <b>' + K.money(v.claim.amt) + '</b> on ' + esc(nice(v.claim.date)) + '. We are checking the bank, and we are keeping your stand for you.</span></p>'
+        : hold.pop && (hold.state === 'held' || hold.state === 'soft') ? '<p class="mg-claim">' + svg('i-clock') + '<span>We have your proof of payment and are checking it. Your stand is kept for you in the meantime.</span></p>'
+        : hold.state === 'held' ? '<p class="mg-claim">' + svg('i-clock') + '<span>Your quotation is valid until <b>' + esc(nice(hold.due, true)) + '</b>. Your stand is held until then.</span></p>'
+        : hold.state === 'grace' ? '<p class="mg-claim">' + svg('i-clock') + '<span>Your quotation was valid until <b>' + esc(nice(hold.due, true)) + '</b>. If you have paid, press <b>I have paid</b> so we can check it.</span></p>' : '') +
       '<div class="mg-bk-acts"><button type="button" class="btn btn-light btn-sm" data-inv-open>' + svg('i-doc') + 'See your reservation</button>' + (bal > (v.claim ? v.claim.amt : 0) && !v.onArrival && !started(v) && hold.state !== 'released' ? '<button type="button" class="btn btn-green btn-sm" data-inv-open="paid">' + svg('i-check') + (v.claim ? 'I have paid more' : 'I have paid') + '</button>' : '') + '</div></div>' +
       (started(v) ? '' : locked(v) ? '<div class="mg-callout">' + svg('i-info') + '<p><b>Your stay starts within ' + balDays() + ' days.</b> To add or remove people now, please WhatsApp or email us.' + (finalMode(v) ? ' You can still finalise everything else here.' : '') + '</p></div>' : '') +
       (v.onArrival && bal > 0 ? '<p class="mg-claim">' + svg('i-info') + '<span>As arranged with Kyleu, you pay <b>' + K.money(bal) + '</b> ' + (/card/i.test(v.onArrival.how || '') ? 'by card' : 'in cash') + ' when you arrive.</span></p>' : '') +

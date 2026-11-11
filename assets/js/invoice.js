@@ -65,14 +65,39 @@
   K.kindName = kindName;
   // the same word inside a sentence or on a button: "quotation", "invoice" or "tax invoice"
   K.docWord = function (inv) { return kindName(inv).toLowerCase(); };
-  // how long a quotation holds the stand: until the deposit date; if the guest said they paid, one more day while Kyleu checks
-  // o: { due (yyyy-mm-dd), paid, claimed, today (yyyy-mm-dd) }  ->  { state: 'paid' | 'held' | 'soft' | 'released', until }
+  /* ---------- how long an unpaid quotation keeps the stand ----------
+     Set in the admin (Rates & fees > Payment & booking rules), handed to the website with the rest:
+     - skip: 'weekends' (default), 'holidays' (weekends and public holidays) or 'off'.
+       A hold that would run out on a Friday, Saturday or Sunday is kept until the end of Monday,
+       so nothing is released before Kyleu has had a working day to check the bank.
+     - popDays: once the guest uploads proof of payment, the stand is kept this many days from the upload (0 = off).
+       Only Kyleu sees that date: the guest is told we are checking the payment and keeping the stand. */
+  var HOLD0 = { skip: 'weekends', popDays: 10 };
+  K.holdRules = function () {
+    if (K.holdOverride) return Object.assign({}, HOLD0, K.holdOverride() || {});
+    var r = null; try { r = ((JSON.parse(localStorage.getItem('kyleu-web-content') || 'null') || {}).rules || {}).hold; } catch (e) {}
+    return Object.assign({}, HOLD0, r || {});
+  };
+  function plus(s, n) { var d = D(s); d.setDate(d.getDate() + n); return new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10); }
+  // the last day a hold lasts, moved so a stand is never released over a weekend
+  K.holdEnd = function (s, r, hol) {
+    r = r || K.holdRules(); if (!s || r.skip === 'off') return s;
+    var off = function (x) { var w = D(x).getDay(); return w === 0 || w === 6 || (r.skip === 'holidays' && !!(hol && hol[x])); };
+    if (!off(s) && !off(plus(s, 1))) return s;   // runs out on a working day and is released on one
+    var x = plus(s, 1); for (var i = 0; i < 14 && off(x); i++) x = plus(x, 1); return x;
+  };
+  // o: { due (yyyy-mm-dd), paid, claimed, popAt (day the guest uploaded proof of payment), today, hol (public holidays), rules }
+  //  -> { state, until (the last day the stand is kept), due, why: 'quote' | 'weekend' | 'claim' | 'pop' }
+  //  state: 'paid' | 'held' (the quotation is still valid) | 'grace' (it ran out over a weekend, kept until Monday)
+  //         | 'soft' (the guest said they paid or sent proof of payment, kept while Kyleu checks) | 'released'
   K.quoteHold = function (o) {
     if (o.paid > 0) return { state: 'paid' };
-    var d = D(o.due); d.setDate(d.getDate() + 1); var soft = new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
-    if (o.today <= o.due) return { state: 'held', until: o.due };
-    if (o.claimed && o.today <= soft) return { state: 'soft', until: soft };
-    return { state: 'released', until: o.due };
+    var r = o.rules || K.holdRules(), hol = o.hol, until = K.holdEnd(o.due, r, hol), why = until > o.due ? 'weekend' : 'quote';
+    if (o.claimed) { var s = K.holdEnd(plus(o.due, 1), r, hol); if (s > until) { until = s; why = 'claim'; } }   // one more day to check the bank
+    if (o.popAt && +r.popDays > 0) { var p = K.holdEnd(plus(String(o.popAt).slice(0, 10), +r.popDays), r, hol); if (p > until) { until = p; why = 'pop'; } }
+    if (o.today > until) return { state: 'released', until: until, due: o.due, why: why };
+    if (o.today <= o.due) return { state: 'held', until: until, due: o.due, why: why };
+    return { state: o.claimed || o.popAt ? 'soft' : 'grace', until: until, due: o.due, why: why };
   };
   function notes() {
     return ['Please note our Terms & Conditions, on our website (kyleu.co.za/policies.html).',

@@ -43,13 +43,14 @@
     TAKEN = []; var db = null;
     try { db = JSON.parse(localStorage.getItem('kyleu-admin-demo-v1') || 'null'); } catch (e) {}
     // an unpaid quotation holds the stand for 5 days (one more day if the guest said they paid); after that the stand is free again
-    var claimed = {}; try { (K.paidClaims ? K.paidClaims() : []).forEach(function (c) { claimed[c.ref] = 1; }); JSON.parse(localStorage.getItem('kyleu-web-pop') || '[]').forEach(function (x) { if (x.ref) claimed[x.ref] = 1; }); } catch (e) {}
+    var claimed = {}, popAt = {}; try { (K.paidClaims ? K.paidClaims() : []).forEach(function (c) { claimed[c.ref] = 1; }); JSON.parse(localStorage.getItem('kyleu-web-pop') || '[]').forEach(function (x) { if (x.ref) { claimed[x.ref] = 1; var d = String(x.at || '').slice(0, 10); if (d && (!popAt[x.ref] || d < popAt[x.ref])) popAt[x.ref] = d; } }); } catch (e) {}
+    var popOf = function (b) { var a = (b.pops || []).map(function (p) { return String(p.at || '').slice(0, 10); }).filter(Boolean).concat(popAt[b.ref] ? [popAt[b.ref]] : []).sort(); return a[0] || ''; };
     var t0 = iso(today()), dueOf = function (created, ci) { var c = parse(String(created || t0).slice(0, 10)), d = addDays(c, depDays()), bd = addDays(parse(ci), -P.num('Booking rules', 'Balance due days before arrival', 7)), soon = addDays(c, 1); if (soon > parse(ci)) soon = parse(ci); return iso(bd < d ? (bd < soon ? soon : bd) : d); };
-    var released = function (due, paidAmt, claim) { return K.quoteHold && P && K.quoteHold({ due: due, paid: paidAmt, claimed: claim, today: t0 }).state === 'released'; };
+    var released = function (due, paidAmt, claim, pa) { return K.quoteHold && P && K.quoteHold({ due: due, paid: paidAmt, claimed: claim, popAt: pa || '', today: t0, hol: P.holidays }).state === 'released'; };
     if (db && db.bookings) {
       db.bookings.forEach(function (b) {
         if (b.status === 'cancelled') return;
-        if (b.status === 'pending' && released(dueOf(b.created, b.ci), (b.payments || []).reduce(function (a, p) { return a + (p.amt || 0); }, 0), !!(b.paidClaim || b.pop || claimed[b.ref]))) return;
+        if (b.status === 'pending' && released(dueOf(b.created, b.ci), (b.payments || []).reduce(function (a, p) { return a + (p.amt || 0); }, 0), !!(b.paidClaim || b.pop || claimed[b.ref]), popOf(b))) return;
         TAKEN.push({ stand: b.stand, from: b.ci, to: b.co });
       });
       (db.blocks || []).forEach(function (k) { TAKEN.push({ stand: k.stand, from: k.from, to: k.to }); });
@@ -57,7 +58,7 @@
     }
     try { JSON.parse(localStorage.getItem('kyleu-web-bookings') || '[]').forEach(function (b) {
       if (!b.stand || !b.ci || !b.co || b.cancelled) return;
-      if (!b.paid && released((b.invoice && b.invoice.depositDue) || dueOf(b.created, b.ci), 0, !!claimed[b.ref])) return;
+      if (!b.paid && released((b.invoice && b.invoice.depositDue) || dueOf(b.created, b.ci), 0, !!claimed[b.ref], popAt[b.ref])) return;
       TAKEN.push({ stand: b.standId || b.stand, from: b.ci, to: b.co });
     }); } catch (e) {}
     return TAKEN;

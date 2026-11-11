@@ -78,7 +78,7 @@
         try { localStorage.setItem('kyleu-web-pop', JSON.stringify(list.slice(-10))); }
         catch (x) { item.file.data = ''; list[list.length - 1] = item; try { localStorage.setItem('kyleu-web-pop', JSON.stringify(list.slice(-10))); } catch (y) {} }
         f.innerHTML = '<div class="success"><div class="success-badge"><svg class="ring" viewBox="0 0 110 110" fill="none" stroke="#3f7d3a" stroke-width="6" stroke-linecap="round"><circle cx="55" cy="55" r="50"/><path d="M34 57l14 14 28-30"/></svg></div>' +
-          '<h2>Thank you, we\'ve got it</h2><p class="muted">Your proof of payment is on booking <b>' + esc(item.ref) + '</b>. We\'ll check the bank and email <b>' + esc(item.email) + '</b> as soon as your booking is confirmed, usually within one working day.</p>' +
+          '<h2>Thank you, we\'ve got it</h2><p class="muted">Your proof of payment is on booking <b>' + esc(item.ref) + '</b>. We\'ll check the bank and email <b>' + esc(item.email) + '</b> as soon as your booking is confirmed, usually within one working day. Your stand is kept for you while we check.</p>' +
           '<div class="cta-actions" style="justify-content:center"><a class="btn" href="index.html">Back to the website</a><a class="btn btn-ghost" href="contact.html">Directions to camp</a></div>' +
           '<div class="demo-flag" style="margin:22px 0 0;text-align:left"><svg><use href="#i-info"/></svg><span>Demo mode: nothing was sent. Open the admin demo (Staff link in the footer) in this browser to see it on the booking.</span></div></div>';
         window.scrollTo({ top: f.getBoundingClientRect().top + scrollY - 120, behavior: 'smooth' });

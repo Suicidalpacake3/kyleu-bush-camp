@@ -87,6 +87,11 @@
     if (soon > b.ci) soon = b.ci;
     return bd < d ? (bd < soon ? soon : bd) : d;   // arriving within a week: the next day (or the arrival day)
   }
+  // how long an unpaid booking keeps its stand (Rates & fees > Payment & booking rules)
+  function holdRules() { return Object.assign({ skip: 'weekends', popDays: 10 }, (DB && DB.web && DB.web.hold) || {}); }
+  function popAt(b) { var a = (b.pops || []).map(function (p) { return p.at || ''; }).filter(Boolean).sort()[0]; return a ? a.slice(0, 10) : ''; }
+  function holdOf(b) { return K.quoteHold({ due: depositDue(b), paid: paid(b), claimed: !!(b.paidClaim || b.pop), popAt: popAt(b), today: TODAY, hol: P.holidays, rules: holdRules() }); }
+  function keptEnd(d) { return d === TODAY ? 'tonight (midnight)' : 'the end of ' + fdw(d); }
   function payFullOf(b) { return diff(b.created.slice(0, 10), b.ci) <= num('Booking rules', 'Balance due days before arrival', 7) + num('Booking rules', 'Deposit due within days of invoice', 5); }
   function balanceDue(b) { return add(b.ci, -num('Booking rules', 'Balance due days before arrival', 7)); }
   function guestName(b) { return b.guest.first + ' ' + b.guest.last; }
@@ -104,7 +109,7 @@
     if (b.status === 'out') return { k: 'out', t: 'Departed', tone: 'muted' };
     if (b.status === 'in') return { k: 'in', t: 'In camp', tone: 'ok' };
     if (b.status === 'pending') {
-      if (b.softHold) return { k: 'soft', t: 'Soft hold until ' + fd(b.softHold), tone: 'bad' };
+      if (b.softHold) return { k: 'soft', t: (b.holdWhy === 'pop' ? 'Proof of payment in' : b.holdWhy === 'claim' ? 'Checking payment' : 'Quotation ran out') + ', kept until ' + fdw(b.softHold), tone: b.holdWhy === 'pop' && diff(TODAY, b.softHold) > 2 ? 'info' : 'bad' };
       if (b.pop) return { k: 'pop', t: 'Proof of payment in', tone: 'info' };
       if (TODAY > depositDue(b)) return { k: 'overdue', t: 'EFT overdue', tone: 'bad' };
       return { k: 'pending', t: 'Awaiting EFT', tone: 'warn' };
@@ -310,19 +315,20 @@
     migrate(); importWeb(); importAmend(); importPop(); importPaid(); sweepHolds();
   }
   /* ---------- an unpaid quotation holds the stand for 5 days ----------
-     After that the stand is released by itself. If the guest said they paid (or sent proof of payment)
-     and it is not confirmed yet, a soft hold keeps the stand one more day while Kyleu checks the bank.
-     Live version: the server does this every night. */
+     After that the stand is released by itself, but never over a weekend: a hold that runs out on a
+     Friday, Saturday or Sunday lasts until the end of Monday. If the guest said they paid, the stand is
+     kept one more day while Kyleu checks the bank; if they uploaded proof of payment, 10 days from the upload.
+     Both are set on Rates & fees > Payment & booking rules. Live version: the server does this every night. */
   function sweepHolds() {
     var n = 0;
     DB.bookings.forEach(function (b) {
       if (b.status !== 'pending' || paid(b) > 0) { if (b.softHold) b.softHold = null; return; }
-      var claimed = !!(b.paidClaim || b.pop), h = K.quoteHold({ due: depositDue(b), paid: 0, claimed: claimed, today: TODAY });
+      var h = holdOf(b);
       if (h.state === 'released') {
         b.status = 'cancelled'; b.softHold = null; b.released = { at: nowStamp(), due: depositDue(b) };
-        b.notes = b.notes || []; b.notes.push({ at: nowStamp(), by: 'System', text: 'Stand released automatically: the quotation was valid until ' + fd(depositDue(b)) + ' and no payment came in.' + (claimed ? ' The guest said they paid, but it was not confirmed within the extra day.' : '') });
+        b.notes = b.notes || []; b.notes.push({ at: nowStamp(), by: 'System', text: 'Stand released automatically: the quotation was valid until ' + fd(depositDue(b)) + ' and no payment came in.' + (h.until > h.due ? ' It was kept until ' + fd(h.until) + (h.why === 'pop' ? ' because proof of payment was uploaded on ' + fd(popAt(b)) : h.why === 'claim' ? ' because the guest said they paid' : ' because it ran out over a weekend') + ', but the payment was not confirmed.' : '') });
         log('Stand released automatically: ' + guestName(b) + ', ' + standById(b.stand).name + ', ' + fd(b.ci) + ' (quotation not paid)', b.ref); n++;
-      } else b.softHold = h.state === 'soft' ? h.until : null;
+      } else { b.softHold = h.state === 'soft' || h.state === 'grace' ? h.until : null; b.holdWhy = b.softHold ? h.why : null; }
     });
     if (n) save();
   }
@@ -567,8 +573,7 @@
     // what is holding the stand (unpaid quotations)
     var balLate = b.status === 'confirmed' && bal > 0 && balanceDue(b) < TODAY;
     var holdTxt = b.status === 'confirmed' && bal > 0 ? (balLate ? '<b>Balance of ' + money(bal) + ' was due ' + fd(balanceDue(b)) + '</b> (' + rel(balanceDue(b)) + '). Remind ' + esc(b.guest.first) + ' or record the payment.' : 'Balance of <b>' + money(bal) + '</b> due by <b>' + fd(balanceDue(b), { weekday: 'short', day: 'numeric', month: 'short' }) + '</b> (' + rel(balanceDue(b)) + ').')
-      : b.status !== 'pending' ? '' : b.softHold ? '<b>Soft hold until ' + (b.softHold === TODAY ? 'tonight' : fd(b.softHold)) + '.</b> Confirm the payment, or the stand is released automatically.'
-      : 'Quotation valid until <b>' + fd(depositDue(b), { weekday: 'short', day: 'numeric', month: 'short' }) + '</b> (' + rel(depositDue(b)) + '). ' + (payFullOf(b) ? 'The full amount' : 'A deposit of') + ' <b>' + money(deposit(b)) + '</b> secures the stand.';
+      : b.status !== 'pending' ? '' : holdTxtOf(b);
     var nCars = cs0.length, nNotes = (b.notes || []).length + DB.threads.filter(function (t) { return t.ref === b.ref || t.email === b.guest.email; }).length;
     var TABS = [['overview', 'Overview'], ['vehicles', 'Vehicles & indemnity'], ['money', 'Money'], ['notes', 'Messages & notes' + (nNotes ? ' (' + nNotes + ')' : '')]];
     if (cancelled && PTAB === 'vehicles') PTAB = 'overview';
@@ -1058,6 +1063,7 @@
   // the old example wording is replaced by Kyleu's own indemnity (K.ind.DEFAULT) unless someone changed it
   function indText() { var t = DB.settings && DB.settings.indemnity; return t && t !== IND_OLD ? t : K.ind.DEFAULT; }
   if (K.ind) K.ind.override = function () { return DB ? indText() : ''; };
+  K.holdOverride = function () { return DB ? holdRules() : null; };
   function printIndemnity(ref, cid) {
     var b = ref ? byRef(ref) : null, c = b && cid ? (b.cars || []).filter(function (x) { return x.id === cid; })[0] : null, rows = Math.max(4, c && c.people ? c.people : b ? people(b) : 6);
     var w = window.open('', '_blank'); if (!w) { toast('Allow pop-ups to print the form'); return; }
@@ -1136,7 +1142,7 @@
     var w = webDB(), prices = {};
     Object.keys(DB.rates || {}).forEach(function (k) { prices[k] = { amount: DB.rates[k] }; });
     Object.keys(w.rateText).forEach(function (k) { prices[k] = Object.assign(prices[k] || {}, w.rateText[k]); });
-    var out = { prices: prices, text: w.text, settings: w.settings, hol: DB.hol || null, home: w.home, rules: { wkDays: w.wkDays && w.wkDays.length ? w.wkDays : null }, indemnity: indText() };
+    var out = { prices: prices, text: w.text, settings: w.settings, hol: DB.hol || null, home: w.home, rules: { wkDays: w.wkDays && w.wkDays.length ? w.wkDays : null, hold: w.hold || null }, indemnity: indText() };
     if (DB.products) out.shop = DB.products.filter(function (p) { return p.active !== false; }).map(function (p) { return { label: p.label, amount: p.amount, note: p.note || '', img: p.img || '', cat: p.cat || '' }; });
     try { localStorage.setItem(WEBK, JSON.stringify(out)); } catch (e) {}
   }
@@ -1600,11 +1606,11 @@
     attention = attention.filter(function (a) { return !DB.dismissed[a.key]; });
     attention.sort(function (a, b) { return a.o - b.o; });
     // soft holds go right at the top: the stand is released at midnight unless the payment is confirmed
-    var softs = DB.bookings.filter(function (b) { return b.status === 'pending' && b.softHold; }).sort(function (a, b) { return a.softHold < b.softHold ? -1 : 1; });
+    var softs = DB.bookings.filter(function (b) { return b.status === 'pending' && b.softHold && (b.holdWhy !== 'pop' || diff(TODAY, b.softHold) <= 2); }).sort(function (a, b) { return a.softHold < b.softHold ? -1 : 1; });
     var softHtml = softs.map(function (b) {
-      var c = b.paidClaim, when = b.softHold === TODAY ? 'tonight at midnight' : 'tomorrow at midnight';
-      return '<button type="button" class="soft-alert" data-open="' + b.ref + '">' + ic('alert') + '<span><b>Soft hold ends ' + when + ': ' + esc(guestName(b)) + ', ' + esc(standById(b.stand).name) + ', ' + fd(b.ci) + '.</b> ' +
-        (c ? esc(b.guest.first) + ' says they paid ' + money(c.amt) + ' on ' + fd(c.date) : 'Proof of payment was uploaded') + ', but it is not confirmed yet. Check the bank and press <b>Money is in</b>, or the stand is released automatically.</span>' + ic('chev-r', 'chev') + '</button>';
+      var c = b.paidClaim, when = b.softHold === TODAY ? 'tonight at midnight' : 'after ' + fdw(b.softHold);
+      return '<button type="button" class="soft-alert" data-open="' + b.ref + '">' + ic('alert') + '<span><b>Stand released ' + when + ': ' + esc(guestName(b)) + ', ' + esc(standById(b.stand).name) + ', ' + fd(b.ci) + '.</b> ' +
+        (c ? esc(b.guest.first) + ' says they paid ' + money(c.amt) + ' on ' + fd(c.date) + ', but it is not confirmed yet' : b.holdWhy === 'pop' ? 'Proof of payment was uploaded on ' + fd(popAt(b)) + ', but it is not confirmed yet' : 'The quotation ran out on ' + fdw(depositDue(b)) + ' (over a weekend) and no payment is recorded') + '. Check the bank and press <b>Money is in</b>, or the stand is released automatically.</span>' + ic('chev-r', 'chev') + '</button>';
     }).join('');
     // occupancy next 30 nights
     var occ = []; for (var i = 0; i < 30; i++) { var d = add(TODAY, i), n = Object.keys(standsBookedOn(d)).length, wk = isWeekendNight(d); occ.push({ label: D(d).getDate(), a: n, tip: fdw(d) + ': ' + n + ' of ' + STANDS.length + ' stands booked (' + Math.round(n / STANDS.length * 100) + '%)', hl: wk }); }
@@ -1658,6 +1664,14 @@
       }).join('') : '<tr><td colspan="7" class="empty">No bookings match.</td></tr>') + '</tbody></table></div>';
   }
 
+  function holdTxtOf(b) {
+    var h = holdOf(b); if (h.state === 'paid') h = { state: 'held', due: depositDue(b), until: depositDue(b), why: 'quote' };
+    var end = '<b>' + keptEnd(h.until) + '</b>', pa = popAt(b);
+    if (h.why === 'pop') return '<b>Proof of payment uploaded ' + fd(pa) + '.</b> The stand is kept until ' + end + ' (' + holdRules().popDays + ' days after the upload) while you check the bank. The guest is only told we are checking and keeping their stand. Press Money is in once it shows, or the stand is released after that.';
+    if (h.state === 'soft') return '<b>' + esc(b.guest.first) + ' says they paid.</b> The stand is kept until ' + end + ' while you check the bank. Confirm the payment, or the stand is released automatically.';
+    if (h.state === 'grace') return '<b>The quotation ran out on ' + fdw(h.due) + '.</b> That was over a weekend, so the stand is kept until ' + end + '. Record the payment if it came in, or the stand is released automatically.';
+    return 'Quotation valid until <b>' + fdw(h.due) + '</b> (' + rel(h.due) + '). ' + (payFullOf(b) ? 'The full amount' : 'A deposit of') + ' <b>' + money(deposit(b)) + '</b> secures the stand.' + (h.why === 'weekend' ? ' It runs out over a weekend, so the stand is kept until ' + end + '.' : '');
+  }
   function vEft() {
     var pend = DB.bookings.filter(function (b) { return b.status === 'pending'; });
     var pop = pend.filter(function (b) { return b.pop; }), over = pend.filter(function (b) { return !b.pop && TODAY > depositDue(b); }), wait = pend.filter(function (b) { return !b.pop && TODAY <= depositDue(b); });
@@ -1665,14 +1679,14 @@
     function card(b, kind) {
       var amt = kind === 'bal' ? balance(b) : deposit(b), due = kind === 'bal' ? balanceDue(b) : depositDue(b), left = diff(TODAY, due);
       return '<article class="eft-card ' + kind + '"><div class="eft-top" data-open="' + b.ref + '"><div><b>' + esc(guestName(b)) + '</b><small>' + esc(b.ref) + ' · ' + esc(standById(b.stand).name) + ' · ' + fd(b.ci) + ' to ' + fd(b.co) + '</small></div><div class="eft-amt"><b>' + money(amt) + '</b><small>' + (kind === 'bal' ? 'balance' : payFullOf(b) ? 'full amount (arrives soon)' : depPct() + '% deposit') + (hasFee() ? ' · card ' + money(kind === 'bal' ? b.card - paid(b) : Math.round(b.card * depPct() / 100)) : '') + '</small></div></div>' +
-        '<div class="eft-due ' + (left < 0 ? 'bad-t' : left <= 1 ? 'warn-t' : '') + '">' + ic('clock') + (b.softHold && kind !== 'bal' ? '<b>Soft hold until ' + (b.softHold === TODAY ? 'tonight' : fd(b.softHold) + ' night') + '.</b> Confirm the payment, or the stand is released' : left < 0 ? 'Overdue by ' + -left + ' day' + (-left > 1 ? 's' : '') : 'Due ' + fd(due) + ' (' + rel(due) + ')') + (b.paidClaim ? '<span class="info-t pop-line">' + ic('bank') + esc(b.guest.first) + ' says they paid ' + money(b.paidClaim.amt) + ' on ' + fd(b.paidClaim.date) + ': check the bank</span>' : '') + (b.pop && (b.pops || []).length ? '<span class="info-t pop-line">' + ic('note') + 'Proof of payment received' + ((b.pops || []).length ? ' ' + whenSaid(b.pops[b.pops.length - 1].at) + ', check the bank:' : ': check the bank') + '</span>' + popChips(b) : '') + '</div>' +
-        '<div class="eft-act"><button class="btn sm" data-act="pay" data-ref="' + b.ref + '">' + ic('check') + 'Money is in</button><button class="btn sm ghost" data-act="remind" data-ref="' + b.ref + '">' + ic('send') + 'Remind</button>' + (kind === 'over' ? '<button class="btn sm ghost danger-t" data-act="release" data-ref="' + b.ref + '">' + ic('x') + 'Release stand</button>' : '') + '</div></article>';
+        '<div class="eft-due ' + (left < 0 ? 'bad-t' : left <= 1 ? 'warn-t' : '') + '">' + ic('clock') + (b.softHold && kind !== 'bal' ? '<b>Kept until ' + keptEnd(b.softHold) + '.</b> Confirm the payment, or the stand is released' : kind !== 'bal' && holdOf(b).until > due ? 'Due ' + fd(due) + ' (' + rel(due) + '). Stand kept until ' + keptEnd(holdOf(b).until) + (holdOf(b).why === 'pop' ? ' (proof of payment)' : ' (not over a weekend)') : left < 0 ? 'Overdue by ' + -left + ' day' + (-left > 1 ? 's' : '') : 'Due ' + fd(due) + ' (' + rel(due) + ')') + (b.paidClaim ? '<span class="info-t pop-line">' + ic('bank') + esc(b.guest.first) + ' says they paid ' + money(b.paidClaim.amt) + ' on ' + fd(b.paidClaim.date) + ': check the bank</span>' : '') + (b.pop && (b.pops || []).length ? '<span class="info-t pop-line">' + ic('note') + 'Proof of payment received' + ((b.pops || []).length ? ' ' + whenSaid(b.pops[b.pops.length - 1].at) + ', check the bank:' : ': check the bank') + '</span>' + popChips(b) : '') + '</div>' +
+        '<div class="eft-act"><button class="btn sm" data-act="pay" data-ref="' + b.ref + '">' + ic('check') + 'Money is in</button><button class="btn sm ghost" data-act="remind" data-ref="' + b.ref + '">' + ic('send') + 'Remind</button>' + (kind === 'over' || (kind === 'pop' && TODAY > depositDue(b)) ? '<button class="btn sm ghost danger-t" data-act="release" data-ref="' + b.ref + '">' + ic('x') + 'Release stand</button>' : '') + '</div></article>';
     }
     var sec = function (title, sub, list, kind) { return '<section class="eft-sec"><h3>' + title + ' <span class="count">' + list.length + '</span></h3><p class="muted small">' + sub + '</p>' + (list.length ? '<div class="eft-grid">' + list.map(function (b) { return card(b, kind); }).join('') + '</div>' : '<p class="empty">Nothing here.</p>') + '</section>'; };
     return '<div class="page-h"><div><h1>EFT payments</h1><p class="muted">' + (hasFee() ? 'Guests who chose EFT pay the normal price (no ' + cardFee() + '% card fee). ' : 'Guests pay by EFT. Proof of payment from the website lands here. ') + 'Match their payments here.</p></div></div>' +
       '<div class="card match"><label class="search big">' + ic('search') + '<input data-match placeholder="Paste the reference from the bank statement, e.g. KY26-4F2K" aria-label="Bank reference"></label><div data-match-out class="muted small">Tip: guests use their booking reference when they pay, so you can paste it straight from the bank app.</div></div>' +
       sec('Proof of payment received', 'The guest says they paid. Check the bank, then confirm.', pop, 'pop') +
-      sec('Waiting for payment', 'Quotation sent. It holds the stand for ' + num('Booking rules', 'Deposit due within days of invoice', 5) + ' days; after that the stand is released automatically.', wait, 'wait') +
+      sec('Waiting for payment', 'Quotation sent. It holds the stand for ' + num('Booking rules', 'Deposit due within days of invoice', 5) + ' days; after that the stand is released automatically' + (holdRules().skip !== 'off' ? ', never over a weekend.' : '.'), wait, 'wait') +
       sec('Overdue', 'Past the deadline. Send a last reminder or release the stand for other guests.', over, 'over') +
       sec('EFT balances due soon', 'Balances are due ' + num('Booking rules', 'Balance due days before arrival', 7) + ' days before arrival.', bal, 'bal');
   }
@@ -2683,7 +2697,7 @@
       body = '<section class="card"><header class="card-h"><h3>Weekend-rate nights</h3><span class="muted small">Saves as you tick</span></header><p class="muted small">Tick the nights that cost the weekend rate. All other nights cost the weekday rate. The night before a public holiday always costs the weekend rate.</p>' +
         '<div class="wk-days">' + [1, 2, 3, 4, 5, 6, 0].map(function (d) { return '<label class="check wk-day' + (wkd.indexOf(d) >= 0 ? ' on' : '') + '"><input type="checkbox" data-wkday="' + d + '"' + (wkd.indexOf(d) >= 0 ? ' checked' : '') + '><span>' + DN[d] + ' night</span></label>'; }).join('') + '</div>' +
         '<p class="hint">' + ic('info') + ' Now: weekday rate on ' + (wdNames.length ? esc(wdNames.join(', ')) : 'no') + ' nights. If you change this, also update the rate descriptions on the <b>Wording and Dinokeng fees</b> tab so the website says the same. Bookings already made keep their price.</p></section>' +
-        '<section class="card rules">' + R.map(function (r) { return '<div class="rule"><div><b>' + r[2] + '</b><p class="muted small">' + r[3] + '</p></div>' + rateIn(br, r[0], { unit: r[1], aria: r[2] }) + '</div>'; }).join('') + '</section>';
+        holdCard() + '<section class="card rules">' + R.map(function (r) { return '<div class="rule"><div><b>' + r[2] + '</b><p class="muted small">' + r[3] + '</p></div>' + rateIn(br, r[0], { unit: r[1], aria: r[2] }) + '</div>'; }).join('') + '</section>';
     }
     if (RT.tab === 'holidays') {
       var hol = Object.keys(P.holidays).filter(function (d) { return d >= TODAY; }).sort();
@@ -2694,6 +2708,15 @@
     return '<div class="page-h"><div><h1>Rates & fees</h1><p class="muted">Enter the price guests pay. There is one price for everyone, however they pay. Dinokeng\'s fees belong to the reserve, so they are not here.</p></div></div>' +
       '<div class="rp-tabs page-tabs">' + tabs.map(function (t) { return '<button class="' + (RT.tab === t[0] ? 'on' : '') + '" data-ratetab="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div>' + body +
       '<div class="savebar" data-savebar hidden><span>' + ic('info') + 'You have unsaved changes</span><button class="btn ghost" data-act="rates-discard">Discard</button><button class="btn" data-act="save-rates">Save changes</button></div>';
+  }
+  // when an unpaid stand is released: never over a weekend, and kept longer once proof of payment is uploaded
+  function holdCard() {
+    var h = holdRules();
+    return '<section class="card rules"><header class="card-h"><h3>When an unpaid stand is released</h3><span class="muted small">Saves as you change it</span></header>' +
+      '<div class="rule"><div><b>Not over a weekend</b><p class="muted small">If a quotation, or the extra time below, runs out on a Friday, Saturday or Sunday, the stand is kept until the end of Monday. That gives a working day to check the bank and press Money is in before anything is released.</p></div>' +
+      '<select data-hold="skip" aria-label="Not over a weekend">' + [['weekends', 'Weekends'], ['holidays', 'Weekends and public holidays'], ['off', 'Off: release on the day']].map(function (o) { return '<option value="' + o[0] + '"' + (h.skip === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>' +
+      '<div class="rule"><div><b>After proof of payment is uploaded</b><p class="muted small">The stand is kept this many days from the upload, so you have time to see the money in the bank. The guest is not told the number of days: they see that the payment is being checked and their stand is kept. 0 turns this off.</p></div>' +
+      '<label class="money-in unit"><input data-hold="popDays" inputmode="numeric" value="' + (+h.popDays || 0) + '" aria-label="Days after proof of payment"><span>days</span></label></div></section>';
   }
   function applyHol() { DB.hol = DB.hol || { add: {}, del: {} }; Object.keys(DB.hol.del).forEach(function (d) { delete P.holidays[d]; }); Object.keys(DB.hol.add).forEach(function (d) { P.holidays[d] = DB.hol.add[d]; }); }
 
@@ -3634,6 +3657,14 @@
       if (!wv || wv === wx.def) { if (ww.text[wx.key] == null) { wt.value = wx.def; return; } delete ww.text[wx.key]; log('Website wording put back to the original: "' + wx.def.slice(0, 60) + '"'); }
       else { if (ww.text[wx.key] === wv) return; ww.text[wx.key] = wv; log('Website wording changed: "' + wv.slice(0, 60) + '"'); }
       save(); var wy = window.scrollY; render(); window.scrollTo(0, wy); toast('Saved. The website shows it now.'); return;
+    }
+    if (wt.matches && wt.matches('[data-hold]')) {
+      var hw = webDB(), hh = holdRules(), hk = wt.dataset.hold;
+      if (hk === 'popDays') { var hn = parseInt(String(wt.value).replace(/[^\d]/g, ''), 10); if (isNaN(hn) || hn > 60) { toast('Type a number of days from 0 to 60'); wt.value = hh.popDays; return; } hh.popDays = hn; }
+      else hh.skip = wt.value;
+      hw.hold = hh.skip === 'weekends' && +hh.popDays === 10 ? null : { skip: hh.skip, popDays: +hh.popDays };
+      log('Release rules changed: ' + (hh.skip === 'off' ? 'stands can be released over a weekend' : 'not over ' + (hh.skip === 'holidays' ? 'weekends and public holidays' : 'weekends')) + ', kept ' + hh.popDays + ' days after proof of payment');
+      sweepHolds(); save(); var hy = window.scrollY; render(); window.scrollTo(0, hy); toast('Saved. Unpaid bookings use it straight away.'); return;
     }
     if (wt.matches && wt.matches('[data-wkday]')) {
       var wds = $$('[data-wkday]').filter(function (x) { return x.checked; }).map(function (x) { return +x.dataset.wkday; });
