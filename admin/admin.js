@@ -3111,21 +3111,32 @@
 
 
   /* ---------- Dinokeng codes page: arrivals and which codes are still to send ---------- */
+  // who has paid: codes usually go to guests who have paid in full
+  var VF = { pay: '' };
+  function vPay(b) {
+    if (paidUp(b)) return { k: 'full', html: '<span class="pill ok vp">' + ic('check') + 'Paid in full</span>' };
+    if (b.status === 'pending' || !paid(b)) return { k: 'none', html: '<span class="pill bad vp"><i></i>Nothing paid yet</span>' };
+    if (b.onArrival) return { k: 'part', html: '<span class="pill info vp"><i></i>' + money(balance(b)) + ' on arrival</span>' };
+    return { k: 'part', html: '<span class="pill warn vp"><i></i>' + money(balance(b)) + ' still to pay</span>' };
+  }
   function vVouchers() {
-    var up = DB.bookings.filter(function (b) { return live(b) && b.status !== 'out' && b.ci >= TODAY && diff(TODAY, b.ci) <= 30; }).sort(function (a, b) { return a.ci < b.ci ? -1 : 1; });
+    var all = DB.bookings.filter(function (b) { return live(b) && b.status !== 'out' && b.ci >= TODAY && diff(TODAY, b.ci) <= 30; }).sort(function (a, b) { return a.ci < b.ci ? -1 : 1; });
+    var nFull = all.filter(function (b) { return vPay(b).k === 'full'; }).length, readyToSend = all.filter(function (b) { return vPay(b).k === 'full' && codesTodo(b) > 0; });
+    var up = all.filter(function (b) { var k = vPay(b).k; return !VF.pay || (VF.pay === 'full' ? k === 'full' : k !== 'full'); });
     var week = up.filter(function (b) { return diff(TODAY, b.ci) <= 7; }), later = up.filter(function (b) { return diff(TODAY, b.ci) > 7; });
-    var todo = week.filter(function (b) { return codesTodo(b) > 0; }), month = TODAY.slice(0, 7);
+    var todo = all.filter(function (b) { return diff(TODAY, b.ci) <= 7 && codesTodo(b) > 0; }), month = TODAY.slice(0, 7);
     var sentMonth = DB.bookings.reduce(function (a, b) { return a + (b.cars || []).filter(function (c) { return c.dgrSent && String(c.dgrSent.at).slice(0, 7) === month; }).length; }, 0);
     var row = function (b) {
       var n = ensureCars(b).length, t = codesTodo(b);
-      return '<div class="brow"><span class="brow-st">' + fd(b.ci) + '</span><span class="brow-g" data-open="' + b.ref + '"><b>' + esc(guestName(b)) + '</b><small>' + esc(b.guest.email || 'No email') + ' · ' +
-        (b.vehTbc ? 'not sure yet how many vehicles' : !t ? 'all ' + n + ' sent' : t === n ? n + ' vehicle' + (n === 1 ? '' : 's') + ', none sent' : t + ' of ' + n + ' vehicles still to send') + (b.status === 'pending' ? ' · deposit not paid yet' : '') + '</small></span>' +
-        (t ? '<button class="btn sm ghost" data-act="dgr" data-ref="' + b.ref + '">' + ic('gift') + 'Add codes</button>' : '<span class="pill ok">' + ic('check') + 'Sent</span>') + '</div>';
+      return '<div class="brow vrow"><span class="brow-st">' + fd(b.ci) + '</span><span class="brow-g" data-open="' + b.ref + '"><b>' + esc(guestName(b)) + '</b><small>' + esc(b.guest.email || 'No email') + ' · ' +
+        (b.vehTbc ? 'not sure yet how many vehicles' : !t ? 'all ' + n + ' sent' : t === n ? n + ' vehicle' + (n === 1 ? '' : 's') + ', none sent' : t + ' of ' + n + ' vehicles still to send') + '</small></span>' +
+        vPay(b).html + (t ? '<button class="btn sm ghost" data-act="dgr" data-ref="' + b.ref + '">' + ic('gift') + 'Add codes</button>' : '<span class="pill ok vsent">' + ic('check') + 'Codes sent</span>') + '</div>';
     };
     return '<div class="page-h"><div><h1>Dinokeng vouchers</h1><p class="muted">Kyleu is a proud DGR CP member, so overnight guests qualify for Conservation Fee Discount Vouchers and pay R85 instead of R100 per adult per night. Make one code per vehicle on the Dinokeng site, paste it on the booking and send it to the client yourself by WhatsApp or email. Dinokeng does not send them.</p></div><div class="ph-act"><a class="btn ghost" href="' + esc(dgrLink()) + '" target="_blank" rel="noopener">' + ic('ext') + 'Open Dinokeng site</a></div></div>' +
-      '<div class="kpis">' + tile('Still to send this week', todo.length, todo.length ? 'Bookings arriving in the next 7 days' : 'All sent for this week', null, todo.length ? 'warn' : 'ok') + tile('Codes sent this month', sentMonth, 'one per vehicle') + tile('Arriving in the next 30 days', up.length, up.reduce(function (a, b) { return a + ensureCars(b).length; }, 0) + ' vehicles') + '</div>' +
-      '<section class="card"><header class="card-h"><h3>Arriving in the next 7 days</h3><span class="count">' + week.length + '</span></header>' + (week.length ? week.map(row).join('') : '<p class="empty">Nobody arriving in the next 7 days.</p>') + '</section>' +
-      '<section class="card"><header class="card-h"><h3>Later this month</h3><span class="count">' + later.length + '</span></header>' + (later.length ? later.map(row).join('') : '<p class="empty">No other arrivals in the next 30 days.</p>') + '</section>';
+      '<div class="kpis">' + tile('Still to send this week', todo.length, todo.length ? 'Bookings arriving in the next 7 days' : 'All sent for this week', null, todo.length ? 'warn' : 'ok') + tile('Paid in full, codes to send', readyToSend.length, readyToSend.length ? 'Ready for their codes now' : 'Nobody waiting', null, readyToSend.length ? 'warn' : 'ok') + tile('Codes sent this month', sentMonth, 'one per vehicle') + tile('Arriving in the next 30 days', all.length, all.reduce(function (a, b) { return a + ensureCars(b).length; }, 0) + ' vehicles') + '</div>' +
+      '<div class="chips">' + [['', 'All', all.length], ['full', 'Paid in full', nFull], ['due', 'Not paid in full', all.length - nFull]].map(function (x) { return '<button class="chip' + (VF.pay === x[0] ? ' on' : '') + '" data-vpay="' + x[0] + '">' + x[1] + ' <span>' + x[2] + '</span></button>'; }).join('') + '</div>' +
+      '<section class="card"><header class="card-h"><h3>Arriving in the next 7 days</h3><span class="count">' + week.length + '</span></header>' + (week.length ? week.map(row).join('') : '<p class="empty">' + (VF.pay ? 'Nobody here with this filter.' : 'Nobody arriving in the next 7 days.') + '</p>') + '</section>' +
+      '<section class="card"><header class="card-h"><h3>Later this month</h3><span class="count">' + later.length + '</span></header>' + (later.length ? later.map(row).join('') : '<p class="empty">' + (VF.pay ? 'Nobody here with this filter.' : 'No other arrivals in the next 30 days.') + '</p>') + '</section>';
   }
   /* =========================================================
      Every table: click a heading to sort (a picker on phones),
@@ -3251,6 +3262,7 @@
     var dpg = t.closest('[data-pg]'); if (dpg) { var dp = dpg.dataset.pg.split('|'); DP[dp[0]] = Math.max(0, (DP[dp[0]] || 0) + (+dp[1])); render(); return; }
     var dtab = t.closest('[data-dtab]'); if (dtab) { DP.tab = dtab.dataset.dtab; render(); return; }
     var gtag = t.closest('[data-gtag]'); if (gtag) { GF.tag = gtag.dataset.gtag; render(); return; }
+    var vpy = t.closest('[data-vpay]'); if (vpy) { VF.pay = vpy.dataset.vpay; render(); return; }
     var fcl = t.closest('[data-fclear]'); if (fcl) { var fc = fcl.dataset.fclear.split(':'); fc[1].split(',').forEach(function (k) { FO(fc[0])[k] = ''; }); resetPages(); render(); return; }
     var th = t.closest('[data-thread]'); if (th) { IN.id = th.dataset.thread || null; CMP_ATT = []; var tt = IN.id && thrById(IN.id); if (tt && tt.unread) { tt.unread = false; save(); } render(); window.scrollTo(0, 0); return; }
     var tg = t.closest('[data-thread-go]'); if (tg) { IN.id = tg.dataset.threadGo; IN.box = 'all'; closeDrawer(); if (!$('#modal').hidden) closeModal(); location.hash = '#/enquiries'; render(); return; }

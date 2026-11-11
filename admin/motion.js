@@ -104,7 +104,7 @@
   function countUp(el) {
     var tn = null; for (var i = 0; i < el.childNodes.length; i++) { if (el.childNodes[i].nodeType === 3 && /\d/.test(el.childNodes[i].nodeValue)) { tn = el.childNodes[i]; break; } }
     if (!tn) return;
-    var m = tn.nodeValue.match(/^(\D*?)(\d[\d\s ]*)(.*)$/); if (!m) return;
+    var m = tn.nodeValue.match(/^(\D*?)(\d(?:[\d\s ]*\d)?)(.*)$/); if (!m) return;   // the number ends on a digit, so "113 items" keeps its space
     var sep = (m[2].match(/[\s ]/) || [''])[0], end = +m[2].replace(/[\s ]/g, ''), pre = m[1], post = m[3];
     if (!end || end < 3) return;
     var t0 = null, dur = Math.min(900, 420 + end / 40);
