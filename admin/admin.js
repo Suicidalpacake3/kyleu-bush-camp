@@ -989,20 +989,36 @@
       '<label class="fld"><span>Passengers, one name per line (everyone else in the vehicle)</span><textarea name="guests" rows="3">' + esc((c.guests || []).join('\n')) + '</textarea></label>';
   }
   function readCar(f, c) { c.reg = fval(f, 'reg').toUpperCase(); c.driver = fval(f, 'driver'); c.phone = fval(f, 'phone'); c.guests = fval(f, 'guests').split(/\n/).map(function (x) { return x.trim(); }).filter(Boolean); c.people = Math.max(1, +fval(f, 'people') || 1, (c.driver ? 1 : 0) + c.guests.length); }
+  // the indemnity at check-in: who in this vehicle has signed, who has not, and a way to sign now
+  function carInd(b, c) {
+    var names = [c.driver].concat(c.guests || []).filter(Boolean), s = K.ind.status(b.ref, people(b));
+    var done = names.filter(function (n) { return s.cov[K.ind.nkey(n)]; }), left = names.filter(function (n) { return !s.cov[K.ind.nkey(n)]; });
+    var unnamed = Math.max(0, (c.people || names.length) - names.length);
+    return { names: names, done: done, left: left, unnamed: unnamed, all: names.length > 0 && !left.length && !unnamed, s: s };
+  }
   function indBox(k, on) {
-    var o = carOf(k), names = o.c ? [o.c.driver].concat(o.c.guests || []).filter(Boolean) : [], cov = o.b ? K.ind.status(o.b.ref, people(o.b)).cov : {};
-    var done = names.filter(function (n) { return cov[K.ind.nkey(n)]; }), all = names.length && done.length === names.length;
-    return '<div class="ind-box"><label class="check"><input type="checkbox" name="ind"' + (on || all ? ' checked' : '') + '><span><b>' + (all ? 'Everyone in this vehicle signed online' : 'Indemnity signed') + '</b> ' + (all ? '(' + esc(done.join(', ')) + ')' : done.length ? 'online by ' + esc(done.join(', ')) + '. The others sign at reception or on paper.' : 'by every adult in this vehicle, online or on paper') + '</span></label>' +
-      (all ? '' : '<button type="button" class="link-btn" data-act="ind-print" data-ref="' + k + '">' + ic('note') + 'Print the paper form</button>') + '</div>';
+    var o = carOf(k), b = o.b, c = o.c; if (!c) return '';
+    var x = carInd(b, c), list = function (a) { return esc(a.join(', ')); };
+    if (x.all) return '<div class="ind-box ok"><input type="hidden" name="ind" value="online"><span class="ind-box-i">' + ic('check') + '</span><div><b>Indemnity complete: everyone in this vehicle has signed</b><small>' + list(x.done) + '</small></div></div>';
+    if (on && c.ind && c.ind.by !== 'Online') return '<div class="ind-box ok"><span class="ind-box-i">' + ic('check') + '</span><div><b>Indemnity marked as signed</b><small>Ticked by ' + esc(c.ind.by) + ' ' + whenShort(c.ind.at) + (x.left.length ? '. Signed on paper: ' + list(x.left) : '') + '</small></div><label class="check"><input type="checkbox" name="ind" checked><span>Signed</span></label></div>';
+    return '<div class="ind-box bad" role="alert"><span class="ind-box-i">' + ic('alert') + '</span><div class="ind-box-b"><b>Indemnity NOT complete for this vehicle</b>' +
+      (x.left.length ? '<small><b>Not signed yet:</b> ' + list(x.left) + '</small>' : '') +
+      (x.unnamed ? '<small><b>' + x.unnamed + ' ' + (x.unnamed === 1 ? 'person is' : 'people are') + ' not named</b> in this vehicle, so they cannot have signed. Add their names above, then sign.</small>' : '') +
+      (x.done.length ? '<small>Already signed: ' + list(x.done) + '</small>' : '') +
+      '<small>Whole booking: ' + Math.min(x.s.covered, x.s.total) + ' of ' + x.s.total + ' signed for</small>' +
+      '<div class="row-btns"><button type="button" class="btn sm" data-act="ind-sign-car" data-ref="' + k + '">' + ic('edit') + 'Sign now at reception</button><button type="button" class="btn ghost sm" data-act="ind-print" data-ref="' + k + '">' + ic('note') + 'Print the paper form</button></div>' +
+      '<label class="check"><input type="checkbox" name="ind"><span>Everyone still to sign <b>signed the paper form</b> instead</span></label></div></div>';
   }
   function actCarIn(key) {
     var o = carOf(key), b = o.b, c = o.c, i = o.i; if (!c) return; var cs = b.cars, bal = balance(b);
-    modal('Check in ' + esc(carLabel(c, i)), '<p class="muted small">' + esc(guestName(b)) + ' · ' + esc(b.ref) + ' · ' + esc(standById(b.stand).name) + (cs.length > 1 ? ' · vehicle ' + (i + 1) + ' of ' + cs.length : '') + '</p>' + carForm(c) + indBox(key, !!c.ind) +
+    modal('Check in ' + esc(carLabel(c, i)), '<p class="muted small">' + esc(guestName(b)) + ' · ' + esc(b.ref) + ' · ' + esc(standById(b.stand).name) + (cs.length > 1 ? ' · vehicle ' + (i + 1) + ' of ' + cs.length : '') + '</p>' + indBox(key, !!c.ind) + carForm(c) +
       (bal > 0 ? '<p class="callout warn">' + ic('alert') + ' <b>' + money(bal) + '</b> is still owing on this booking. Collect it at reception.</p>' : ''),
       'Check in', function (f) {
         if (f.elements.reg && !String(fval(f, 'reg')).trim()) { toast('Add the registration number first: it goes on the gate list'); f.elements.reg.focus(); return false; }
-        if (!fval(f, 'ind')) { toast('Get the indemnity forms signed before checking in'); return false; }
-        readCar(f, c); c.ind = c.ind || { at: nowStamp(), by: ME.name }; c.st = 'in'; c.inAt = nowStamp();
+        if (!fval(f, 'ind')) { toast('The indemnity is not complete. Sign now at reception, or tick that they signed the paper form.'); var ib = $('.ind-box', f); if (ib) { ib.scrollIntoView({ block: 'center', behavior: 'smooth' }); ib.classList.remove('shake'); void ib.offsetWidth; ib.classList.add('shake'); } return false; }
+        var onl = fval(f, 'ind') === 'online';
+        readCar(f, c); c.ind = c.ind || { at: nowStamp(), by: onl ? 'Online' : ME.name };
+        if (!onl) { var cx = carInd(b, c), who = cx.left.concat(cx.unnamed ? [cx.unnamed + ' unnamed ' + (cx.unnamed === 1 ? 'person' : 'people')] : []); if (who.length) b.notes.push({ at: nowStamp(), by: ME.name, text: carLabel(c, i) + ': paper indemnity signed at check-in by ' + who.join(', ') + '.' }); } c.st = 'in'; c.inAt = nowStamp();
         if (b.status !== 'in' && bal > 0) b.notes.push({ at: nowStamp(), by: ME.name, text: 'Checked in with ' + money(bal) + ' still owing. Collect at reception.' });
         b.status = 'in';
         var left = cs.filter(function (x) { return x.st === 'due'; }).length;
@@ -3176,14 +3192,14 @@
       (s.recs.length > 1 ? '<button type="button" class="btn ghost sm" data-act="ind-pdf-ref" data-ref="' + b.ref + '">' + ic('download') + 'All ' + s.recs.length + ' forms (PDF)</button>' : '') + '<button type="button" class="btn ghost sm" data-act="ind-print" data-ref="' + b.ref + '|">' + ic('note') + 'Paper form</button></div></section>';
   }
   // a guest signs on this device, at reception
-  function actIndSign(ref) {
+  function actIndSign(ref, after) {
     var b = byRef(ref); if (!b) return; var st = standById(b.stand);
     modal('Indemnity for ' + esc(guestName(b)), '<p class="muted small">' + esc(b.ref) + ' · ' + esc(st.name) + ' · ' + fd(b.ci) + ' to ' + fd(b.co) + '. Hand the device to the guest: they read the risks, then sign.</p>' + K.ind.statusHTML(b.ref, people(b), indNames(b)) + K.ind.risksHTML(st.area, { standName: st.name, title: 'What the guest agrees to' }) + '<div data-ind-form></div>', null, null, { wide: true, noFocus: true,
       onOpen: function (f) {
         // the signing form is its own form: move it out of the modal's form so Enter does not submit the modal
         var box = $('[data-ind-form]', f);
         K.ind.form(box, { ref: b.ref, key: b.key, stand: b.stand, standName: st.name, area: st.area, ci: b.ci, co: b.co, eta: b.eta, booker: { name: guestName(b), phone: b.guest.phone, email: b.guest.email }, people: indNames(b), cars: ensureCars(b).map(function (c, i) { return { label: 'Vehicle ' + (i + 1), reg: c.reg }; }), total: people(b), via: 'At reception', by: ME.name, staff: true }, function (rec) {
-          log('Indemnity signed at reception by ' + rec.name + (rec.minors.length ? ' (also for ' + rec.minors.join(', ') + ')' : ''), b.ref); save(); closeModal(); refresh();
+          log('Indemnity signed at reception by ' + rec.name + (rec.minors.length ? ' (also for ' + rec.minors.join(', ') + ')' : ''), b.ref); save(); refresh(); if (after) after(); else closeModal();
           toast('Signed and saved: ' + esc(rec.name) + (K.ind.status(b.ref, people(b)).done ? '. Everyone is signed for.' : ''));
         });
       } });
@@ -3514,6 +3530,7 @@
     if (act === 'car-tab') { SHOP.who = ref; SHOP.tab = 'till'; closeDrawer(); location.hash = '#/shop'; render(); return; }
     if (act === 'ind-print') { var ip = (ref || '').split('|'); printIndemnity(ip[0], ip[1]); return; }
     if (act === 'ind-sign') { actIndSign(ref); return; }
+    if (act === 'ind-sign-car') { var oc = carOf(ref); if (oc.c) { var mf = $('#modal form'); if (mf && oc.c.st === 'due') readCar(mf, oc.c); actIndSign(oc.b.ref, function () { if (oc.c.st === 'due') actCarIn(ref); else actCarEdit(ref); }); } return; }
     if (act === 'ind-view') { actIndView(ref); return; }
     if (act === 'ind-pdf') { var r1 = indRec(ref); if (r1) K.ind.pdf([r1]).catch(function () { toast('The PDF could not be made. Check the internet connection.'); }); return; }
     if (act === 'ind-pdf-ref') { var rr = K.ind.forRef(ref); if (rr.length) K.ind.pdf(rr, { name: 'Kyleu indemnities ' + ref + '.pdf' }).catch(function () { toast('The PDF could not be made. Check the internet connection.'); }); return; }
