@@ -803,7 +803,7 @@
         (live(b) ? '<dt>Indemnity</dt><dd>' + indPill(b) + ' <button type="button" class="link-btn" data-ptab="vehicles">See' + ic('chev-r') + '</button></dd>' : '') +
         '<dt>Booked</dt><dd>' + fd(b.created.slice(0, 10), { day: 'numeric', month: 'short', year: 'numeric' }) + ' via ' + esc(b.source) + '</dd></dl></section>' +
         linkSec(b) +
-        ((b.notes || []).length ? '<section class="d-sec"><h4 class="h4-row">Latest note<button type="button" class="link-btn" data-ptab="notes">All notes' + ic('chev-r') + '</button></h4>' + noteItem(b, b.notes.length - 1, b.notes[b.notes.length - 1]) + '</section>' : '');
+        ((b.notes || []).length ? '<section class="d-sec"><h4 class="h4-row">Latest note<button type="button" class="link-btn" data-ptab="notes">All notes' + ic('chev-r') + '</button></h4>' + '<ul class="notes">' + noteItem(b, b.notes.length - 1, b.notes[b.notes.length - 1]) + '</ul></section>' : '');
     } else if (PTAB === 'vehicles') {
       body = carsHTML(b) + indHTML(b) + dgrHTML(b);
     } else if (PTAB === 'money') {

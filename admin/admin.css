@@ -1414,7 +1414,7 @@ html:has(body.lock) { overflow: hidden; }
 @keyframes viewIn { from { opacity: 0; transform: translateY(12px); } }
 
 /* the highlight glides from the old tab to the new one */
-.tabs, .rp-tabs, .d-tabs, .seg, .mail-boxes, .side nav { position: relative; }
+.tabs, .rp-tabs, .seg, .mail-boxes, .side nav { position: relative; }
 .glider { position: absolute; z-index: 0; pointer-events: none; border-radius: 8px; transition: left .34s cubic-bezier(.3, 1.2, .5, 1), top .34s cubic-bezier(.3, 1.2, .5, 1), width .34s cubic-bezier(.3, 1.2, .5, 1), height .34s ease; }
 .gliding > :not(.glider) { position: relative; z-index: 1; }
 .tabs > .glider, .rp-tabs > .glider, .seg > .glider { background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
