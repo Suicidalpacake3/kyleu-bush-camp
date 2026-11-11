@@ -143,7 +143,7 @@
       '<p class="inv-thanks">' + esc(THANKS) + '</p>' +
       '<p class="inv-sign">Kind regards,<br><b>' + esc(BIZ.signer) + '</b></p>' +
       '<div class="inv-dgr"><img src="' + BASE + 'assets/img/dgr-certified-partner.png" alt="DGR Certified Partner logo"><p><b>Kyleu is a proud DGR CP member.</b> ' + esc(DGR_TXT) + '</p></div>' +
-      '<footer class="inv-foot">' + esc(BIZ.name) + ' · Reg. ' + esc(BIZ.reg) + (vatLine() ? ' · ' + esc(vatLine()) : '') + ' · ' + esc(BIZ.addr) + ' · ' + esc(BIZ.phone) + ' · ' + esc(BIZ.email) + ' · ' + esc(BIZ.web) + '</footer></article>';
+      '<footer class="inv-foot">' + esc(BIZ.name) + ' · Reg. ' + esc(BIZ.reg) + (vatLine() ? ' · ' + esc(vatLine()) : '') + ' · ' + esc(BIZ.addr) + ' · ' + esc(BIZ.web) + '</footer></article>';
   };
 
   /* ---------- PDF ---------- */
@@ -248,7 +248,7 @@
     font(8, false, C.soft); text(doc.splitTextToSize(DGR_TXT, W - 40).map(clean), L + 40, y + 7.4);
     // footer on every page
     var n = doc.getNumberOfPages();
-    for (var i = 1; i <= n; i++) { doc.setPage(i); doc.setDrawColor(C.line[0], C.line[1], C.line[2]); doc.line(L, 285, R, 285); font(7, false, C.soft); text(BIZ.name + ' · Reg. ' + BIZ.reg + (vatLine() ? ' · ' + vatLine() : '') + ' · ' + BIZ.addr, 105, 289, { align: 'center' }); text(BIZ.phone + ' · ' + BIZ.email + ' · ' + BIZ.web + (n > 1 ? ' · page ' + i + ' of ' + n : ''), 105, 292.6, { align: 'center' }); }
+    for (var i = 1; i <= n; i++) { doc.setPage(i); doc.setDrawColor(C.line[0], C.line[1], C.line[2]); doc.line(L, 285, R, 285); font(7, false, C.soft); text(BIZ.name + ' · Reg. ' + BIZ.reg + (vatLine() ? ' · ' + vatLine() : '') + ' · ' + BIZ.addr, 105, 289, { align: 'center' }); text(BIZ.web + (n > 1 ? ' · page ' + i + ' of ' + n : ''), 105, 292.6, { align: 'center' }); }
   };
   K.invoicePDF = function (inv) {
     var J = window.jspdf && window.jspdf.jsPDF; if (!J) return null;

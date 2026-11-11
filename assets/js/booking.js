@@ -231,19 +231,22 @@
   }
 
   /* ---------- weekend rule ---------- */
+  // A stay that includes a Friday or Saturday night is at least 2 nights ("Minimum nights over a weekend").
+  // Friday + Saturday and Saturday + Sunday are both fine; one weekend night on its own is not.
+  function weekendShort(ci, co) {
+    var nights = nightsOf(ci, co), minN = P ? P.num('Booking rules', 'Minimum nights over a weekend', 2) : 2;
+    var wk = nights.some(function (d) { return d.getDay() === 5 || d.getDay() === 6; });
+    return wk && nights.length < minN ? minN - nights.length : 0;
+  }
   function checkWeekendRule() {
-    var nights = nightsOf(state.ci, state.co), hasFri = false, hasSat = false;
-    nights.forEach(function (d) { if (d.getDay() === 5) hasFri = true; if (d.getDay() === 6) hasSat = true; });
-    var minN = P.num('Booking rules', 'Minimum nights over a weekend', 2);
-    var bad = (hasFri && !hasSat) || (hasSat && !hasFri);
-    ruleNote.classList.toggle('hidden', !bad || minN < 2);
-    if (bad) $('span', ruleNote).innerHTML = '<b>Weekends are booked as a whole</b> (Friday + Saturday nights, minimum ' + minN + ' nights). We can adjust your dates for you.';
-    return !bad;
+    var minN = P.num('Booking rules', 'Minimum nights over a weekend', 2), short = weekendShort(state.ci, state.co);
+    ruleNote.classList.toggle('hidden', !short || minN < 2);
+    if (short) $('span', ruleNote).innerHTML = '<b>Weekend stays are at least ' + minN + ' nights:</b> Friday and Saturday, or Saturday and Sunday. We can adjust your dates for you.';
+    return !short;
   }
   function fixWeekend() {
-    var nights = nightsOf(state.ci, state.co), hasFri = nights.some(function (d) { return d.getDay() === 5; });
-    if (hasFri) state.co = addDays(state.co, 1);
-    else { var ci = addDays(state.ci, -1); if (ci >= today()) state.ci = ci; else state.co = addDays(state.co, 1); }
+    // add the missing night(s) at the end: a Friday becomes Friday + Saturday, a Saturday becomes Saturday + Sunday
+    var short = weekendShort(state.ci, state.co); if (short) state.co = addDays(state.co, short);
     syncSearch(); render();
   }
 
@@ -361,8 +364,7 @@
   var modal, step = 1, booking = null;
   function openCheckout() {
     if (!sel.co) return;
-    var nights = nightsOf(sel.ci, sel.co), hasFri = nights.some(function (d) { return d.getDay() === 5; }), hasSat = nights.some(function (d) { return d.getDay() === 6; });
-    if (hasFri !== hasSat) { K.toast('Weekend stays need both Friday and Saturday night'); return; }
+    if (weekendShort(sel.ci, sel.co)) { K.toast('Weekend stays are at least 2 nights: Friday and Saturday, or Saturday and Sunday'); return; }
     if ((S && /q2b/i.test(S.get('Booking mode', 'demo')))) { window.open(S.get('Live availability (Q2B)'), '_blank', 'noopener'); return; }
     booking = { stand: current, ci: sel.ci, co: sel.co, g: { adults: state.adults, pens: state.pens, kids: state.kids } };
     extras = {}; shopQty = {}; extras.__shop = shopQty;
@@ -493,7 +495,8 @@
     var blink = 'manage.html?b=' + encodeURIComponent(ref) + '&k=' + bkey;
     var isCard = pay === 'full' || pay === 'deposit';
     var paid = pay === 'full' ? q.cardTotal : pay === 'deposit' ? q.cardDeposit : pay === 'eft' ? (q.payFull ? q.total : q.deposit) : 0;
-    var inv = makeInvoice(ref, q, isCard, paid, cv), docW = K.docWord(inv), DocW = docW.charAt(0).toUpperCase() + docW.slice(1);
+    // guests see one word, "reservation", whether the document is still a quotation or already an invoice
+    var inv = makeInvoice(ref, q, isCard, paid, cv), docW = 'reservation', DocW = 'Reservation';
     // Demo only: keep a copy in THIS browser so it shows up in the admin mock-up (/admin). Never any card details.
     try {
       var saved = JSON.parse(localStorage.getItem('kyleu-web-bookings') || '[]'), now = new Date();
@@ -532,7 +535,7 @@
       '<li><b>✓</b><span>Enter at Dinokeng <b>Tau Gate</b>, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km. <a href="contact.html">Directions</a></span></li></ol>' +
       '<div class="cta-actions"><button class="btn" type="button" data-ics><svg><use href="#i-cal"/></svg>Add to calendar</button><a class="btn btn-green" target="_blank" rel="noopener" href="https://wa.me/27604584478?text=' + encodeURIComponent('Hi Kyleu! My booking reference is ' + ref + ' (' + booking.stand.name + ', ' + iso(booking.ci) + ' to ' + iso(booking.co) + ').') + '"><svg><use href="#i-wa"/></svg>WhatsApp us your reference</a></div>' +
       '<details class="inv-fold"><summary>See your ' + docW + '</summary><div class="inv-wrap">' + K.invoiceHTML(inv) + '</div></details>' +
-      '<div class="inv-acts"><button class="btn btn-ghost" type="button" data-inv-pdf><svg><use href="#i-doc"/></svg>Download ' + docW + ' (PDF)</button><button class="btn btn-ghost" type="button" data-inv-print><svg><use href="#i-doc"/></svg>Print</button></div>' +
+      '<div class="inv-acts"><button class="btn btn-ghost" type="button" data-inv-pdf><svg><use href="#i-doc"/></svg>Download your reservation (PDF)</button><button class="btn btn-ghost" type="button" data-inv-print><svg><use href="#i-doc"/></svg>Print</button></div>' +
       '<div class="demo-flag" style="margin:22px 0 0;text-align:left"><svg><use href="#i-info"/></svg><span>Demo mode: this is a mock-up. No booking was made, nothing was charged and no details were sent anywhere. A copy stays in this browser only, so you can see it in the admin demo.</span></div></div>';
     $('[data-ics]', box).onclick = downloadICS;
     setTimeout(function () { var s = $('[data-inv-sent]', box); if (s) { s.className = 'inv-sent ok'; s.innerHTML = '<svg><use href="#i-check"/></svg>' + DocW + ' sent to ' + K.esc(f('email')) + ' by email'; } }, 1400);

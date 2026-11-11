@@ -35,7 +35,10 @@
     return P.num(sec, label, d);
   }
   // "5 days": how long a quotation is valid, counted from the day it was made
-  function validDays(from, to) { var n = Math.max(1, diff(String(from).slice(0, 10), to)); return n + ' day' + (n === 1 ? '' : 's'); }
+  // "5 days, until Friday 14 November": the date makes a resent email still right
+  // "quotation" or "invoice INV 1001" for email subjects (no repeat when the document has the booking's own number)
+  function docTag(inv, ref) { var k = inv.kind === 'Quote' ? 'quotation' : 'invoice'; return inv.no && inv.no !== ref ? k + ' ' + inv.no : k; }
+  function validDays(from, to) { var n = Math.max(1, diff(String(from).slice(0, 10), to)); return n + ' day' + (n === 1 ? '' : 's') + ', until ' + fd(to, { weekday: 'long', day: 'numeric', month: 'long' }); }
   function cardFee() { return num('Booking rules', 'Card payment fee percentage', 3); }
   function toCard(n) { return Math.round(n * (1 + cardFee() / 100)); }
   function hasFee() { return cardFee() > 0; }
@@ -409,7 +412,7 @@
       }
       if (a.note) { b.notes.push({ at: a.at, by: 'Guest', text: a.note }); done.push('left a message'); }
       if (a.finalise) { b.finalised = { at: a.at, by: 'Guest' }; done.push('finalised the booking'); }
-      if (a.invoice) { b.invoices = b.invoices || []; b.invoices.push(Object.assign(JSON.parse(JSON.stringify(a.invoice)), { by: 'Website', sent: { at: a.at, via: 'Email (automatic)', to: b.guest.email } })); autoMail(b, a.invoice, a.at, 'Your updated Kyleu invoice ' + a.invoice.no, invMailBody(b, a.invoice, true)); done.push('updated invoice ' + a.invoice.no + ' emailed'); }
+      if (a.invoice) { b.invoices = b.invoices || []; b.invoices.push(Object.assign(JSON.parse(JSON.stringify(a.invoice)), { by: 'Website', sent: { at: a.at, via: 'Email (automatic)', to: b.guest.email } })); autoMail(b, a.invoice, a.at, 'Your updated Kyleu reservation ' + b.ref + ' (' + docTag(a.invoice, b.ref) + ')', invMailBody(b, a.invoice, true)); done.push('updated invoice ' + a.invoice.no + ' emailed'); }
       if (!done.length) return;
       b.notes.push({ at: a.at, by: 'Guest', text: 'Changed on the website: ' + done.join('; ') + '.' });
       b.guestEdit = { at: a.at, what: done, seen: false };
@@ -447,7 +450,7 @@
       if (w.cars && w.cars.length) b.cars = w.cars.map(function (c, i) { var dr = c.driver || (i ? '' : w.first + ' ' + w.last), gs = (c.guests || []).slice(); return newCar({ reg: String(c.reg || '').toUpperCase(), driver: dr, phone: i ? '' : w.phone, guests: gs, people: (dr ? 1 : 0) + gs.length }); });
       if (w.shop && w.shop.length) { b.charges = []; setPreShop(b, w.shop, w.created, true); }
       ensureCars(b); DB.bookings.push(b); added++;
-      if (w.invoice) { b.invoices = [Object.assign(JSON.parse(JSON.stringify(w.invoice)), { by: 'Website', sent: { at: w.created, via: 'Email (automatic)', to: w.email } })]; autoMail(b, w.invoice, w.created, 'Your Kyleu booking ' + b.ref + ': invoice ' + w.invoice.no, invMailBody(b, w.invoice)); }
+      if (w.invoice) { b.invoices = [Object.assign(JSON.parse(JSON.stringify(w.invoice)), { by: 'Website', sent: { at: w.created, via: 'Email (automatic)', to: w.email } })]; autoMail(b, w.invoice, w.created, 'Your Kyleu reservation ' + b.ref + ' (' + docTag(w.invoice, b.ref) + ')', invMailBody(b, w.invoice)); }
       DB.log.unshift({ at: w.created, by: 'Website', text: 'New website booking ' + b.ref + ' for ' + guestName(b), ref: b.ref });
     });
     if (added) { DB.bookings.sort(function (a, b) { return a.ci < b.ci ? -1 : 1; }); save(); }
@@ -699,8 +702,8 @@
     balance: { t: 'Balance reminder', s: 'Your Kyleu stay is coming up', b: function (b) { return 'Hi {first},\n\nYour stay at {stand} starts on {ci}. The balance of {balance} is due by {baldue}. Pay by EFT with reference {ref}, or reply and we will send a card payment link.\n\nThe Kyleu team'; } },
     arrival: { t: 'Pre-arrival information', s: 'Getting to Kyleu Bush Camp', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}.\n\nDirections: enter Dinokeng at Tau Gate, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km.\n\nKyleu is a proud DGR CP member, so we send you a Conservation Fee Discount Voucher code for each vehicle. Enter it when you buy your conservation fees at https://dinokeng.plnktn.io to pay R85 instead of R100 per adult per night. To use the self-drive route, each vehicle also needs a Self Drive Permit (R250 once off).\n\nEvery adult signs an indemnity form when you arrive. Let us know roughly when you will arrive and we will have your stand ready. Gate questions: 060 458 4478.\n\nThe Kyleu team'; } },
     thanks: { t: 'Thank you & review', s: 'Thanks for staying at Kyleu', b: function (b) { return 'Hi {first},\n\nThank you for camping with us at {stand}. We hope you loved the bush! If you have a minute, a Google review helps our small family camp a lot.\n\nThe Kyleu team'; } },
-    invoice: { t: 'Quotation or invoice', s: 'Your Kyleu {doc} {ref}', b: function (b) { return b && b.payments && paid(b) > 0 ? 'Hi {first},\n\nPlease find your invoice for {stand}, {ci} to {co}, attached.\n\nTotal {total}, paid so far {paid}, balance {balance}. Pay by EFT using reference {ref}.\n\nThe Kyleu team'
-      : 'Hi {first},\n\nThank you for booking {stand}, {ci} to {co}. Please find your quotation attached, with our bank details and your booking reference {ref}.\n\nThis quotation is valid for {qdays}. To secure your stand, please pay {deposit} using reference {ref}.\n\nOnce payment has been made, upload your proof of payment directly to your booking:\n{link}\n\nThe Kyleu team'; } },
+    invoice: { t: 'Quotation or invoice', s: 'Your Kyleu reservation {ref} ({doc})', b: function (b) { return b && b.payments && paid(b) > 0 ? 'Hi {first},\n\nPlease find your invoice for {stand}, {ci} to {co}, attached.\n\nTotal {total}, paid so far {paid}, balance {balance}. Pay by EFT using reference {ref}.\n\nThe Kyleu team'
+      : 'Hi {first},\n\nThank you for booking {stand}, {ci} to {co}. Please find your quotation attached, with our bank details and your booking reference {ref}.\n\nThis quotation is valid for {qdays}. After that the stand is released. To secure your stand, please pay {deposit} using reference {ref}.\n\nOnce payment has been made, upload your proof of payment directly to your booking:\n{link}\n\nThe Kyleu team'; } },
     indemnity: { t: 'Indemnity form', s: 'Kyleu indemnity form for {ref}', b: function (b) { return 'Hi {first},\n\nPlease find the Kyleu indemnity form attached, one page per vehicle. Every adult signs it when you arrive. You are welcome to print it and fill it in before you come, which makes check-in quicker.\n\nSee you on {ci}!\nThe Kyleu team'; } },
     update: { t: 'Booking updated', s: 'Your Kyleu booking {ref} has been updated', b: function (b) { return 'Hi {first},\n\nWe have updated your booking {ref}: {stand}, {ci} to {co}.\nTotal {total}, paid {paid}, balance {balance}.\n\nIf anything looks wrong, just reply to this email.\n\nThe Kyleu team'; } },
     extra: { t: 'Extra amount to pay', s: 'Your updated Kyleu invoice {ref}', b: function (b) { return 'Hi {first},\n\nThank you for letting us know about the change to your booking {ref}. Your new total is {total}. You have already paid {paid}, so {balance} is still to pay.\n\nThe updated invoice is attached. Please pay the {balance} by EFT using reference {ref} before you arrive on {ci}.\n\nThe Kyleu team'; } },
@@ -841,7 +844,7 @@
       '<div class="grid2"><label class="fld"><span>Booked via</span><select name="source"><option>Phone</option><option>WhatsApp</option><option>Email</option><option>Walk-in</option></select></label><label class="fld"><span>Game drive (people)</span><input type="number" min="0" max="10" name="gd" value="0"></label></div>' +
       '<label class="fld"><span>Vehicles coming (one booking can cover the whole group)</span><input type="number" min="1" max="20" name="veh" value="1"></label>' +
       '<label class="fld"><span>Note for the team (optional)</span><input name="note" placeholder="e.g. Celebrating a birthday, arriving late on Friday"></label>' +
-      '<span class="fld-l">How will they pay?</span><div class="seg"><label><input type="radio" name="m" value="eft" checked><span>EFT</span></label><label><input type="radio" name="m" value="card"><span>Card</span></label><label><input type="radio" name="m" value="cash"><span>Cash</span></label></div>' +
+      '<span class="fld-l">How will they pay?</span><div class="seg"><label><input type="radio" name="m" value="eft" checked><span>EFT</span></label><label><input type="radio" name="m" value="card"><span>Card</span></label><label><input type="radio" name="m" value="cash"><span>Cash on arrival</span></label></div>' +
       '<div class="quote-box" data-q></div><div data-credit-box></div>',
       'Create booking', function (f) {
         var g = { adults: +fval(f, 'adults') || 0, pens: +fval(f, 'pens') || 0, kids: +fval(f, 'kids') || 0 }, sid = fval(f, 'stand'), a = fval(f, 'ci'), z = fval(f, 'co'), m = $('[name=m]:checked', f).value;
@@ -859,6 +862,12 @@
         if (m !== 'eft') b.status = 'confirmed';
         if (fval(f, 'usecredit')) { var need = b.total; creditsFor(b.guest.email).forEach(function (c) { var take = Math.min(need, c.amt - c.used); if (take <= 0) return; c.used += take; need -= take; b.payments.push({ d: TODAY, amt: take, m: 'credit', type: 'Credit', ref: 'Credit from ' + c.from }); }); if (paid(b) >= deposit(b)) b.status = 'confirmed'; }
         if (fval(f, 'note')) b.notes.push({ at: nowStamp(), by: ME.name, text: fval(f, 'note') });
+        // cash on arrival (arranged with a regular): confirmed without a deposit, an invoice that says so, never released
+        if (m === 'cash' && paid(b) < b.total) {
+          b.onArrival = { how: 'Cash', at: nowStamp(), by: ME.name }; b.status = 'confirmed';
+          b.notes.push({ at: nowStamp(), by: ME.name, text: 'Confirmed without a deposit: the guest pays ' + money(b.total - paid(b)) + ' on arrival (cash).' });
+          var oaInv = invFor(b, 'Invoice', null, { by: ME.name, note: 'Payment on arrival (cash), as arranged with Kyleu.' }); b.invoices = [oaInv]; K.commitNo('Invoice', oaInv.no);
+        }
         ensureCars(b); DB.bookings.push(b); DB.bookings.sort(function (x, y) { return x.ci < y.ci ? -1 : 1; });
         log('New ' + b.source.toLowerCase() + ' booking ' + b.ref + ' for ' + guestName(b), b.ref); save(); render(); openBooking(b.ref);
         toast('Booking ' + b.ref + ' created' + (linked ? ' for returning client ' + esc(clientName(cl)) : ''));
@@ -873,11 +882,11 @@
           if (!f._picked && overlaps(sel.value, a, z)) { var fo = $$('option', sel).filter(function (o) { return !overlaps(o.value, a, z); })[0]; if (fo) { sel.value = fo.value; sid = fo.value; } }
           var q = quote(sid, a, z, g, { gd: +fval(f, 'gd') || 0 }), free = !overlaps(sid, a, z), st = standById(sid);
           var nts = []; for (var dd = a; dd < z; dd = add(dd, 1)) nts.push(D(dd).getDay());
-          var halfWeekend = (nts.indexOf(5) >= 0) !== (nts.indexOf(6) >= 0), full = diff(TODAY, a) <= num('Booking rules', 'Balance due days before arrival', 7) + num('Booking rules', 'Deposit due within days of invoice', 5);
+          var halfWeekend = (nts.indexOf(5) >= 0 || nts.indexOf(6) >= 0) && nts.length < num('Booking rules', 'Minimum nights over a weekend', 2), full = diff(TODAY, a) <= num('Booking rules', 'Balance due days before arrival', 7) + num('Booking rules', 'Deposit due within days of invoice', 5);
           box.innerHTML = (free ? '<span class="pill ok"><i></i>Stand free</span>' : '<span class="pill bad"><i></i>Stand not free</span>') + (g.adults + g.pens + g.kids > st.guests ? ' <span class="pill warn"><i></i>Over ' + st.guests + ' guests</span>' : '') +
             '<div class="qb-row"><span>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + '</span><span class="price-pair">' + (!hasFee() ? '<b>' + money(q.eft) + '</b>' : m === 'card' ? '<b>' + money(q.card) + '</b> <small>card price</small>' : '<s>' + money(q.card) + '</s> <b>' + money(q.eft) + '</b> <small>' + methodLabel(m) + '</small>') + '</span></div>' +
             '<div class="muted small">' + (full ? 'Arrives within 12 days, so the full amount secures the stand' : 'Deposit ' + depPct() + '%: ' + money(Math.round((m === 'card' ? q.card : q.eft) * depPct() / 100))) + ' · ' + nFree + ' of ' + STANDS.length + ' stands free for these dates</div>' +
-            (halfWeekend ? '<div class="small warn-t">' + ic('info') + ' Only one weekend night: weekends are normally booked as a whole (Friday and Saturday). Fine if you agreed it with the guest.</div>' : '');
+            (halfWeekend ? '<div class="small warn-t">' + ic('info') + ' Only one weekend night: weekend stays are normally at least 2 nights (Friday and Saturday, or Saturday and Sunday). Fine if you agreed it with the guest.</div>' : '');
           var pc = clientById(fval(f, 'cid')), cl = creditLeft(pc ? pc.email : fval(f, 'email')), cb = $('[data-credit-box]', f), was = f.elements.usecredit ? f.elements.usecredit.checked : true;
           cb.innerHTML = cl ? '<label class="check credit-use"><input type="checkbox" name="usecredit"' + (was ? ' checked' : '') + '><span>Use <b>' + money(cl) + '</b> credit from a cancelled booking</span></label>' : '';
         };
@@ -1109,7 +1118,8 @@
   // the name and description of a rate as the website shows them
   function rateWord(sec, label, f) { var it = sec && sec.items.filter(function (i) { return i.label === label; })[0]; if (!it) return ''; var o = webDB().rateText[sec.title + '|' + label] || {}; return f === 'name' ? (o.name || it.label) : (o.note != null ? o.note : it.note || ''); }
 
-  var WEB = { tab: 'details', q: '', pages: null, loading: false, S0: null };
+  // the Website wording page (not WEB: that name is the website bookings key)
+  var WTX = { tab: 'details', q: '', pages: null, loading: false, S0: null };
   var WEB_PAGES = [['home', 'Home', 'index.html'], ['discover', 'Discover', 'discover.html'], ['experience', 'Experience', 'experience.html'], ['dinokeng', 'Dinokeng', 'dinokeng.html'], ['stay', 'Stay and book', 'stay.html'], ['stands', 'Stands', 'stands.html'], ['news', 'Camp news', 'news.html'], ['contact', 'Contact', 'contact.html'], ['policies', 'Policies', 'policies.html'], ['site', 'Footer', 'index.html']];
   var WEB_KIND = { h1: 'Main heading', h2: 'Heading', h3: 'Sub-heading', h4: 'Sub-heading', h5: 'Sub-heading', p: 'Text', figcaption: 'Photo caption', summary: 'Question', li: 'List item', dt: 'Label', dd: 'Text', blockquote: 'Quote', span: 'Small label', div: 'Label' };
   // wording from a page, shown the way staff type it: **bold**, *highlighted*, [words](link)
@@ -1122,7 +1132,7 @@
     return out.replace(/ ?\n ?/g, '\n').trim();
   }
   function webLoad() {
-    if (WEB.loading || WEB.pages) return; WEB.loading = true;
+    if (WTX.loading || WTX.pages) return; WTX.loading = true;
     var files = []; WEB_PAGES.forEach(function (p) { if (files.indexOf(p[2]) < 0) files.push(p[2]); });
     var pages = {}; WEB_PAGES.forEach(function (p) { pages[p[0]] = []; });
     Promise.all(files.map(function (f) {
@@ -1137,27 +1147,27 @@
         });
       }).catch(function () {});
     })).then(function () { return K.settingsFile ? K.settingsFile() : null; }).catch(function () { return null; }).then(function (S) {
-      WEB.S0 = S;
+      WTX.S0 = S;
       // wording the booking steps draw by themselves
       pages.stay.push({ key: 'booking.intl.title', tag: 'h3', def: 'Booking from outside South Africa?', group: 'Paying for a booking' });
       pages.stay.push({ key: 'booking.intl.text', tag: 'p', def: 'Bank transfers from other countries can be expensive. WhatsApp us and we will arrange for you to pay by cash or card when you arrive.', group: 'Paying for a booking' });
-      WEB.pages = pages; WEB.loading = false; if (route() === 'webtext') render();
+      WTX.pages = pages; WTX.loading = false; if (route() === 'webtext') render();
     });
   }
   var WEB_SET = [['Phone', 'Phone number', 'Shown in the header, footer and contact page', 'tel'], ['WhatsApp number', 'WhatsApp number', 'Country code first, no spaces or plus sign, e.g. 27604584478', 'tel'], ['Email', 'Email address', 'Where guests email you', 'email'], ['Guest rating', 'Guest rating (stars)', 'Shown on the home page and the Experience page, e.g. 4.9', 'text'], ['Google reviews', 'Link to your Google reviews', 'The "Read our reviews" button opens this', 'url'], ['Pay Dinokeng fees', 'Link to pay Dinokeng fees', 'Dinokeng\'s own payment page', 'url']];
   function vWeb() {
     webLoad();
     var w = webDB(), tabs = [['details', 'Contact details']].concat(WEB_PAGES.map(function (p) { return [p[0], p[1]]; })), body = '', nChanged = Object.keys(w.text).length;
-    var tabN = function (id) { if (!WEB.pages || id === 'details') return 0; return WEB.pages[id].filter(function (x) { return w.text[x.key] != null; }).length; };
-    if (!WEB.pages) body = '<p class="empty">Loading the website\'s wording…</p>';
-    else if (WEB.tab === 'details') {
+    var tabN = function (id) { if (!WTX.pages || id === 'details') return 0; return WTX.pages[id].filter(function (x) { return w.text[x.key] != null; }).length; };
+    if (!WTX.pages) body = '<p class="empty">Loading the website\'s wording…</p>';
+    else if (WTX.tab === 'details') {
       body = '<section class="card"><header class="card-h"><h3>Contact details and links</h3><span class="muted small">Used all over the website</span></header><div class="wt-set">' +
-        WEB_SET.map(function (r) { var def = WEB.S0 ? WEB.S0.get(r[0], '') : '', cur = w.settings[r[0]] != null ? w.settings[r[0]] : def;
+        WEB_SET.map(function (r) { var def = WTX.S0 ? WTX.S0.get(r[0], '') : '', cur = w.settings[r[0]] != null ? w.settings[r[0]] : def;
           return '<label class="fld"><span>' + r[1] + (w.settings[r[0]] != null ? ' <em class="wt-ch">Changed</em>' : '') + '</span><input data-ws="' + esc(r[0]) + '" data-def="' + esc(def) + '" value="' + esc(cur) + '" type="' + (r[3] === 'email' ? 'email' : 'text') + '"' + (r[3] === 'tel' ? ' inputmode="tel"' : r[3] === 'url' ? ' inputmode="url"' : '') + '><small class="muted">' + r[2] + '</small></label>'; }).join('') + '</div>' +
         '<p class="hint">' + ic('info') + ' Each box saves by itself when you click outside it. Social media links are on the <a href="#/social">Social media</a> page, bank details under <a href="#/settings">Settings</a>, and prices on the <a href="#/rates">Rates &amp; fees</a> page.</p></section>';
     } else {
-      var list = WEB.pages[WEB.tab] || [], q = WEB.q.trim().toLowerCase(), file = WEB_PAGES.filter(function (p) { return p[0] === WEB.tab; })[0][2], heroCard = '';
-      if (WEB.tab === 'home') {
+      var list = WTX.pages[WTX.tab] || [], q = WTX.q.trim().toLowerCase(), file = WEB_PAGES.filter(function (p) { return p[0] === WTX.tab; })[0][2], heroCard = '';
+      if (WTX.tab === 'home') {
         var hv = w.home.hero || '', hopt = function (v, img, t, sub, extra) { return '<label class="hero-opt' + (hv === v ? ' on' : '') + '"><input type="radio" name="hero" data-hero value="' + v + '"' + (hv === v ? ' checked' : '') + '>' + img + '<span><b>' + t + '</b><small>' + sub + '</small>' + (extra || '') + '</span></label>'; };
         heroCard = '<section class="card"><header class="card-h"><h3>Header photo</h3><span class="muted small">The big photo at the top of the home page</span></header><div class="hero-pick">' +
           hopt('', '<img src="../assets/img/hero/kyleu-sunset.jpg" alt="">', 'Sunset at camp', 'Sharp on phones and on big screens') +
@@ -1168,7 +1178,7 @@
       }
       if (q) list = list.filter(function (x) { return (x.def + ' ' + (w.text[x.key] || '')).toLowerCase().indexOf(q) >= 0; });
       var groups = [], cur = null; list.forEach(function (x) { if (!cur || cur.t !== x.group) { cur = { t: x.group, items: [] }; groups.push(cur); } cur.items.push(x); });
-      body = heroCard + '<div class="filters"><label class="search">' + ic('search') + '<input type="search" data-wtq placeholder="Find wording on this page" value="' + esc(WEB.q) + '" aria-label="Find wording"></label><a class="btn ghost" href="../' + file + '" target="_blank" rel="noopener">' + ic('ext') + 'View this page</a></div>' +
+      body = heroCard + '<div class="filters"><label class="search">' + ic('search') + '<input type="search" data-wtq placeholder="Find wording on this page" value="' + esc(WTX.q) + '" aria-label="Find wording"></label><a class="btn ghost" href="../' + file + '" target="_blank" rel="noopener">' + ic('ext') + 'View this page</a></div>' +
         (groups.length ? groups.map(function (g) {
           return '<section class="card wt-card"><header class="card-h"><h3>' + esc(g.t || 'Top of the page') + '</h3></header>' + g.items.map(function (x) {
             var has = w.text[x.key] != null, val = has ? w.text[x.key] : x.def, long = val.length > 70 || /\n/.test(val) || x.def.length > 70, kind = x.faq ? 'Answer' : WEB_KIND[x.tag] || 'Text';
@@ -1179,8 +1189,8 @@
         }).join('') : '<p class="empty">' + (q ? 'No wording on this page matches your search.' : 'This page has no wording to change here: the website fills it in by itself.') + '</p>');
     }
     return '<div class="page-h"><div><h1>Website wording</h1><p class="muted">Change the words on the website yourself. Pick a page, change a box and click outside it: it saves by itself and the website updates.</p></div>' + (nChanged ? '<div class="ph-act"><span class="pill info"><i></i>' + nChanged + ' wording change' + (nChanged === 1 ? '' : 's') + ' live</span></div>' : '') + '</div>' +
-      '<div class="rp-tabs page-tabs">' + tabs.map(function (t) { var n = tabN(t[0]); return '<button class="' + (WEB.tab === t[0] ? 'on' : '') + '" data-webtab="' + t[0] + '">' + t[1] + (n ? ' <span class="tab-n">' + n + '</span>' : '') + '</button>'; }).join('') + '</div>' +
-      (WEB.tab !== 'details' && WEB.pages ? '<p class="hint wt-tips">' + ic('info') + ' <span>Put <b>**two stars**</b> around words to make them bold and <b>*one star*</b> to highlight them. A link is written as <b>[the words](https://the-link)</b>. Prices and anything the booking system fills in are not here: change prices on the <a href="#/rates">Rates &amp; fees</a> page.</span></p>' : '') + body +
+      '<div class="rp-tabs page-tabs">' + tabs.map(function (t) { var n = tabN(t[0]); return '<button class="' + (WTX.tab === t[0] ? 'on' : '') + '" data-webtab="' + t[0] + '">' + t[1] + (n ? ' <span class="tab-n">' + n + '</span>' : '') + '</button>'; }).join('') + '</div>' +
+      (WTX.tab !== 'details' && WTX.pages ? '<p class="hint wt-tips">' + ic('info') + ' <span>Put <b>**two stars**</b> around words to make them bold and <b>*one star*</b> to highlight them. A link is written as <b>[the words](https://the-link)</b>. Prices and anything the booking system fills in are not here: change prices on the <a href="#/rates">Rates &amp; fees</a> page.</span></p>' : '') + body +
       '<p class="demo-note">' + ic('info') + 'Demo: your changes show on the website in this browser. In the live version they are saved on the server, so every visitor sees them.</p>';
   }
   // make a photo smaller before it is kept (longest side at most `max` pixels)
@@ -1190,7 +1200,7 @@
     im.onerror = function () { URL.revokeObjectURL(url); cb(null); };
     im.src = url;
   }
-  function webFind(key) { var f = null; Object.keys(WEB.pages || {}).forEach(function (p) { WEB.pages[p].forEach(function (x) { if (x.key === key) f = x; }); }); return f; }
+  function webFind(key) { var f = null; Object.keys(WTX.pages || {}).forEach(function (p) { WTX.pages[p].forEach(function (x) { if (x.key === key) f = x; }); }); return f; }
 
   /* ---------- camp news: posts for the website's news page ---------- */
   var MDPOSTS = null, MDLOAD = false, NEWSK = 'kyleu-web-news';
@@ -1644,7 +1654,7 @@
   var CAL = { start: null, days: 21, area: '' };
   function vCalendar() {
     if (!CAL.start) CAL.start = add(TODAY, -2);
-    var days = window.innerWidth < 700 ? 10 : CAL.days, s = CAL.start, e = add(s, days), cols = [];
+    var days = window.innerWidth < 700 ? 21 : CAL.days, s = CAL.start, e = add(s, days), cols = [];
     for (var i = 0; i < days; i++) cols.push(add(s, i));
     var head = '<div class="cal-row cal-head"><div class="cal-name">Stand</div>' + cols.map(function (d) { var dd = D(d); return '<div class="cal-day' + (d === TODAY ? ' today' : '') + (isWeekendNight(d) ? ' wk' : '') + '"><small>' + dd.toLocaleDateString('en-ZA', { weekday: 'short' }) + '</small><b>' + dd.getDate() + '</b></div>'; }).join('') + '</div>';
     var rows = ['fenced', 'unfenced', 'self-sufficient'].filter(function (a) { return !CAL.area || a === CAL.area; }).map(function (a) {
@@ -2081,12 +2091,12 @@
     var att = [{ name: K.invoiceName(inv), type: 'application/pdf', size: 0, inv: K.docKey(inv), invRef: b.ref, at: at, via: 'Sent automatically' }];
     if (!t) { t = { id: uid('t'), subject: subject, name: guestName(b), email: b.guest.email, phone: b.guest.phone, status: 'closed', unread: false, ref: b.ref, auto: true, msgs: [] }; DB.threads.push(t); }
     var sh = sigShared();
-    t.msgs.push({ from: 'staff', by: 'Website (automatic)', at: at, body: (t.subject !== subject ? 'Subject: ' + subject + '\n\n' : '') + body + '\n\n--\nKyleu Bush Camp\n' + sh.phone + ' (call or WhatsApp) · info@kyleu.co.za · ' + sh.web + '\nProud DGR CP Member', att: att });
+    t.msgs.push({ from: 'staff', by: 'Website (automatic)', at: at, body: (t.subject !== subject ? 'Subject: ' + subject + '\n\n' : '') + body + '\n\n--\nKyleu Bush Camp\n' + sh.phone + ' · info@kyleu.co.za · ' + sh.web + '\nProud DGR CP Member', att: att });
   }
   function invMailBody(b, inv, updated) {
     var st = K.invoiceState(inv);
     if (inv.kind === 'Quote') return 'Hi ' + b.guest.first + ',\n\n' + (updated ? 'Your booking ' + b.ref + ' was changed, so here is your updated quotation ' + inv.no + '.' : 'Thank you for booking ' + standById(b.stand).name + ' from ' + fd(b.ci, LONGD) + ' to ' + fd(b.co, LONGD) + '. Your quotation ' + inv.no + ' is attached, with our bank details and your booking reference ' + b.ref + '.') +
-      '\n\nThis quotation is valid for ' + validDays(inv.date || TODAY, inv.validTo || depositDue(b)) + '. To secure your stand, pay ' + money(st.now || deposit(b)) + ' using reference ' + b.ref + '.\n\nOnce payment has been made, upload your proof of payment directly to your booking (press "I have paid"):\n' + bookingLink(b) + '\n\nSee you in the bush!\nThe Kyleu team';
+      '\n\nThis quotation is valid for ' + validDays(inv.date || TODAY, inv.validTo || depositDue(b)) + '. After that the stand is released. To secure your stand, pay ' + money(st.now || deposit(b)) + ' using reference ' + b.ref + '.\n\nOnce payment has been made, upload your proof of payment directly to your booking (press "I have paid"):\n' + bookingLink(b) + '\n\nSee you in the bush!\nThe Kyleu team';
     return 'Hi ' + b.guest.first + ',\n\n' + (updated === 'staff' ? 'Please find your invoice ' + inv.no + ' for ' + standById(b.stand).name + ', ' + fd(b.ci, LONGD) + ' to ' + fd(b.co, LONGD) + ', attached.' : updated ? 'Your booking ' + b.ref + ' was changed, so here is your updated invoice ' + inv.no + '.' : 'Thank you for booking ' + standById(b.stand).name + ' from ' + fd(b.ci, LONGD) + ' to ' + fd(b.co, LONGD) + '. Your invoice ' + inv.no + ' is attached.') + '\n\n' +
       (st.k === 'due' ? st.t + '. Pay by EFT using reference ' + b.ref + '; our banking details are on the invoice. When you have paid, press "I have paid" on your booking page:\n' + bookingLink(b) + '\n\nOnce your booking is paid in full, the same link lets you finalise it (vehicles, passengers and arrival time).' : st.t) + '\n\nSee you in the bush!\nThe Kyleu team';
   }
@@ -2108,7 +2118,7 @@
   function invGet(b, key) { return invByNo(b, key) || CUR_INV[b.ref + '|' + key]; }
   function sendInvoice(b, inv) {
     sendBox({ b: b, title: 'Send ' + inv.kind.toLowerCase() + ' ' + inv.no, value: 'inv', choices: [['inv', inv.kind]], load: function () {
-      return { subject: (inv.kind === 'Quote' ? 'Your Kyleu quotation ' : 'Your Kyleu invoice ') + inv.no, text: inv.kind === 'Quote' ? 'Hi ' + b.guest.first + ',\n\nHere is your quotation ' + inv.no + ' for ' + standById(b.stand).name + ', ' + fd(b.ci, LONGD) + ' to ' + fd(b.co, LONGD) + '. The total is ' + money(inv.total) + (inv.validTo ? ', and the quotation is valid for ' + validDays(inv.date || TODAY, inv.validTo) : '') + '.\n\nYour stand is held once the deposit is paid. Our banking details are on the quotation.\n\nThe Kyleu team' : invMailBody(b, inv, 'staff'), docs: [invDoc(inv)] };
+      return { subject: 'Your Kyleu reservation ' + b.ref + ' (' + docTag(inv, b.ref) + ')', text: inv.kind === 'Quote' ? 'Hi ' + b.guest.first + ',\n\nHere is your quotation ' + inv.no + ' for ' + standById(b.stand).name + ', ' + fd(b.ci, LONGD) + ' to ' + fd(b.co, LONGD) + '. The total is ' + money(inv.total) + (inv.validTo ? ', and the quotation is valid for ' + validDays(inv.date || TODAY, inv.validTo) : '') + '.\n\nYour stand is held once the deposit is paid. Our banking details are on the quotation.\n\nThe Kyleu team' : invMailBody(b, inv, 'staff'), docs: [invDoc(inv)] };
     } });
   }
   function actInvNew(ref) {
@@ -2641,7 +2651,7 @@
         ['Deposit percentage', '%', 'Deposit', 'How much of the total secures a booking.'],
         ['Deposit due within days of invoice', 'days', 'Deposit deadline', 'EFT guests must pay the deposit within this many days, or the stand can be released.'],
         ['Balance due days before arrival', 'days', 'Balance deadline', 'The rest is due this many days before arrival.'],
-        ['Minimum nights over a weekend', 'nights', 'Weekend minimum', 'Shortest stay allowed over a Friday or Saturday night.'],
+        ['Minimum nights over a weekend', 'nights', 'Weekend minimum', 'Shortest stay when it includes a Friday or Saturday night. With 2, Friday + Saturday and Saturday + Sunday are both fine.'],
         ['Children free under age', 'years', 'Children stay free under', 'Children younger than this pay nothing.']];
       var DN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'], wkd = P.wkDays || [5, 6, 0], wdNames = [1, 2, 3, 4, 5, 6, 0].filter(function (d) { return wkd.indexOf(d) < 0; }).map(function (d) { return DN[d]; });
       body = '<section class="card"><header class="card-h"><h3>Weekend-rate nights</h3><span class="muted small">Saves as you tick</span></header><p class="muted small">Tick the nights that cost the weekend rate. All other nights cost the weekday rate. The night before a public holiday always costs the weekend rate.</p>' +
@@ -3030,12 +3040,12 @@
     var f = 'font-family:Arial,Helvetica,sans-serif;', a = 'color:#2a1b12;text-decoration:none;', lab = 'color:#8a7a68;padding:0 10px 0 0;font-size:12px;';
     var row = function (l, v, href) { return '<tr><td style="' + f + lab + '">' + l + '</td><td style="' + f + 'font-size:13px;color:#2a1b12;padding:1px 0;">' + (href ? '<a href="' + esc(href) + '" style="' + a + '">' + esc(v) + '</a>' : esc(v)) + '</td></tr>'; };
     return '<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;' + f + 'color:#2a1b12;max-width:520px;"><tr>' +
-      (d.photo ? '<td valign="middle" style="padding:0 18px 0 0;"><a href="https://' + esc(sh.web.replace(/^https?:\/\//, '')) + '" style="text-decoration:none;"><img src="' + base + 'assets/img/email/kyleu-logo.png" width="104" height="83" alt="Kyleu Bush Camp" style="display:block;border:0;"></a></td>' : '') +
+      (d.photo ? '<td valign="middle" style="padding:0 18px 0 0;"><a href="https://' + esc(sh.web.replace(/^https?:\/\//, '')) + '" style="text-decoration:none;"><img src="' + base + 'assets/img/email/kyleu-logo.png" width="150" height="120" alt="Kyleu Bush Camp" style="display:block;border:0;"></a></td>' : '') +
       '<td valign="top" style="border-left:3px solid #e8731c;padding:0 0 0 16px;">' +
       '<div style="font-family:Georgia,\'Times New Roman\',serif;font-size:21px;font-weight:bold;color:#2a1b12;line-height:1.2;">' + esc(d.name) + '</div>' +
       '<div style="' + f + 'font-size:11px;font-weight:bold;letter-spacing:1.4px;text-transform:uppercase;color:#b8461a;padding:3px 0 9px;">' + esc(d.title ? d.title + ' · ' : '') + 'Kyleu Bush Camp</div>' +
       '<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">' +
-      row('Phone', sh.phone + ' (call or WhatsApp)', 'tel:' + telLink(sh.phone)) + (d.mobile ? row('Mobile', d.mobile, 'tel:' + telLink(d.mobile)) : '') +
+      row('Phone', sh.phone, 'tel:' + telLink(sh.phone)) + (d.mobile ? row('Mobile', d.mobile, 'tel:' + telLink(d.mobile)) : '') +
       row('Email', d.email, 'mailto:' + d.email) + row('Web', sh.web, 'https://' + sh.web.replace(/^https?:\/\//, '')) + '</table>' +
       '<div style="' + f + 'font-size:12px;color:#8a7a68;padding:7px 0 0;">' + esc(sh.place) + '</div>' +
       (soc.length ? '<div style="' + f + 'font-size:12px;padding:6px 0 0;">' + soc.map(function (x) { return '<a href="' + esc(x[1]) + '" style="color:#b8461a;font-weight:bold;text-decoration:none;">' + x[0] + '</a>'; }).join(' &nbsp;·&nbsp; ') + '</div>' : '') +
@@ -3044,7 +3054,7 @@
       '</table>';
   }
   // the same signature as plain text (WhatsApp, plain emails, and the demo's email log)
-  function sigText(d) { var sh = sigShared(); return d.name + '\n' + (d.title ? d.title + ', ' : '') + 'Kyleu Bush Camp\n' + sh.phone + ' (call or WhatsApp)' + (d.mobile ? ' · ' + d.mobile : '') + ' · ' + d.email + ' · ' + sh.web + (d.dgr ? '\nProud DGR CP Member' : ''); }
+  function sigText(d) { var sh = sigShared(); return d.name + '\n' + (d.title ? d.title + ', ' : '') + 'Kyleu Bush Camp\n' + sh.phone + (d.mobile ? ' · ' + d.mobile : '') + ' · ' + d.email + ' · ' + sh.web + (d.dgr ? '\nProud DGR CP Member' : ''); }
   function mySig() { return ME ? sigData(ME.id) : null; }
   function sigPage() {
     var who = SIG_WHO || (ME ? ME.id : STAFF[0].id), d = sigData(who), sh = sigShared(), local = /localhost|127\.0\.0\.1/.test(location.hostname);
@@ -3276,7 +3286,7 @@
     var stb = t.closest('[data-shoptab]'); if (stb) { SHOP.tab = stb.dataset.shoptab; render(); window.scrollTo(0, 0); return; }
     var pcat = t.closest('[data-pcat]'); if (pcat) { SHOP.cat = pcat.dataset.pcat; render(); return; }
     var prc = t.closest('[data-prodcat]'); if (prc) { PROD.cat = prc.dataset.prodcat; render(); return; }
-    var wtb = t.closest('[data-webtab]'); if (wtb) { WEB.tab = wtb.dataset.webtab; WEB.q = ''; render(); window.scrollTo(0, 0); return; }
+    var wtb = t.closest('[data-webtab]'); if (wtb) { WTX.tab = wtb.dataset.webtab; WTX.q = ''; render(); window.scrollTo(0, 0); return; }
     var wrs = t.closest('[data-wt-reset]'); if (wrs) { var wrx = webFind(wrs.dataset.wtReset); delete webDB().text[wrs.dataset.wtReset]; log('Website wording put back to the original' + (wrx ? ': "' + wrx.def.slice(0, 60) + '"' : '')); save(); var wry = window.scrollY; render(); window.scrollTo(0, wry); toast('Back to the original wording'); return; }
     var rtb = t.closest('[data-ratetab]'); if (rtb) { var sb = $('[data-savebar]'); if (sb && !sb.hidden) { toast('Save or discard your changes first'); return; } RT.tab = rtb.dataset.ratetab; render(); return; }
     var hd = t.closest('[data-hol-del]'); if (hd) { var hdd = hd.dataset.holDel; if (DB.hol.add[hdd]) delete DB.hol.add[hdd]; else DB.hol.del[hdd] = 1; delete P.holidays[hdd]; log('Removed holiday ' + hdd); save(); render(); toast('Date removed'); return; }
@@ -3428,7 +3438,7 @@
     if (t.matches('[data-f=q]')) { F.q = t.value; var pos = t.selectionStart; render(); var i = $('[data-f=q]'); i.focus(); i.setSelectionRange(pos, pos); return; }
     if (t.matches('[data-gq]')) { GQ = t.value; var p2 = t.selectionStart; render(); var g = $('[data-gq]'); g.focus(); g.setSelectionRange(p2, p2); return; }
     if (t.matches('[data-rw]')) { var sb2 = $('[data-savebar]'); if (sb2) sb2.hidden = false; return; }
-    if (t.matches('[data-wtq]')) { WEB.q = t.value; var wp = t.selectionStart; render(); var wi = $('[data-wtq]'); wi.focus(); wi.setSelectionRange(wp, wp); return; }
+    if (t.matches('[data-wtq]')) { WTX.q = t.value; var wp = t.selectionStart; render(); var wi = $('[data-wtq]'); wi.focus(); wi.setSelectionRange(wp, wp); return; }
     if (t.matches('[data-rate]')) { var sbar = $('[data-savebar]'); if (sbar) sbar.hidden = false; var ex = $('[data-example]'); if (ex) ex.innerHTML = exampleText(); var c = $('[data-cardof="' + t.dataset.rate.replace(/"/g, '\\"') + '"]'), v = parseFloat(t.value); if (c) c.textContent = v && hasFee() ? 'Card ' + money(toCard(v)) : ''; return; }
     if (t.matches('[data-q]')) { var qk = t.dataset.q, qp = qk.split(':'); FO(qp[0])[qp[1]] = t.value; resetPages(); var qpos = t.selectionStart; render(); var nq = $('[data-q="' + qk + '"]'); if (nq) { nq.focus(); nq.setSelectionRange(qpos, qpos); } return; }
     if (t.matches('[data-f=q],[data-gq],[data-inq],[data-payq],[data-shopq],[data-prodq]')) resetPages();

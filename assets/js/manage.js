@@ -63,7 +63,7 @@
       vehicles: b.vehTbc ? 0 : (cs.length || b.vehicles || 1), cars: cs.map(function (c) { return { reg: c.reg || '', driver: c.driver || '', guests: (c.guests || []).slice() }; }),
       eta: b.eta || '', shop: pre && pre.items ? clone(pre.items) : {}, total: b.total || 0, paid: (b.payments || []).reduce(function (a, p) { return a + p.amt; }, 0), method: b.method || 'eft',
       request: b.changeReq && !b.changeReq.done ? b.changeReq : null, invoice: (b.invoices || []).slice(-1)[0] || null,
-      claim: b.paidClaim && !b.paidClaim.done ? b.paidClaim : null, created: (b.created || '').slice(0, 10), key: b.key || '', finalised: b.finalised || null };
+      claim: b.paidClaim && !b.paidClaim.done ? b.paidClaim : null, created: (b.created || '').slice(0, 10), key: b.key || '', finalised: b.finalised || null, onArrival: b.onArrival || null };
   }
   function fromWeb(w) {
     var card = w.pay === 'deposit' || w.pay === 'full', shop = {};
@@ -141,14 +141,14 @@
     return Object.assign(cur, { id: K.docId ? K.docId() : '', no: no, date: today(), lines: lines, total: total, deposit: cur.paid ? cur.deposit : Math.round(total * (cur.depPct || 50) / 100), note: 'Updated ' + (q ? 'quotation' : 'invoice') + (no === cur.no ? '' : ': replaces ' + cur.no) + '.' });
   }
   function invModal(v) {
-    var inv = invoiceFor(v), st = K.invoiceState(inv), word = K.docWord(inv), m = document.createElement('div');   // word: quotation until something is paid, then invoice
+    var inv = invoiceFor(v), st = K.invoiceState(inv), word = 'reservation', m = document.createElement('div');   // one word for guests; the document itself says Quotation or Invoice
     m.className = 'inv-modal'; m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true'); m.setAttribute('aria-label', v._paid ? 'Tell us you have paid' : 'Your ' + word);
     if (v._paid) m.innerHTML = '<div class="inv-modal-card paid-only"><div class="inv-modal-h"><h2>I have paid</h2><button type="button" class="inv-x" data-inv-close aria-label="Close">' + svg('i-x') + '</button></div>' +
       '<p class="mg-paid-due">Still to pay on <b>' + esc(v.ref) + '</b>: <b>' + K.money(st.bal) + '</b>' + (st.now && st.now < st.bal ? ' (' + K.money(st.now) + ' due now)' : '') + '</p><div class="paid-box" data-paid-box></div>' +
       '<p class="mg-paid-inv"><button type="button" class="link-btn" data-inv-full>See the ' + word + ' and our bank details</button></p></div>';
     else m.innerHTML = '<div class="inv-modal-card"><div class="inv-modal-h"><h2>Your ' + word + '</h2><button type="button" class="inv-x" data-inv-close aria-label="Close">' + svg('i-x') + '</button></div>' + K.invoiceHTML(inv) +
-      '<div class="inv-acts"><button class="btn btn-ghost" type="button" data-inv-pdf>' + svg('i-doc') + 'Download ' + word + ' (PDF)</button><button class="btn btn-ghost" type="button" data-inv-print>' + svg('i-doc') + 'Print</button>' +
-      (st.bal > 0 && !v.claim ? '<button class="btn btn-green" type="button" data-inv-paid>' + svg('i-check') + 'I have paid</button>' : '') + '</div><div class="paid-box" data-paid-box>' + (v.claim ? K.paidThanks(v.claim, inv) : '') + '</div></div>';
+      '<div class="inv-acts"><button class="btn btn-ghost" type="button" data-inv-pdf>' + svg('i-doc') + 'Download your reservation (PDF)</button><button class="btn btn-ghost" type="button" data-inv-print>' + svg('i-doc') + 'Print</button>' +
+      (st.bal > 0 && !v.claim && !v.onArrival ? '<button class="btn btn-green" type="button" data-inv-paid>' + svg('i-check') + 'I have paid</button>' : '') + '</div><div class="paid-box" data-paid-box>' + (v.claim ? K.paidThanks(v.claim, inv) : '') + '</div></div>';
     document.body.appendChild(m); document.body.classList.add('lock');
     var close = function () { m.remove(); document.body.classList.remove('lock'); drawSecs(); };
     m.addEventListener('click', function (e) {
@@ -196,7 +196,7 @@
     note: { id: 'note', ic: 'i-mail', t: 'A message for the Kyleu team' }
   };
   var SECS = [];
-  function secsFor(v) { return (finalMode(v) ? ['cars', 'eta', 'shop', 'guests', 'details', 'note'] : ['guests', 'shop', 'details']).map(function (k) { return ALL[k]; }); }
+  function secsFor(v) { return (finalMode(v) ? ['cars', 'eta', 'shop', 'note', 'guests', 'details'] : ['guests', 'shop', 'note', 'details']).map(function (k) { return ALL[k]; }); }
   function carsText(v) {
     if (!v.vehicles) return 'Not sure yet how many vehicles';
     var named = v.cars.slice(0, v.vehicles).reduce(function (a, c) { return a + (c.driver ? 1 : 0) + c.guests.length; }, 0), regs = v.cars.slice(0, v.vehicles).filter(function (c) { return c.reg; }).length;
@@ -225,10 +225,11 @@
   function anyChange() { return ['details', 'cars', 'eta', 'shop', 'guests', 'note'].some(changed); }
 
   // what the guest's document is called right now: "quotation" until something is paid, then "invoice"
-  function docWord(v) { return K.docWord(invoiceFor(v)); }
+  // guests see one word, "reservation", whether the document is still a quotation or already an invoice
+  function docWord(v) { return 'reservation'; }
   // an unpaid quotation holds the stand for 5 days (a day longer while Kyleu checks a payment the guest told us about)
   function holdOf(v) {
-    if (v.paid || !K.quoteHold) return { state: 'paid' };
+    if (v.paid || v.onArrival || !K.quoteHold) return { state: 'paid' };   // paid, or paying on arrival as arranged with Kyleu: the stand is not on hold
     var pops = []; try { pops = JSON.parse(localStorage.getItem('kyleu-web-pop') || '[]'); } catch (e) {}
     var claimed = !!v.claim || pops.some(function (x) { return key(x.ref) === key(v.ref); });
     var h = K.quoteHold({ due: (v.invoice && v.invoice.validTo) || depDueOf(v), paid: 0, claimed: claimed, today: today() });
@@ -237,7 +238,7 @@
   }
   function bookingCard(v) {
     var st = stand(v.stand), bal = Math.max(0, v.total - v.paid), hold = holdOf(v);
-    var stt = v.status === 'in' ? ['ok', 'In camp now'] : paidFull(v) ? ['ok', v.finalised ? 'Paid in full · finalised' : 'Paid in full'] : v.paid ? ['warn', 'Waiting for payment · ' + K.money(Math.max(0, v.total - v.paid)) + ' owing'] : ['warn', 'Waiting for payment'];
+    var stt = v.status === 'in' ? ['ok', 'In camp now'] : paidFull(v) ? ['ok', v.finalised ? 'Paid in full · finalised' : 'Paid in full'] : v.onArrival ? ['ok', 'Confirmed · pay on arrival'] : v.paid ? ['warn', 'Waiting for payment · ' + K.money(Math.max(0, v.total - v.paid)) + ' owing'] : ['warn', 'Waiting for payment'];
     return '<div class="mg-booking"><div class="mg-bk-top"><span class="mg-ref">' + esc(v.ref) + '</span><span class="mg-st ' + stt[0] + '">' + stt[1] + '</span></div>' +
       '<h3>' + esc(st.name) + '</h3><p>' + svg('i-cal') + '<span><b>' + esc(nice(v.ci, true)) + '</b> to <b>' + esc(nice(v.co, true)) + '</b> (' + nights(v.ci, v.co) + ' night' + (nights(v.ci, v.co) === 1 ? '' : 's') + ')</span></p>' +
       '<p>' + svg('i-users') + '<span>' + esc(peopleText(v)) + '</span></p>' +
@@ -246,9 +247,10 @@
         : hold.state === 'soft' ? '<p class="mg-claim">' + svg('i-clock') + '<span>We are checking your payment. Your stand is held until <b>' + esc(nice(hold.until, true)) + '</b>.</span></p>'
         : hold.state === 'released' ? '<p class="mg-claim bad">' + svg('i-info') + '<span>This quotation expired on <b>' + esc(nice(hold.until || v.ci, true)) + '</b> and the stand was released. WhatsApp or email us and we will help you book again.</span></p>' : '') +
       (v.claim ? '<p class="mg-claim">' + svg('i-clock') + '<span>You told us you paid <b>' + K.money(v.claim.amt) + '</b> on ' + esc(nice(v.claim.date)) + '. We are checking the bank.</span></p>' : '') +
-      '<div class="mg-bk-acts"><button type="button" class="btn btn-light btn-sm" data-inv-open>' + svg('i-doc') + 'View my ' + docWord(v) + '</button>' + (bal > (v.claim ? v.claim.amt : 0) && !started(v) && hold.state !== 'released' ? '<button type="button" class="btn btn-green btn-sm" data-inv-open="paid">' + svg('i-check') + (v.claim ? 'I have paid more' : 'I have paid') + '</button>' : '') + '</div></div>' +
+      '<div class="mg-bk-acts"><button type="button" class="btn btn-light btn-sm" data-inv-open>' + svg('i-doc') + 'See your reservation</button>' + (bal > (v.claim ? v.claim.amt : 0) && !v.onArrival && !started(v) && hold.state !== 'released' ? '<button type="button" class="btn btn-green btn-sm" data-inv-open="paid">' + svg('i-check') + (v.claim ? 'I have paid more' : 'I have paid') + '</button>' : '') + '</div></div>' +
       (started(v) ? '' : locked(v) ? '<div class="mg-callout">' + svg('i-info') + '<p><b>Your stay starts within ' + balDays() + ' days.</b> To add or remove people now, please WhatsApp or email us.' + (finalMode(v) ? ' You can still finalise everything else here.' : '') + '</p></div>' : '') +
-      (!v.paid && !v.claim && bal > 0 && v.method !== 'card' && !started(v) && hold.state !== 'released' && K.intlNote ? K.intlNote({ ref: v.ref }) : '');
+      (v.onArrival && bal > 0 ? '<p class="mg-claim">' + svg('i-info') + '<span>As arranged with Kyleu, you pay <b>' + K.money(bal) + '</b> ' + (/card/i.test(v.onArrival.how || '') ? 'by card' : 'in cash') + ' when you arrive.</span></p>' : '') +
+      (!v.paid && !v.claim && !v.onArrival && bal > 0 && v.method !== 'card' && !started(v) && hold.state !== 'released' && K.intlNote ? K.intlNote({ ref: v.ref }) : '');
   }
   function editor(id) {
     var d = draft;
@@ -279,7 +281,7 @@
         '<div class="bw-date"><label for="e-co"><span class="bw-dn">B</span><span><b>Leaving</b><small>Now: ' + esc(nice(base.co)) + '</small></span></label><input id="e-co" type="date" name="co" min="' + today() + '" value="' + esc(r.co || base.co) + '"></div></div>' +
         '<div class="field"><label for="e-msg">Anything else about the change? <span class="opt">(optional)</span></label><textarea id="e-msg" name="msg" rows="3" placeholder="e.g. We would like a stand closer to the pool">' + esc(r.msg || '') + '</textarea></div>';
     }
-    if (id === 'note') return '<p class="mg-help-t">Anything else we should know? Celebrating something, a question, or a porta potty (only for the self-sufficient (R) stands)? Write it here and the team will see it on your booking.</p><div class="field"><label for="e-note">Your message</label><textarea id="e-note" name="note" rows="4">' + esc(d.note || '') + '</textarea></div>';
+    if (id === 'note') return '<p class="mg-help-t">Anything else we should know? A note about your shop order (for example one bag of ice per day), celebrating something, a question, or a porta potty (only for the self-sufficient (R) stands)? Write it here and the team will see it on your booking.</p><div class="field"><label for="e-note">Your message</label><textarea id="e-note" name="note" rows="4">' + esc(d.note || '') + '</textarea></div>';
     return '';
   }
   function drawSecs() {
@@ -451,7 +453,7 @@
     }
     if (missing.length) steps.push('<b>Still to add before you arrive:</b> ' + esc(missing.length > 1 ? missing.slice(0, -1).join(', ') + ' and ' + missing[missing.length - 1] : missing[0]) + '. Come back with the link to your booking any time before ' + esc(nice(base.ci)) + '.');
     if (a.guests && a.guests.extra) steps.unshift('<b>Your booking is waiting for payment again:</b> ' + K.money(base.total - base.paid) + ' is owing for the added guests. Once it is paid, you can finalise the rest of your booking here.');
-    if (a.invoice) steps.unshift('We have emailed your <b>updated ' + (a.invoice.kind === 'Quote' ? 'quotation' : 'invoice') + '</b> to <b>' + esc(base.email) + '</b>. <button type="button" class="link-btn" data-inv-open>View it here</button>.');
+    if (a.invoice) steps.unshift('We have emailed your <b>updated reservation</b> to <b>' + esc(base.email) + '</b>. <button type="button" class="link-btn" data-inv-open>View it here</button>.');
     $('[data-pane="4"]').innerHTML = '<div class="success mg-done"><div class="success-badge"><svg class="ring" viewBox="0 0 110 110" fill="none" stroke="#3f7d3a" stroke-width="6" stroke-linecap="round"><circle cx="55" cy="55" r="50"/><path d="M34 57l14 14 28-30"/></svg></div>' +
       '<p class="bw-of">Step 4 of 4</p><h2>' + (a.finalise && !missing.length ? 'Your booking is finalised' : a.finalise ? 'Saved. Nearly done!' : 'Your changes are saved') + '</h2><p class="muted">Booking <b>' + esc(base.ref) + '</b> · ' + esc(stand(base.stand).name) + ' · ' + esc(nice(base.ci)) + ' to ' + esc(nice(base.co)) + '</p>' +
       (function () { var ch = a.summary.filter(function (x) { return x !== 'finalised the booking'; }); return ch.length ? '<p class="mg-small">You changed: ' + esc(ch.length > 1 ? ch.slice(0, -1).join(', ') + ' and ' + ch[ch.length - 1] : ch[0]) + '.</p>' : ''; })() +

@@ -125,7 +125,12 @@ input, select, textarea { font: inherit; color: inherit; }
 .brand img { height: 52px; width: auto; filter: drop-shadow(0 4px 10px rgba(0,0,0,.25)); transition: transform .3s var(--ease); }
 .brand:hover img { transform: rotate(-4deg) scale(1.04); }
 .brand-text { display: flex; flex-direction: column; line-height: 1.05; }
-.brand-text b { font-family: var(--font-display); font-size: 1.2rem; letter-spacing: .02em; }
+/* The name next to the logo uses --font-brand. Kyleu's logo font is Dom Bold BT (a paid Bitstream font).
+   Once Kyleu has a web licence: put the file in assets/fonts/dom-bold-bt.woff2, uncomment the @font-face
+   below and change --font-brand to: 'Dom Bold BT', var(--font-display). Until then it falls back to Fraunces. */
+/* @font-face { font-family: 'Dom Bold BT'; src: url('../fonts/dom-bold-bt.woff2') format('woff2'); font-weight: 700; font-display: swap; } */
+:root { --font-brand: var(--font-display); }
+.brand-text b { font-family: var(--font-brand); font-size: 1.2rem; letter-spacing: .02em; }
 .brand-text small { font-size: .7rem; letter-spacing: .18em; text-transform: uppercase; opacity: .75; font-weight: 700; }
 .site-header:not(.solid):not(.always-solid) .brand-text, .site-header:not(.solid):not(.always-solid) .nav-links > a, .site-header:not(.solid):not(.always-solid) .nav-drop > a { color: #fff; text-shadow: 0 1px 12px rgba(0,0,0,.4); }
 .nav-links { display: flex; align-items: center; gap: 4px; }

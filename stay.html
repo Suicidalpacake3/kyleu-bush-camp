@@ -27,8 +27,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700;6..12,800;6..12,900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/style.css?v=202611110600">
-<link rel="stylesheet" href="assets/css/pages.css?v=202611110600">
+<link rel="stylesheet" href="assets/css/style.css?v=202611110724">
+<link rel="stylesheet" href="assets/css/pages.css?v=202611110724">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -67,10 +67,10 @@
 <script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.kyleu.co.za/"}, {"@type": "ListItem", "position": 2, "name": "Book a Campsite", "item": "https://www.kyleu.co.za/stay.html"}]}</script>
 
 <meta name="kyleu-base" content="">
-<script src="assets/js/content.js?v=202611110600" defer></script>
-<script src="assets/js/campmap-layout.js?v=202611110600" defer></script>
-<script src="assets/js/site.js?v=202611110600" defer></script>
-<script src="assets/js/pages.js?v=202611110600" defer></script><script src="assets/js/campmap-data.js?v=202611110600" defer></script><script src="assets/js/campmap.js?v=202611110600" defer></script><link rel="stylesheet" href="assets/css/invoice.css?v=202611110600"><script src="assets/js/invoice.js?v=202611110600" defer></script><script src="assets/js/bookparts.js?v=202611110600" defer></script><script src="assets/js/datepicker.js?v=202611110600" defer></script><script src="assets/js/booking.js?v=202611110600" defer></script>
+<script src="assets/js/content.js?v=202611110724" defer></script>
+<script src="assets/js/campmap-layout.js?v=202611110724" defer></script>
+<script src="assets/js/site.js?v=202611110724" defer></script>
+<script src="assets/js/pages.js?v=202611110724" defer></script><script src="assets/js/campmap-data.js?v=202611110724" defer></script><script src="assets/js/campmap.js?v=202611110724" defer></script><link rel="stylesheet" href="assets/css/invoice.css?v=202611110724"><script src="assets/js/invoice.js?v=202611110724" defer></script><script src="assets/js/bookparts.js?v=202611110724" defer></script><script src="assets/js/datepicker.js?v=202611110724" defer></script><script src="assets/js/booking.js?v=202611110724" defer></script>
 </head>
 <body class="page-stay">
 <a class="skip" href="#main">Skip to content</a>
@@ -295,7 +295,7 @@
     <div class="features" data-stagger>
       <div class="feature" data-reveal><div class="ic"><svg><use href="#i-shield"/></svg></div><h3 data-edit="stay.book-with-confidence">Book with confidence</h3><p data-edit="stay.50-deposit-secures-your-stand-balance">50% deposit secures your stand. Balance due 7 days before you arrive. Booking less than 12 days ahead? Then you pay in full.</p></div>
       <div class="feature" data-reveal><div class="ic"><svg><use href="#i-f-family"/></svg></div><h3 data-edit="stay.children-under-12-free">Children under 12 free</h3><p data-edit="stay.only-adults-and-pensioners-are-charged">Only adults and pensioners are charged. Bring the children along and make memories in the bush.</p></div>
-      <div class="feature" data-reveal><div class="ic"><svg><use href="#i-cal"/></svg></div><h3 data-edit="stay.weekend-fri-sat">Weekend = Fri, Sat &amp; Sun</h3><p data-edit="stay.weekends-and-long-weekends-are-booked">Friday, Saturday and Sunday nights are weekend nights. Friday and Saturday are booked together (minimum 2 nights), and so are long weekends.</p></div>
+      <div class="feature" data-reveal><div class="ic"><svg><use href="#i-cal"/></svg></div><h3 data-edit="stay.weekend-fri-sat">Weekend = Fri, Sat &amp; Sun</h3><p data-edit="stay.weekends-and-long-weekends-are-booked">Friday, Saturday and Sunday nights are weekend nights. A weekend stay is at least 2 nights: Friday and Saturday, or Saturday and Sunday.</p></div>
     </div>
   </div>
 </section>
@@ -328,7 +328,6 @@
             <div class="field"><label for="f-email">Email</label><input id="f-email" name="email" type="email" autocomplete="email" required><span class="msg">We need a valid email for your confirmation</span></div>
             <div class="field"><label for="f-phone">Mobile number</label><input id="f-phone" name="phone" type="tel" autocomplete="tel" placeholder="e.g. 082 123 4567" required><span class="msg" data-msg-empty="Please add a mobile number" data-msg-bad="Please check your mobile number: it should have 10 digits, like 082 123 4567">Please add a mobile number</span></div>
           </div>
-          <div class="field"><label for="f-notes">Anything we should know? <span class="opt">(optional)</span></label><textarea id="f-notes" name="notes" placeholder="Celebrating something? Travelling with a big group? Anything else we should know?"></textarea></div>
         </div>
         <div class="mc-actions"><span class="muted" style="font-size:.85rem"><svg width="14" height="14" style="vertical-align:-2px"><use href="#i-lock"/></svg> Your details are protected under POPIA. <a href="policies.html#privacy" target="_blank">Privacy</a></span><button class="btn" type="button" data-next>Continue <svg><use href="#i-arrow"/></svg></button></div>
       </div>
@@ -343,6 +342,7 @@
           <div data-extras></div>
           <div data-shop></div>
         </div>
+        <div class="field bk-notes"><label for="f-notes">Anything we should know? <span class="opt">(optional)</span></label><textarea id="f-notes" name="notes" placeholder="For example: one bag of ice per day, please. Celebrating something? Travelling with a big group?"></textarea></div>
         <p class="muted small-note">Once your booking is paid in full, we email you a link to <b>finalise</b> it: your vehicles and who is in each one, and roughly when you arrive.</p>
         <div class="form-grid" style="margin-top:12px">
           <label class="check"><input type="checkbox" name="tc" required><span>I've read and accept the <a href="policies.html" target="_blank">terms, payment &amp; cancellation policy</a> (cancellations are not refunded but kept as a credit for another stay), and understand that <b>camping at Kyleu is entirely at my own risk</b>, because wild animals roam freely.</span></label>
@@ -358,9 +358,9 @@
         <p class="muted">Choose how you'd like to pay.</p>
         <div class="demo-flag"><svg><use href="#i-info"/></svg><span>Demo mode: this is a mock-up. No card is charged and nothing is sent. Use the "fill test card" link to try it.</span></div>
         <div class="pay-opts">
-          <label class="pay-opt" data-pay="deposit"><input type="radio" name="pay" value="deposit"><span><b>Pay the deposit now by card</b><small>Card price (includes the card company's fee). Balance due 7 days before arrival</small></span><span class="amt">R0</span></label>
-          <label class="pay-opt" data-pay="full"><input type="radio" name="pay" value="full"><span><b>Pay in full by card</b><small>Card price (includes the card company's fee). Nothing more to pay before you arrive</small></span><span class="amt">R0</span></label>
-          <label class="pay-opt" data-pay="eft"><input type="radio" name="pay" value="eft"><span><b>Instant EFT</b><small>No card fee: you pay the normal price. Confirmed immediately</small></span><span class="amt">R0</span></label>
+          <label class="pay-opt" data-pay="deposit"><input type="radio" name="pay" value="deposit"><span><b>Pay the deposit now by card</b><small>Balance due 7 days before arrival</small></span><span class="amt">R0</span></label>
+          <label class="pay-opt" data-pay="full"><input type="radio" name="pay" value="full"><span><b>Pay in full by card</b><small>Nothing more to pay before you arrive</small></span><span class="amt">R0</span></label>
+          <label class="pay-opt" data-pay="eft"><input type="radio" name="pay" value="eft"><span><b>Instant EFT</b><small>Confirmed immediately</small></span><span class="amt">R0</span></label>
           <label class="pay-opt" data-pay="invoice"><input type="radio" name="pay" value="invoice"><span><b>Send me a quotation (EFT / bank deposit)</b><small>Pay by EFT within 5 days</small></span><span class="amt">R0</span></label>
         </div>
         <div data-card>
