@@ -498,6 +498,7 @@
   function modal(title, body, ok, onOk, opts) {
     opts = opts || {};
     var m = $('#modal'); if (m.hidden) pushLayer();
+    m.classList.toggle('swap', !m.hidden);
     m.innerHTML = '<div class="m-back" data-close></div><form class="m-card' + (opts.wide ? ' wide' : '') + (opts.xl ? ' xl' : '') + '" novalidate><header><h3>' + title + '</h3><button type="button" class="icon-btn" data-close aria-label="Close">' + ic('x') + '</button></header><div class="m-body">' + body + '</div>' +
       (ok ? '<footer><button type="button" class="btn ghost" data-close>' + (opts.cancelLabel || 'Cancel') + '</button><button class="btn ' + (opts.danger ? 'danger' : '') + '" type="submit">' + ok + '</button></footer>' : '') + '</form>';
     m.hidden = false; document.body.classList.add('lock');
@@ -508,7 +509,7 @@
     var first = $('input:not([type=hidden]),select,textarea', f); if (first && !opts.noFocus) setTimeout(function () { first.focus(); }, 30);
     return f;
   }
-  function closeModal(fromBack) { var m = $('#modal'); if (!m.hidden && fromBack !== true) popLayer(); m.hidden = true; m.innerHTML = ''; if ($('#drawer').hidden) document.body.classList.remove('lock'); }
+  function closeModal(fromBack) { var m = $('#modal'); if (!m.hidden && fromBack !== true) popLayer(); if (window.KyleuMotion) window.KyleuMotion.modalOut(m); m.hidden = true; m.innerHTML = ''; if ($('#drawer').hidden) document.body.classList.remove('lock'); }
   function fval(f, n) { var el = f.elements[n]; return el ? (el.type === 'checkbox' ? el.checked : el.value.trim()) : ''; }
 
   var drawerRef = null;
@@ -1575,7 +1576,7 @@
     var drives = DB.bookings.filter(function (b) { return live(b) && b.extras && b.extras.gd && b.ci <= TODAY && TODAY < b.co; });
     var ice = DB.bookings.filter(function (b) { return live(b) && b.extras && b.extras.ice && b.ci === TODAY; }).reduce(function (a, b) { return a + b.extras.ice; }, 0);
     return '<div class="hello"><div><h1>' + (h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening') + ', ' + esc(ME.name) + '</h1><p class="muted">' + fd(TODAY, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + ' · ' + nT + ' of ' + STANDS.length + ' stands occupied tonight</p></div><button class="btn" data-act="new">' + ic('plus') + 'New booking</button></div>' +
-      '<div class="kpis">' + tile('Arriving today', arr.length, arr.filter(function (b) { return b.status === 'in'; }).length + ' checked in', 'today') + tile('Departing today', dep.length, dep.filter(function (b) { return b.status === 'out'; }).length + ' checked out', 'today') +
+      '<div class="kpis">' + tile('Arriving today', arr.length, arr.filter(function (b) { return b.status === 'in'; }).length + ' checked in', 'today:arr') + tile('Departing today', dep.length, dep.filter(function (b) { return b.status === 'out'; }).length + ' checked out', 'today:dep') +
       tile('In camp tonight', nT + '<small>/' + STANDS.length + '</small>', Math.round(nT / STANDS.length * 100) + '% occupied', 'calendar') + tile('Awaiting EFT', pend.length, money(pendAmt) + ' to come in', can('eft') ? 'eft' : 'bookings', pend.length ? 'warn' : '') +
       tile('Balances due in 7 days', money(balAmt), balSoon.length + ' booking' + (balSoon.length === 1 ? '' : 's'), can('eft') ? 'eft' : 'bookings') + (can('payments') ? tile('Received this month', money(recv), 'bookings and shop', 'payments', 'ok') : '') + '</div>' +
       (function () {
@@ -1610,7 +1611,7 @@
       '</div>' + (function () { var nAct = ['area', 'stand', 'src', 'm', 'from', 'to'].filter(function (k) { return F[k]; }).length; return '<details class="more-filters"' + (window.innerWidth > 760 || nAct ? ' open' : '') + '><summary>' + ic('list') + 'Filters' + (nAct ? ' (' + nAct + ')' : '') + '</summary>'; })() + '<div class="filter-row">' + fsel('F:area', F.area, [['', 'All areas']].concat(Object.keys(AREA_SHORT).map(function (a) { return [a, AREA_SHORT[a]]; }))) +
       fsel('F:stand', F.stand, [['', 'All stands']].concat(STANDS.filter(function (x) { return !F.area || x.area === F.area; }).map(function (x) { return [x.id, x.name]; }))) +
       fsel('F:src', F.src, [['', 'Booked via: any']].concat(srcs.map(function (x) { return [x, 'Booked via ' + x]; }))) + fsel('F:m', F.m, [['', 'Pays by: any'], ['card', 'Pays by card'], ['eft', 'Pays by EFT']]) +
-      '<label class="fdate"><span>Arriving from</span><input type="date" data-fk="F:from" value="' + F.from + '"' + (F.from ? ' class="on"' : '') + '></label><label class="fdate"><span>to</span><input type="date" data-fk="F:to" value="' + F.to + '"' + (F.to ? ' class="on"' : '') + '></label>' + fclear('F', ['area', 'stand', 'src', 'm', 'from', 'to']) + '</div></details>' +
+      '<span class="frange"><label class="fdate"><span>Arriving from</span><input type="date" data-fk="F:from" value="' + F.from + '"' + (F.from ? ' class="on"' : '') + '></label><label class="fdate"><span>to</span><input type="date" data-fk="F:to" value="' + F.to + '"' + (F.to ? ' class="on"' : '') + '></label></span>' + fclear('F', ['area', 'stand', 'src', 'm', 'from', 'to']) + '</div></details>' +
       '<div class="chips scroll">' + groups.map(function (g) { return '<button class="chip' + (F.st === g[0] ? ' on' : '') + '" data-fst="' + g[0] + '">' + g[1] + ' <span>' + counts[g[0]] + '</span></button>'; }).join('') + '</div>' +
       '<div class="card flush"><table class="tbl"><thead><tr><th>Guest</th><th>Stand</th><th>Dates</th><th>Guests</th><th class="r">Total</th><th class="r">Balance</th><th>Status</th></tr></thead><tbody>' +
       (list.length ? list.map(function (b) {
@@ -1776,7 +1777,7 @@
     var area = src ? src.area : 'fenced';
     var body = (isNew ? '<label class="fld"><span>Copy details from</span><select data-copy-from><option value="">Nothing, start blank</option>' + STANDS.map(function (s) { return '<option value="' + esc(s.id) + '"' + (s.id === copyFrom ? ' selected' : '') + '>' + esc(s.name) + ' (' + AREA_SHORT[s.area] + ')</option>'; }).join('') + '</select></label>' : '') +
       '<div class="grid2"><label class="fld"><span>Name</span><input name="name" value="' + (isNew ? (src ? esc(nextName(src.name)) : '') : val('name')) + '" placeholder="e.g. Inside 5" autocomplete="off"></label><label class="fld"><span>Area (sets the price)</span><select name="area">' + Object.keys(AREA_SHORT).map(function (a) { return '<option value="' + a + '"' + (a === area ? ' selected' : '') + '>' + AREA_SHORT[a] + '</option>'; }).join('') + '</select></label></div>' +
-      '<div class="grid2"><label class="fld"><span>Most guests</span><input name="guests" inputmode="numeric" value="' + (src ? src.guests : 8) + '"></label><label class="fld"><span>Setups</span><input name="setups" value="' + val('setups') + '" placeholder="1-2 trailers or tents"></label></div>' +
+      '<div class="grid2"><label class="fld"><span>Most guests</span><input name="guests" inputmode="numeric" data-stp min="1" max="99" value="' + (src ? src.guests : 8) + '"></label><label class="fld"><span>Setups</span><input name="setups" value="' + val('setups') + '" placeholder="1-2 trailers or tents"></label></div>' +
       '<label class="fld"><span>Short line</span><input name="feel" value="' + val('feel') + '" placeholder="e.g. Intimate yet spacious"></label>' +
       '<label class="fld"><span>Highlights, separated by commas</span><input name="hl" value="' + (src ? esc((src.highlights || []).join(', ')) : '') + '" placeholder="Braai area, Near the fence"></label>' +
       '<label class="fld"><span>Description</span><textarea name="desc" rows="4">' + val('description') + '</textarea></label>' +
@@ -2401,12 +2402,12 @@
       '<div class="chips scroll"><button class="chip' + (!SHOP.cat ? ' on' : '') + '" data-pcat="">All</button>' + cats.map(function (c) { return '<button class="chip' + (SHOP.cat === c ? ' on' : '') + '" data-pcat="' + esc(c) + '">' + esc(c) + '</button>'; }).join('') + '</div>' +
       '<div class="pos">' + shown.map(function (p) {
         var left = p.stock == null ? null : p.stock - (CART[p.id] || 0), out = left !== null && left <= 0;
-        return '<button class="pos-it' + (CART[p.id] ? ' on' : '') + '" data-add="' + p.id + '"' + (out ? ' disabled' : '') + '><b>' + esc(p.label) + '</b><span class="pos-p">' + money(p.amount) + (hasFee() ? '<small>Card ' + money(toCard(p.amount)) + '</small>' : '') + '</span>' + (left !== null ? '<span class="pos-stock' + (left <= (p.lowAt || 5) ? ' low' : '') + '">' + (out ? 'Sold out' : left + ' left') + '</span>' : '') + (CART[p.id] ? '<em>' + CART[p.id] + '</em>' : '') + '</button>';
+        return '<button class="pos-it' + (CART[p.id] ? ' on' : '') + '" data-add="' + p.id + '"' + (out ? ' disabled' : '') + '><b>' + esc(p.label) + '</b><span class="pos-p">' + money(p.amount) + (hasFee() ? '<small>Card ' + money(toCard(p.amount)) + '</small>' : '') + '</span>' + (left !== null ? '<span class="pos-stock' + (left <= (p.lowAt || 5) ? ' low' : '') + '">' + (out ? 'Sold out' : left + ' left') + '</span>' : '') + (CART[p.id] ? '<em data-roll="b:' + p.id + '">' + CART[p.id] + '</em>' : '') + '</button>';
       }).join('') + (shown.length ? '' : '<p class="empty">No products match.</p>') + '</div></section>' +
       '<aside class="card pos-sale"><header class="card-h"><h3>Current sale</h3>' + (lines.length ? '<button class="btn ghost sm" data-act="cart-clear">Clear</button>' : '') + '</header>' +
-      (lines.length ? '<div class="sale-lines">' + lines.map(function (id) { var p = prodBy(id); return '<div class="sl"><div class="sl-n"><b>' + esc(p.label) + '</b><small>' + money(p.amount) + ' each</small></div><div class="qty"><button class="icon-btn sm" data-rem="' + id + '" aria-label="One less">' + ic('minus') + '</button><span>' + CART[id] + '</span><button class="icon-btn sm" data-add="' + id + '" aria-label="One more">' + ic('plus') + '</button></div><b class="sl-t">' + money(p.amount * CART[id]) + '</b></div>'; }).join('') + '</div>' : '<div class="sale-empty">' + ic('cart') + '<p>Tap a product to add it to the sale.</p></div>') +
+      (lines.length ? '<div class="sale-lines">' + lines.map(function (id) { var p = prodBy(id); return '<div class="sl"><div class="sl-n"><b>' + esc(p.label) + '</b><small>' + money(p.amount) + ' each</small></div><div class="qty"><button class="icon-btn sm" data-rem="' + id + '" aria-label="One less">' + ic('minus') + '</button><span data-roll="q:' + id + '">' + CART[id] + '</span><button class="icon-btn sm" data-add="' + id + '" aria-label="One more">' + ic('plus') + '</button></div><b class="sl-t" data-roll="t:' + id + '">' + money(p.amount * CART[id]) + '</b></div>'; }).join('') + '</div>' : '<div class="sale-empty">' + ic('cart') + '<p>Tap a product to add it to the sale.</p></div>') +
       '<label class="fld"><span>Who is it for?</span><select data-who><option value="">Walk-in customer (pays now)</option>' + here.map(function (b) { var cs = ensureCars(b).filter(function (c) { return c.st === 'in'; }), nm = standById(b.stand).name + ' · ' + guestName(b); if (!cs.length) return '<option value="' + b.ref + '"' + (SHOP.who === b.ref ? ' selected' : '') + '>' + esc(nm) + '</option>'; return '<optgroup label="' + esc(nm) + '">' + cs.map(function (c) { var k = b.ref + '|' + c.id; return '<option value="' + k + '"' + (SHOP.who === k ? ' selected' : '') + '>' + esc(carLabel(c, b.cars.indexOf(c)) + (c.driver ? ' · ' + c.driver : '')) + '</option>'; }).join('') + '</optgroup>'; }).join('') + '</select></label>' +
-      '<div class="sale-tot"><div><span>Cash or EFT</span><b>' + money(tot(false)) + '</b></div>' + (hasFee() ? '<div class="muted"><span>Card (+' + cardFee() + '%)</span><b>' + money(tot(true)) + '</b></div>' : '') + '</div>' +
+      '<div class="sale-tot"><div><span>Cash or EFT</span><b data-roll="tot:cash">' + money(tot(false)) + '</b></div>' + (hasFee() ? '<div class="muted"><span>Card (+' + cardFee() + '%)</span><b data-roll="tot:card">' + money(tot(true)) + '</b></div>' : '') + '</div>' +
       '<div class="pay-btns"><button class="btn" data-sell="cash"' + dis + '>' + ic('cash') + 'Cash ' + money(tot(false)) + '</button><button class="btn blue" data-sell="card"' + dis + '>' + ic('card') + 'Card ' + money(tot(true)) + '</button>' + (who ? '<button class="btn ghost full" data-sell="bill"' + dis + '>' + ic('list') + (wb.car ? 'Add to ' + esc(guestName(who)) + '\'s tab (' + esc(wb.label) + ')' : 'Add to ' + esc(guestName(who)) + '\'s bill') + '</button>' : '') + '</div>' +
       (who && wb.car ? '<p class="muted small">Goes on this vehicle\'s tab. They settle it when the vehicle checks out.</p>' : who ? '<p class="muted small">"Add to bill" puts it on ' + esc(guestName(who)) + '\'s booking. They pay it with their balance.</p>' : '') + '</aside></div>' +
       (lines.length ? '<button class="cart-bar" data-act="to-sale">' + ic('cart') + '<span>' + lines.reduce(function (a, id) { return a + CART[id]; }, 0) + ' item' + (lines.reduce(function (a, id) { return a + CART[id]; }, 0) === 1 ? '' : 's') + ' · <b>' + money(tot(false)) + '</b></span><span>View sale</span></button>' : '') +
@@ -2492,7 +2493,7 @@
       '<div class="grid2"><label class="fld"><span>Price for cash and EFT</span><input name="a" inputmode="decimal" value="' + (src ? src.amount : '') + '" placeholder="R" data-prod-price></label><label class="fld"><span>Card price (+' + cardFee() + '%)</span><input data-prod-card value="' + (src ? money(toCard(src.amount)) : '') + '" disabled></label></div>' +
       '<label class="fld"><span>Short description (optional)</span><input name="t" value="' + (src ? esc(src.note || '') : '') + '" placeholder="e.g. Enamel, two designs"></label>' +
       '<h5>Stock</h5><label class="check"><input type="checkbox" name="track" data-track' + (track ? ' checked' : '') + '><span>Count stock for this product</span></label>' +
-      '<div class="grid2" data-stockf' + (track ? '' : ' hidden') + '><label class="fld"><span>In stock now</span><input name="s" inputmode="numeric" value="' + (src && src.stock != null ? src.stock : '') + '"></label><label class="fld"><span>Warn me when it gets to</span><input name="l" inputmode="numeric" value="' + (src ? src.lowAt || 5 : 5) + '"></label></div>' +
+      '<div class="grid2" data-stockf' + (track ? '' : ' hidden') + '><label class="fld"><span>In stock now</span><input name="s" inputmode="numeric" data-stp min="0" max="9999" value="' + (src && src.stock != null ? src.stock : '') + '"></label><label class="fld"><span>Warn me when it gets to</span><input name="l" inputmode="numeric" data-stp min="0" max="999" value="' + (src ? src.lowAt || 5 : 5) + '"></label></div>' +
       '<label class="check"><input type="checkbox" name="on"' + (!src || src.active !== false ? ' checked' : '') + '><span>Show this product on the till</span></label>' +
       (it ? '<div class="m-extra"><button type="button" class="btn ghost sm" data-act="prod-dup" data-ref="' + it.id + '">Duplicate</button><button type="button" class="btn ghost sm danger-t" data-act="prod-del" data-ref="' + it.id + '">Delete product</button></div>' : ''),
       it ? 'Save' : 'Add product', function (f) {
@@ -2547,7 +2548,7 @@
     var dr = pre && pre.drive ? pre.drive : { d: pre ? (pre.ci < TODAY ? TODAY : pre.ci) : TODAY, slot: 'pm', guide: GUIDES[0] };
     modal(pre && pre.extras && pre.extras.gd ? 'Game drive for ' + esc(guestName(pre)) : 'Add a game drive',
       (pre ? '<p class="muted small">' + esc(standById(pre.stand).name) + ' · staying ' + fd(pre.ci) + ' to ' + fd(pre.co) + '</p><input type="hidden" name="b" value="' + pre.ref + '">' : '<label class="fld"><span>Booking</span><select name="b">' + here.map(function (b) { return '<option value="' + b.ref + '">' + esc(standById(b.stand).name + ' · ' + guestName(b) + ' · ' + fd(b.ci) + ' to ' + fd(b.co)) + '</option>'; }).join('') + '</select></label>') +
-      '<div class="grid2"><label class="fld"><span>People</span><input name="n" inputmode="numeric" value="' + (pre && pre.extras && pre.extras.gd || 2) + '" data-gd-n></label><label class="fld"><span>Price (EFT)</span><input data-gd-p value="' + money(drivePrice(pre && pre.extras && pre.extras.gd || 2)) + '" disabled></label></div>' +
+      '<div class="grid2"><label class="fld"><span>People</span><input name="n" inputmode="numeric" data-stp min="1" max="20" value="' + (pre && pre.extras && pre.extras.gd || 2) + '" data-gd-n></label><label class="fld"><span>Price (EFT)</span><input data-gd-p value="' + money(drivePrice(pre && pre.extras && pre.extras.gd || 2)) + '" disabled></label></div>' +
       '<div class="grid2"><label class="fld"><span>Date</span><input type="date" name="d" value="' + dr.d + '"></label><label class="fld"><span>Guide</span><select name="g">' + GUIDES.map(function (g) { return '<option' + (g === dr.guide ? ' selected' : '') + '>' + g + '</option>'; }).join('') + '</select></label></div>' +
       '<div class="seg">' + ['am', 'pm'].map(function (s) { return '<label><input type="radio" name="s" value="' + s + '"' + (dr.slot === s ? ' checked' : '') + '><span>' + SLOTS[s] + '</span></label>'; }).join('') + '</div>' +
       (pre && pre.drive ? '<div class="m-extra"><button type="button" class="btn ghost sm danger-t" data-act="drive-del" data-ref="' + pre.ref + '">Cancel this game drive</button></div>' : ''),
@@ -3164,7 +3165,7 @@
     app.innerHTML = '<aside class="side"><a class="brand" href="#/dashboard"><img src="../assets/img/logo-small.png" alt=""><span><b>Kyleu</b><small>Staff admin</small></span></a><nav>' +
       NAV.filter(function (n) { return can(n.id); }).map(function (n, i, arr) { return (n.g && (!i || arr[i - 1].g !== n.g) ? '<span class="nav-h">' + n.g + '</span>' : '') + '<a href="#/' + n.id + '" data-nav="' + n.id + '">' + ic(n.i) + '<span>' + n.t + '</span>' + (bd[n.id] ? '<em>' + bd[n.id] + '</em>' : '') + '</a>'; }).join('') +
       '</nav><div class="side-f"><a href="../index.html" target="_blank" rel="noopener">' + ic('ext') + 'View website</a><button data-act="logout">' + ic('out') + 'Sign out</button></div></aside><div class="scrim" data-act="menu"></div>' +
-      '<div class="main"><header class="top"><button class="icon-btn menu-btn" data-act="menu" aria-label="Menu">' + ic('menu') + '</button><label class="search top-search">' + ic('search') + '<input data-global placeholder="Find a booking: name, ref or phone" aria-label="Find a booking"><div class="sugg" data-sugg hidden></div></label>' +
+      '<div class="main"><header class="top"><button class="icon-btn menu-btn" data-act="menu" aria-label="Menu">' + ic('menu') + '</button><label class="search top-search">' + ic('search') + '<input data-global placeholder="Find a booking: name, ref or phone" aria-label="Find a booking" aria-keyshortcuts="/ Control+K"><kbd class="kbd" title="Press / to search">/</kbd><div class="sugg" data-sugg hidden></div></label>' +
       '<span class="demo-badge">Demo data</span><div class="me"><span class="avatar">' + ME.name[0] + '</span><span class="me-t"><b>' + ME.name + '</b><small>' + ME.role + '</small></span></div></header><main id="view" tabindex="-1"></main></div>' +
       '<nav class="bottom">' + ['dashboard', 'bookings', 'eft', 'calendar'].filter(can).map(function (id) { var n = NAV.filter(function (x) { return x.id === id; })[0]; return '<a href="#/' + id + '" data-nav="' + id + '">' + ic(n.i) + '<span>' + (id === 'eft' ? 'EFT' : n.t) + '</span>' + (bd[id] ? '<em>' + bd[id] + '</em>' : '') + '</a>'; }).join('') + '<button data-act="menu">' + ic('menu') + '<span>More</span></button></nav>' +
       '<div id="drawer" hidden></div><div id="modal" hidden></div><div class="toasts" aria-live="polite"></div><div class="tip" hidden></div>';
@@ -3199,7 +3200,11 @@
   function onClick(e) {
     var t = e.target;
     if (!ME) return;
-    var go = t.closest('[data-go]'); if (go) { location.hash = '#/' + go.dataset.go; return; }
+    var go = t.closest('[data-go]'); if (go) {
+      var tday = /^today:(\w+)$/.exec(go.dataset.go);
+      if (tday) { DP.tab = tday[1]; DP[tday[1]] = 0; render(); var tc = $('#today'); if (tc) { tc.scrollIntoView({ behavior: 'smooth', block: 'center' }); tc.classList.remove('flash'); void tc.offsetWidth; tc.classList.add('flash'); } return; }
+      location.hash = '#/' + go.dataset.go; return;
+    }
     var op = t.closest('[data-open]'); if (op && !t.closest('[data-act]')) { e.preventDefault(); if (!$('#modal').hidden) closeModal(); openBooking(op.dataset.open); return; }
     var nav = t.closest('[data-nav]'); if (nav) { document.body.classList.remove('nav-open'); }
     var tab = t.closest('[data-tab]'); if (tab) { var card = tab.closest('.card'); $$('[data-tab]', card).forEach(function (x) { x.classList.toggle('on', x === tab); }); $$('[data-pane]', card).forEach(function (p) { p.hidden = p.dataset.pane !== tab.dataset.tab; }); return; }
@@ -3497,6 +3502,11 @@
     document.addEventListener('mouseover', onOver);
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') { if (!$('#modal') || $('#modal').hidden) { if ($('#drawer') && !$('#drawer').hidden) closeDrawer(); } else closeModal(); }
+      // "/" or Ctrl+K (Cmd+K on a Mac) jumps to the booking search, like most modern tools
+      var typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable;
+      if (ME && ((e.key === '/' && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) || ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')))) {
+        var gs = $('[data-global]'); if (gs && $('#modal').hidden) { e.preventDefault(); if (drawerRef) closeDrawer(); gs.focus(); gs.select(); }
+      }
       if (e.key === 'Enter' && e.target.matches('tr[data-open],tr[data-guest],tr[data-client],tr[data-post],tr[data-sale],tr[data-prod],tr[data-voucher],th.sortable')) e.target.click();
     });
     document.addEventListener('focusout', function (e) { if (e.target.matches('[data-global]')) setTimeout(function () { var s = $('[data-sugg]'); if (s) s.hidden = true; }, 200); });
