@@ -1103,7 +1103,7 @@
     Object.keys(DB.rates || {}).forEach(function (k) { prices[k] = { amount: DB.rates[k] }; });
     Object.keys(w.rateText).forEach(function (k) { prices[k] = Object.assign(prices[k] || {}, w.rateText[k]); });
     var out = { prices: prices, text: w.text, settings: w.settings, hol: DB.hol || null, home: w.home, rules: { wkDays: w.wkDays && w.wkDays.length ? w.wkDays : null } };
-    if (DB.products) out.shop = DB.products.filter(function (p) { return p.active !== false; }).map(function (p) { return { label: p.label, amount: p.amount, note: p.note || '' }; });
+    if (DB.products) out.shop = DB.products.filter(function (p) { return p.active !== false; }).map(function (p) { return { label: p.label, amount: p.amount, note: p.note || '', img: p.img || '', cat: p.cat || '' }; });
     try { localStorage.setItem(WEBK, JSON.stringify(out)); } catch (e) {}
   }
   // the name and description of a rate as the website shows them
@@ -1853,6 +1853,8 @@
   }
   function prodCats() { var out = CATS.slice(); shopItems().forEach(function (p) { if (p.cat && out.indexOf(p.cat) < 0) out.push(p.cat); }); return out; }
   function prodBy(id) { return shopItems().filter(function (p) { return p.id === id; })[0]; }
+  function prodPic(p) { var s = K.shopImg ? K.shopImg(p.label || '', p.img) : p.img; return !s || (/logo/.test(s) && !p.img) ? '' : imgSrc(s); }
+  function prodPicHTML(p, cls) { var s = prodPic(p); return '<span class="' + cls + (s ? '' : ' none') + '">' + (s ? '<img src="' + esc(s) + '" alt="" loading="lazy">' : ic('image')) + '</span>'; }
   function lowStock(p) { return p.stock != null && p.stock <= (p.lowAt || 5); }
   function hhmm() { var d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
   function uid(p) { return p + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36); }
@@ -2402,7 +2404,7 @@
       '<div class="chips scroll"><button class="chip' + (!SHOP.cat ? ' on' : '') + '" data-pcat="">All</button>' + cats.map(function (c) { return '<button class="chip' + (SHOP.cat === c ? ' on' : '') + '" data-pcat="' + esc(c) + '">' + esc(c) + '</button>'; }).join('') + '</div>' +
       '<div class="pos">' + shown.map(function (p) {
         var left = p.stock == null ? null : p.stock - (CART[p.id] || 0), out = left !== null && left <= 0;
-        return '<button class="pos-it' + (CART[p.id] ? ' on' : '') + '" data-add="' + p.id + '"' + (out ? ' disabled' : '') + '><b>' + esc(p.label) + '</b><span class="pos-p">' + money(p.amount) + (hasFee() ? '<small>Card ' + money(toCard(p.amount)) + '</small>' : '') + '</span>' + (left !== null ? '<span class="pos-stock' + (left <= (p.lowAt || 5) ? ' low' : '') + '">' + (out ? 'Sold out' : left + ' left') + '</span>' : '') + (CART[p.id] ? '<em data-roll="b:' + p.id + '">' + CART[p.id] + '</em>' : '') + '</button>';
+        return '<button class="pos-it' + (CART[p.id] ? ' on' : '') + '" data-add="' + p.id + '"' + (out ? ' disabled' : '') + '>' + prodPicHTML(p, 'pos-img') + '<b>' + esc(p.label) + '</b><span class="pos-p">' + money(p.amount) + (hasFee() ? '<small>Card ' + money(toCard(p.amount)) + '</small>' : '') + '</span>' + (left !== null ? '<span class="pos-stock' + (left <= (p.lowAt || 5) ? ' low' : '') + '">' + (out ? 'Sold out' : left + ' left') + '</span>' : '') + (CART[p.id] ? '<em data-roll="b:' + p.id + '">' + CART[p.id] + '</em>' : '') + '</button>';
       }).join('') + (shown.length ? '' : '<p class="empty">No products match.</p>') + '</div></section>' +
       '<aside class="card pos-sale"><header class="card-h"><h3>Current sale</h3>' + (lines.length ? '<button class="btn ghost sm" data-act="cart-clear">Clear</button>' : '') + '</header>' +
       (lines.length ? '<div class="sale-lines">' + lines.map(function (id) { var p = prodBy(id); return '<div class="sl"><div class="sl-n"><b>' + esc(p.label) + '</b><small>' + money(p.amount) + ' each</small></div><div class="qty"><button class="icon-btn sm" data-rem="' + id + '" aria-label="One less">' + ic('minus') + '</button><span data-roll="q:' + id + '">' + CART[id] + '</span><button class="icon-btn sm" data-add="' + id + '" aria-label="One more">' + ic('plus') + '</button></div><b class="sl-t" data-roll="t:' + id + '">' + money(p.amount * CART[id]) + '</b></div>'; }).join('') + '</div>' : '<div class="sale-empty">' + ic('cart') + '<p>Tap a product to add it to the sale.</p></div>') +
@@ -2478,7 +2480,7 @@
       '<div class="card flush"><table class="tbl prods"><thead><tr><th>Product</th><th>Category</th><th class="r">Price</th><th class="r">In stock</th><th class="r">Sold, 30 days</th><th>Status</th></tr></thead><tbody>' +
       (list.length ? list.map(function (p) {
         var s = sold[p.id] || { q: 0, v: 0 };
-        return '<tr data-prod="' + p.id + '" tabindex="0"><td data-l="Product"><b>' + esc(p.label) + '</b>' + (p.note ? '<small>' + esc(p.note) + '</small>' : '') + '</td><td data-l="Category">' + esc(p.cat || '') + '</td><td data-l="Price" class="r">' + money(p.amount) + (hasFee() ? '<small>Card ' + money(toCard(p.amount)) + '</small>' : '') + '</td>' +
+        return '<tr data-prod="' + p.id + '" tabindex="0"><td data-l="Product"><div class="prod-cell">' + prodPicHTML(p, 'prod-thumb') + '<div><b>' + esc(p.label) + '</b>' + (p.note ? '<small>' + esc(p.note) + '</small>' : '') + '</div></div></td><td data-l="Category">' + esc(p.cat || '') + '</td><td data-l="Price" class="r">' + money(p.amount) + (hasFee() ? '<small>Card ' + money(toCard(p.amount)) + '</small>' : '') + '</td>' +
           '<td data-l="In stock" class="r" data-s="' + (p.stock == null ? -1 : p.stock) + '">' + (p.stock == null ? '<span class="muted">Not counted</span>' : lowStock(p) ? '<span class="pill warn"><i></i>' + p.stock + ' left</span>' : p.stock) + '</td><td data-l="Sold" class="r" data-s="' + s.q + '">' + s.q + '<small>' + money(s.v) + '</small></td>' +
           '<td data-l="Status">' + (p.active === false ? '<span class="pill muted"><i></i>Hidden</span>' : '<span class="pill ok"><i></i>On the till</span>') + '</td></tr>';
       }).join('') : '<tr><td colspan="6" class="empty">No products match.</td></tr>') + '</tbody></table></div>' +
@@ -2486,12 +2488,20 @@
   }
   function actProduct(id, copyId) {
     var items = shopItems(), it = id ? prodBy(id) : null, src = it || (copyId ? prodBy(copyId) : null), cats = prodCats(), cat = src ? src.cat : SHOP.cat || PROD.cat || CATS[0];
-    var track = src ? src.stock != null : true;
+    var track = src ? src.stock != null : true, pic = src && src.img ? src.img : '';
+    var phHTML = function (name) {
+      var cur = pic ? imgSrc(pic) : prodPic({ label: name || '' });
+      return '<div class="pp-cur' + (cur ? '' : ' none') + '">' + (cur ? '<img src="' + esc(cur) + '" alt="">' : ic('image')) + '</div>' +
+        '<div class="pp-side"><b>Photo</b><small>' + (pic ? 'Shows on the till, on the booking page and in the website\'s Camp shop.' : cur ? 'Kyleu\'s standard photo for this product. Upload your own to change it.' : 'No photo yet. Until you add one, the website shows the Kyleu logo.') + '</small>' +
+        '<div class="row-btns"><label class="btn ghost sm">' + ic('image') + (pic ? 'Change photo' : 'Upload a photo') + '<input type="file" accept="image/*" data-pp-file hidden></label>' + (pic ? '<button type="button" class="btn ghost sm danger-t" data-pp-del>' + ic('x') + 'Remove photo</button>' : '') + '</div>' +
+        '<div class="pp-picks"><small>Or use one of Kyleu\'s shop photos</small><div>' + (K.SHOP_PHOTOS || []).map(function (p) { return '<button type="button" class="pp-pick' + (pic === p ? ' on' : '') + '" data-pp-pick="' + p + '" aria-label="Use this photo" aria-pressed="' + (pic === p) + '"><img src="' + imgSrc(p) + '" alt=""></button>'; }).join('') + '</div></div></div>';
+    };
     modal(it ? 'Edit product' : src ? 'Duplicate product' : 'Add product',
       '<label class="fld"><span>Product name</span><input name="n" value="' + (src ? esc(it ? src.label : 'Copy of ' + src.label) : '') + '" placeholder="e.g. Braai tongs" autocomplete="off"></label>' +
       '<div class="grid2"><label class="fld"><span>Category</span><select name="c" data-catsel>' + cats.map(function (c) { return '<option' + (c === cat ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') + '<option value="__new">New category…</option></select></label><label class="fld" data-newcat hidden><span>New category name</span><input name="nc"></label></div>' +
       '<div class="grid2"><label class="fld"><span>Price for cash and EFT</span><input name="a" inputmode="decimal" value="' + (src ? src.amount : '') + '" placeholder="R" data-prod-price></label><label class="fld"><span>Card price (+' + cardFee() + '%)</span><input data-prod-card value="' + (src ? money(toCard(src.amount)) : '') + '" disabled></label></div>' +
       '<label class="fld"><span>Short description (optional)</span><input name="t" value="' + (src ? esc(src.note || '') : '') + '" placeholder="e.g. Enamel, two designs"></label>' +
+      '<div class="prod-ph" data-prod-ph>' + phHTML(src ? src.label : '') + '</div>' +
       '<h5>Stock</h5><label class="check"><input type="checkbox" name="track" data-track' + (track ? ' checked' : '') + '><span>Count stock for this product</span></label>' +
       '<div class="grid2" data-stockf' + (track ? '' : ' hidden') + '><label class="fld"><span>In stock now</span><input name="s" inputmode="numeric" data-stp min="0" max="9999" value="' + (src && src.stock != null ? src.stock : '') + '"></label><label class="fld"><span>Warn me when it gets to</span><input name="l" inputmode="numeric" data-stp min="0" max="999" value="' + (src ? src.lowAt || 5 : 5) + '"></label></div>' +
       '<label class="check"><input type="checkbox" name="on"' + (!src || src.active !== false ? ' checked' : '') + '><span>Show this product on the till</span></label>' +
@@ -2503,11 +2513,29 @@
         if (!c) { toast('Name the new category'); return false; }
         if (items.some(function (x) { return x !== it && K.norm(x.label) === K.norm(nm); })) { toast('There is already a product called ' + esc(nm)); return false; }
         var tr = fval(f, 'track'), s = parseInt(fval(f, 's'), 10);
-        var row = { label: nm, amount: amt, note: fval(f, 't'), cat: c, active: fval(f, 'on'), stock: tr ? (isNaN(s) ? 0 : s) : null, lowAt: parseInt(fval(f, 'l'), 10) || 5 };
+        var row = { label: nm, amount: amt, note: fval(f, 't'), cat: c, active: fval(f, 'on'), stock: tr ? (isNaN(s) ? 0 : s) : null, lowAt: parseInt(fval(f, 'l'), 10) || 5, img: pic };
+        var tgt = it;
         if (it) Object.keys(row).forEach(function (k) { it[k] = row[k]; });
-        else { var base = slugify(nm), pid = base, n = 2; while (prodBy(pid)) pid = base + '-' + n++; row.id = pid; DB.products.push(row); }
-        log((it ? 'Updated product ' : 'Added product ') + nm); save(); render(); toast(esc(nm) + (it ? ' saved' : ' added to the shop'));
-      }, { wide: true, noFocus: !!it });
+        else { var base = slugify(nm), pid = base, n = 2; while (prodBy(pid)) pid = base + '-' + n++; row.id = pid; DB.products.push(row); tgt = row; }
+        log((it ? 'Updated product ' : 'Added product ') + nm);
+        if (!save()) { tgt.img = src && src.img && src.img !== pic ? src.img : ''; save(); render(); toast('Saved, but the photo is too big for this browser. Try a smaller photo.'); return; }
+        render(); toast(esc(nm) + (it ? ' saved' : ' added to the shop'));
+      }, { wide: true, noFocus: !!it, onOpen: function (f) {
+        var box = $('[data-prod-ph]', f), draw = function () { box.innerHTML = phHTML(fval(f, 'n')); };
+        f.addEventListener('change', function (e) {
+          if (!e.target.matches('[data-pp-file]')) return;
+          var file = e.target.files && e.target.files[0]; if (!file) return;
+          resizeImg(file, 640, function (blob) {
+            if (!blob) { toast('That file is not a photo that can be used. Try a JPG or PNG.'); return; }
+            var rd = new FileReader(); rd.onload = function () { pic = rd.result; draw(); }; rd.readAsDataURL(blob);
+          });
+        });
+        box.addEventListener('click', function (e) {
+          var pk = e.target.closest('[data-pp-pick]'); if (pk) { pic = pk.dataset.ppPick; draw(); return; }
+          if (e.target.closest('[data-pp-del]')) { pic = ''; draw(); }
+        });
+        f.elements.n.addEventListener('input', function () { if (!pic) draw(); });   // the standard photo follows the name
+      } });
   }
   function actRemoveProduct(id) {
     var it = prodBy(id);

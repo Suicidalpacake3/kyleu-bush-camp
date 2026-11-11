@@ -128,11 +128,10 @@
   };
 
   /* ---------- camp shop ---------- */
-  var IMG = [[/sekelbos|firewood/i, 'sekelbos-wood.jpg'], [/long.?burning/i, 'long-burning-wood.jpg'], [/^ice/i, 'ice.jpg'], [/firelighter/i, 'firelighters.jpg'], [/mug/i, 'mugs.jpg'], [/cap/i, 'caps.jpg'], [/starter|tokkie/i, 'fire-starter.jpg']];
-  K.shopImg = function (label) { for (var i = 0; i < IMG.length; i++) if (IMG[i][0].test(label)) return 'assets/img/shop/' + IMG[i][1]; return 'assets/img/logo-small.png'; };
+  // K.shopImg (content.js): the photo chosen in the admin, else Kyleu's own photo for that kind of product
   K.shopItems = function (P) {
     var sec = P && P.sections.filter(function (s) { return /shop/i.test(s.title); })[0];
-    return (sec ? sec.items : []).filter(function (it) { return !isNaN(it.amount); }).map(function (it) { return { label: it.label, each: it.amount, note: it.note || '', img: K.shopImg(it.label) }; });
+    return (sec ? sec.items : []).filter(function (it) { return !isNaN(it.amount); }).map(function (it) { return { label: it.label, each: it.amount, note: it.note || '', img: K.shopImg(it.label, it.img) }; });
   };
   // qty: { label: number } is changed in place; onChange is called after every tap
   K.shopPicker = function (box, items, qty, onChange) {

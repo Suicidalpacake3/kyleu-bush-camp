@@ -115,7 +115,7 @@
         return row;
       });
       // the shop's products come from the admin's Products page once staff have changed them there
-      if (/shop/i.test(sec.title) && W.shop) items = W.shop.map(function (p) { return { label: p.label, name: p.label, amount: +p.amount, note: p.note || '', raw: '' }; });
+      if (/shop/i.test(sec.title) && W.shop) items = W.shop.map(function (p) { return { label: p.label, name: p.label, amount: +p.amount, note: p.note || '', raw: '', img: p.img || '', cat: p.cat || '' }; });
       secs.push({ title: sec.title, items: items });
     });
     function find(secKey, labelKey) {
@@ -242,6 +242,21 @@
     return '<span class="dual"><s class="dual-card" title="Card price">' + money(cardAmt) + '</s> <span class="dual-eft">' + money(eftAmt) + '</span>' + (tag === false ? '' : '<small class="dual-tag">EFT</small>') + '</span>';
   };
   K.dual = function (n, P, tag) { return K.dualPair(K.toCard(n, P), n, tag); };
+  // a shop product's picture: the one chosen in the admin, else Kyleu's own photo for that kind of product, else the logo
+  var SHOPIMG = [[/sekelbos|firewood/i, 'sekelbos-wood.jpg'], [/long.?burning/i, 'long-burning-wood.jpg'], [/^ice/i, 'ice.jpg'], [/firelighter/i, 'firelighters.jpg'], [/mug/i, 'mugs.jpg'], [/cap/i, 'caps.jpg'], [/starter|tokkie/i, 'fire-starter.jpg']];
+  K.SHOP_PHOTOS = SHOPIMG.map(function (x) { return 'assets/img/shop/' + x[1]; });
+  K.shopImg = function (label, own) { if (own) return own; for (var i = 0; i < SHOPIMG.length; i++) if (SHOPIMG[i][0].test(label)) return 'assets/img/shop/' + SHOPIMG[i][1]; return 'assets/img/logo-small.png'; };
+  // the camp shop cards (Discover page): every product on the admin's till, with its photo and price
+  K.shopCards = function (box, P) {
+    var sec = P.sections.filter(function (s) { return /shop/i.test(s.title); })[0];
+    var items = (sec ? sec.items : []).filter(function (it) { return !isNaN(it.amount); });
+    if (!items.length) return;
+    box.innerHTML = items.map(function (it, i) {
+      var src = K.shopImg(it.label, it.img), logo = /logo/.test(src) && !it.img, nm = it.name || it.label;
+      return '<article class="shop-item" style="--i:' + i + '"><div class="si-img' + (logo ? ' si-logo' : '') + '"><img src="' + esc(src) + '" alt="' + esc(nm) + '" loading="lazy"></div>' +
+        '<div class="si-body"><h3>' + esc(nm) + '</h3>' + (it.note ? '<p>' + esc(it.note) + '</p>' : '') + '<div class="si-foot"><span class="si-price">' + K.dual(it.amount, P, false) + '</span><small>each</small></div></div></article>';
+    }).join('');
+  };
   K.settings = function () { return load('settings').then(function (md) { return parseSettings(md); }); };
   K.prices = function () { return load('prices').then(function (md) { return parsePrices(md); }); };
   K.pricesFile = function () { return load('prices').then(function (md) { return parsePrices(md, true); }); };   // prices.md only (the admin starts from this)
@@ -358,7 +373,8 @@
   // <span data-price="Ablution stands|Weekday per person per night">R160</span>
   // <a data-setting-href="tel">…</a>, <span data-setting="Phone">…</span>
   document.addEventListener('DOMContentLoaded', function () {
-    var priceEls = document.querySelectorAll('[data-price]');
+    var priceEls = document.querySelectorAll('[data-price]'), shopBox = document.querySelector('[data-shop-grid]');
+    if (shopBox) K.prices().then(function (P) { K.shopCards(shopBox, P); }).catch(function () {});
     if (priceEls.length) K.prices().then(function (P) {
       priceEls.forEach(function (el) {
         var parts = el.getAttribute('data-price').split('|');
