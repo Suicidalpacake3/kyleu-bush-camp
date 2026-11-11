@@ -181,9 +181,177 @@
   var LAST = ['Nkosi', 'van der Merwe', 'Mokoena', 'Botha', 'Patel', 'Dlamini', 'Smith', 'Pretorius', 'Khumalo', 'du Plessis', 'Mahlangu', 'Jacobs', 'Venter', 'Ndlovu', 'Steyn', 'Coetzee', 'Molefe', 'Nel', 'Naidoo', 'Kruger', 'Sithole', 'Fourie', 'Mthembu', 'Swanepoel'];
   var SETUPS = ['Rooftop tent', 'Off-road trailer', 'Caravan', 'Ground tent', 'Rooftop tent', 'Off-road trailer'];
   var SOURCES = ['Website', 'Website', 'Website', 'Website', 'WhatsApp', 'WhatsApp', 'Phone', 'Q2B', 'Website', 'Phone'];
+  /* ---------- hand-made demo bookings: every stage of a booking, and the odd ones staff will meet ----------
+     Added on top of the random ones, so each screen has something to show (dates move with today). */
+  function seedStories(db, r) {
+    var d = function (n) { return add(TODAY, n); }, at = function (day, t) { return day + ' ' + (t || '09:00'); };
+    var nextDow = function (w, from) { return add(from, (w - D(from).getDay() + 7) % 7); };   // that weekday, on or after "from"
+    var sat = nextDow(6, d(1));
+    var refOf = function (ci) { return 'KY' + ci.slice(2, 4) + '-' + Math.floor(r() * 1679616).toString(36).toUpperCase().padStart(4, '0'); };
+    var prod = function (re) { return db.products.filter(function (p) { return re.test(p.label); })[0]; };
+    var free = function (ci, co, area, ppl) { var c = STANDS.filter(function (s) { return (!area || s.area === area) && (s.guests || 8) >= ppl && !overlaps(s.id, ci, co); }); return c[0] || (area ? free(ci, co, null, ppl) : null); };
+    var code = function () { return 'DGR' + Math.floor(r() * 2176782336).toString(36).toUpperCase().padStart(6, '0').slice(0, 6); };
+    function bk(o) {
+      var g = { adults: o.adults == null ? 2 : o.adults, pens: o.pens || 0, kids: o.kids || 0 }, ppl = g.adults + g.pens + g.kids;
+      var st = o.stand ? standById(o.stand) : free(o.ci, o.co, o.area, ppl); if (!st || overlaps(st.id, o.ci, o.co)) return null;
+      var ex = o.ex || {}, q = quote(st.id, o.ci, o.co, o.priced || g, ex), method = o.method || 'eft';
+      var b = { ref: refOf(o.ci), created: o.created || at(add(o.ci, -40), '10:12'), source: o.source || 'Website',
+        guest: { first: o.first, last: o.last, email: o.email != null ? o.email : (o.first + '.' + o.last.split(' ').pop()).toLowerCase().replace(/[^a-z.]/g, '') + '@gmail.com', phone: o.phone || '0' + ['82', '83', '72', '79'][Math.floor(r() * 4)] + ' ' + (300 + Math.floor(r() * 600)) + ' ' + (1000 + Math.floor(r() * 8999)), consent: o.consent !== false, notes: o.clientNote || '', town: o.town || '' },
+        stand: st.id, ci: o.ci, co: o.co, adults: g.adults, pens: g.pens, kids: g.kids, vehicles: (o.cars || [0]).length, setup: o.setup || 'Rooftop tent', extras: ex,
+        method: method, eft: q.eft, card: q.card, total: method === 'card' ? q.card : q.eft, payments: [], charges: [], status: o.status || 'confirmed', notes: [], pop: false, eta: o.eta || '' };
+      if (o.created && o.created.length === 10) b.created = at(o.created, '10:12');
+      var cday = b.created.slice(0, 10), m = method === 'card' ? 'card' : 'eft', pref = method === 'card' ? 'Card ••' + (1000 + Math.floor(r() * 8999)) : b.ref;
+      // a camp shop order made with the booking (part of the total)
+      if (o.shop) { var items = {}, e = 0, lbl = []; o.shop.forEach(function (x) { var p = prod(x[0]); if (!p) return; items[p.label] = x[1]; e += p.amount * x[1]; lbl.push(x[1] + ' × ' + p.label); });
+        if (e) { b.charges.push({ d: cday, desc: 'Shop order for arrival: ' + lbl.join(', '), e: e, c: toCard(e), pre: true, items: items }); b.eft += e; b.card += toCard(e); b.total = method === 'card' ? b.card : b.eft; } }
+      if (o.pay === 'deposit' || o.pay === 'full') {
+        var dep = deposit(b), pd = o.payDay || add(cday, method === 'card' ? 0 : 1); if (pd > TODAY) pd = TODAY;
+        if (method === 'card' && o.pay === 'full') b.payments.push({ d: pd, amt: b.total, m: 'card', type: 'Full payment', ref: pref });
+        else { b.payments.push({ d: pd, amt: dep, m: m, type: dep >= b.total ? 'Full payment' : 'Deposit', ref: pref });
+          if (o.pay === 'full' && dep < b.total) { var bd = add(o.ci, -8); if (bd > TODAY) bd = TODAY; if (bd < pd) bd = pd; b.payments.push({ d: bd, amt: b.total - dep, m: m, type: 'Balance', ref: method === 'card' ? 'Card' : pref }); } }
+      }
+      (o.payments || []).forEach(function (p) { b.payments.push(Object.assign({ m: m, ref: pref }, p)); });
+      // vehicles: who is in which car, Dinokeng codes sent, checked in or out
+      if (o.cars) b.cars = o.cars.map(function (c, i) {
+        var cst = c.st || (b.status === 'in' ? 'in' : b.status === 'out' ? 'out' : 'due'), inAt = cst === 'due' ? '' : c.inAt || o.ci + ' 13:' + (20 + i * 7);
+        var x = newCar({ reg: c.reg || '', driver: c.driver || '', phone: i ? '' : b.guest.phone, guests: (c.guests || []).slice(), st: cst, inAt: inAt, outAt: cst === 'out' ? o.co + ' 10:' + (15 + i * 9) : '', ind: cst === 'due' ? null : { at: inAt, by: c.paper ? 'Leuan' : 'Online' } });
+        x.people = c.people || (x.driver ? 1 : 0) + x.guests.length;
+        if (c.code) { x.dgr = code(); var sent = add(o.ci, -5); if (sent > TODAY) sent = TODAY; if (sent < cday) sent = cday; x.dgrSent = { at: sent + ' 09:10', by: 'Sherri', code: x.dgr }; }
+        return x;
+      });
+      if (b.cars) b.vehicles = b.cars.length;
+      // bought at the camp shop on the vehicle's tab, to settle before leaving
+      (o.tab || []).forEach(function (t) { var p = prod(t[1]); if (!p || !b.cars) return; var c = b.cars[t[3] || 0], sid = uid('S');
+        b.charges.push({ d: t[0], desc: 'Shop: ' + t[2] + ' × ' + p.label, e: p.amount * t[2], c: toCard(p.amount) * t[2], sid: sid, car: c.id }); b.eft += p.amount * t[2]; b.card += toCard(p.amount) * t[2]; b.total = method === 'card' ? b.card : b.eft;
+        db.sales.push({ sid: sid, d: t[0], t: t[4] || '17:40', item: p.label, pid: p.id, qty: t[2], m: 'bill', amt: (method === 'card' ? toCard(p.amount) : p.amount) * t[2], stand: st.name, ref: b.ref, car: c.reg || 'Vehicle 1', by: 'Leuan' }); });
+      (o.notes || []).forEach(function (n) { b.notes.push({ at: n[0].length === 10 ? at(n[0], '10:30') : n[0], by: n[1], text: n[2] }); });
+      if ((b.status === 'in' || b.status === 'out') && b.cars) { b.finalised = { at: at(add(o.ci, -3), '19:48'), by: 'Guest' }; if (!b.eta) b.eta = '13:00-15:00'; }
+      if (o.ind) b.demoInd = { mode: o.ind, kids: o.kidNames || [] };
+      if (o.then) o.then(b, st);
+      db.bookings.push(b); return b;
+    }
+    var T = function (id, subject, b, msgs) { db.threads.push({ id: id, subject: subject, name: guestName(b), email: b.guest.email, phone: b.guest.phone, status: 'open', unread: true, ref: b.ref, msgs: msgs }); };
+
+    // 1. everything done: paid in full, finalised, everyone signed, codes sent, shop order and a game drive
+    bk({ first: 'Hennie', last: 'Botha', ci: d(2), co: d(4), adults: 4, kids: 1, method: 'card', pay: 'full', area: 'fenced', setup: 'Off-road trailer', eta: '15:00-18:00', ex: { gd: 5 }, shop: [[/sekelbos/i, 2], [/^ice/i, 2]],
+      cars: [{ reg: 'CA 123-456', driver: 'Hennie Botha', guests: ['Marlene Botha', 'Liam Botha'], code: true }, { reg: 'HZ 44 BX GP', driver: 'Pieter Botha', guests: ['Sanet Botha'], code: true }], ind: 'all', kidNames: ['Liam Botha'],
+      notes: [[d(-20), 'Sherri', 'Celebrating their 30th wedding anniversary on Saturday. Asked for a quiet stand.']],
+      then: function (b) { b.finalised = { at: at(d(-3), '20:14'), by: 'Guest' }; b.drive = { d: d(3), slot: 'am', guide: 'Devon' }; } });
+    // 2. paid in full, not finalised yet, not sure how many vehicles
+    bk({ first: 'Thabo', last: 'Nkosi', ci: d(4), co: d(7), adults: 3, method: 'eft', pay: 'full', area: 'unfenced', setup: 'Ground tent',
+      then: function (b) { b.vehTbc = true; b.vehicles = 1; } });
+    // 3. paid in full and finalised, Dinokeng code still to make; her husband has not signed yet
+    bk({ first: 'Annelie', last: 'de Villiers', ci: d(6), co: d(8), method: 'eft', pay: 'full', area: 'fenced', eta: '13:00-15:00',
+      cars: [{ reg: 'CL 77 PP GP', driver: 'Annelie de Villiers', guests: ['Francois de Villiers'] }], ind: 'some',
+      then: function (b) { b.finalised = { at: at(d(-1), '18:02'), by: 'Guest' }; } });
+    // 4. three vehicles: codes sent for two, the third was added on WhatsApp later
+    bk({ first: 'Kagiso', last: 'Molefe', ci: d(5), co: d(7), adults: 6, method: 'card', pay: 'full', area: 'unfenced', source: 'WhatsApp', eta: '15:00-18:00',
+      cars: [{ reg: 'JHB 552 GP', driver: 'Kagiso Molefe', guests: ['Palesa Molefe'], code: true }, { reg: 'KK 19 LM GP', driver: 'Tumi Sithole', guests: ['Karabo Sithole'], code: true }, { reg: 'ND 456-789', driver: 'Neo Mabaso', guests: ['Lesego Mabaso'] }], ind: 'some',
+      notes: [[d(-2), 'Sherri', 'Third vehicle (Neo Mabaso) added on WhatsApp. Dinokeng code still to make for it.']],
+      then: function (b) { b.finalised = { at: at(d(-6), '12:40'), by: 'Guest' }; } });
+    // 5. arriving today: one car is in, the other comes after work; the balance was never paid
+    bk({ first: 'Ruan', last: 'Steyn', ci: TODAY, co: d(3), method: 'eft', pay: 'deposit', area: 'fenced', status: 'in', eta: 'After 18:00', setup: 'Caravan',
+      cars: [{ reg: 'BG 31 RS GP', driver: 'Ruan Steyn', st: 'in', inAt: TODAY + ' 11:40', code: true }, { reg: 'FX 08 ES GP', driver: 'Elize Steyn', st: 'due', code: true }], ind: 'some',
+      notes: [[TODAY + ' 11:42', 'Leuan', 'Ruan checked in. Elize follows after work, after 18:00: gate code sent to her phone. Balance still to pay: Ruan says he will settle by card before they leave.']] });
+    // 6. in camp with firewood and ice on the tab, a game drive still to book
+    bk({ first: 'Werner', last: 'Pretorius', ci: d(-1), co: d(2), adults: 2, kids: 2, method: 'card', pay: 'full', area: 'unfenced', status: 'in', ex: { gd: 4 },
+      cars: [{ reg: 'WP 99 KR GP', driver: 'Werner Pretorius', guests: ['Leandri Pretorius', 'Ruben Pretorius', 'Mia Pretorius'], code: true }], ind: 'all', kidNames: ['Ruben Pretorius', 'Mia Pretorius'],
+      tab: [[d(-1), /sekelbos/i, 2, 0, '17:05'], [TODAY, /^ice/i, 3, 0, '10:20'], [TODAY, /mug/i, 1, 0, '10:21']],
+      notes: [[d(-1), 'Leuan', 'Asked about a game drive for the family. Book a time with them.']] });
+    // 7. leaving today: a first-time visitor from the UK, everything paid
+    bk({ first: 'Sarah', last: 'Mitchell', email: 'sarah.mitchell@btinternet.com', phone: '+44 7700 900123', town: 'Bristol, UK', ci: d(-3), co: TODAY, adults: 2, method: 'card', pay: 'full', area: 'fenced', status: 'in', setup: 'Rooftop tent',
+      cars: [{ reg: 'KX 55 TP GP', driver: 'Sarah Mitchell', guests: ['James Mitchell'], code: true }], ind: 'all',
+      notes: [[d(-30), 'Sherri', 'First time in Africa. Sent the Dinokeng gate directions and a packing list. Hired a 4x4 with a rooftop tent from Avis.']] });
+    // 8. a regular who pays cash on arrival, with two earlier stays
+    var koos = { first: 'Koos', last: 'van Zyl', email: 'koosvz@mweb.co.za', phone: '083 412 7781', town: 'Bronkhorstspruit', clientNote: 'Regular since 2019. Pays cash on arrival (arranged with Sherri). Likes the stands on the spruit and brings his own firewood.' };
+    bk(Object.assign({}, koos, { ci: d(-150), co: d(-146), adults: 0, pens: 2, area: 'self-sufficient', setup: 'Caravan', method: 'eft', pay: 'full', status: 'out', cars: [{ reg: 'KVZ 1 GP', driver: 'Koos van Zyl', guests: ['Anna van Zyl'] }] }));
+    bk(Object.assign({}, koos, { ci: d(-48), co: d(-45), adults: 0, pens: 2, area: 'self-sufficient', setup: 'Caravan', method: 'eft', pay: 'full', status: 'out', cars: [{ reg: 'KVZ 1 GP', driver: 'Koos van Zyl', guests: ['Anna van Zyl'] }], notes: [[d(-45), 'Leuan', 'Left the stand spotless again. Asked to be told when the new spruit stands open.']] }));
+    var mon = nextDow(1, d(5));
+    bk(Object.assign({}, koos, { ci: mon, co: add(mon, 4), adults: 0, pens: 2, area: 'self-sufficient', setup: 'Caravan', method: 'eft', source: 'Phone', created: d(-9), eta: 'Before 13:00', cars: [{ reg: 'KVZ 1 GP', driver: 'Koos van Zyl', guests: ['Anna van Zyl'] }],
+      then: function (b) { b.onArrival = { how: 'Cash', at: at(d(-9), '11:05'), by: 'Sherri' }; b.notes.push({ at: at(d(-9), '11:05'), by: 'Sherri', text: 'Booked by phone. Pays cash on arrival as always.' }); } }));
+    // 9. a long stay: 12 nights on the spruit, balance in two parts
+    bk({ first: 'Gerrit', last: 'Fourie', ci: d(10), co: d(22), adults: 0, pens: 2, area: 'self-sufficient', setup: 'Caravan', method: 'eft', pay: 'deposit', ex: { pp: 1 }, town: 'Polokwane',
+      notes: [[d(-25), 'Sherri', 'Long stay: 12 nights. Agreed they pay the balance in two parts, half now and half on arrival.']],
+      payments: [{ d: d(-6), amt: 1500, type: 'Part of the balance' }] });
+    // 10. a big family on the biggest stand, deposit paid by card
+    bk({ first: 'Sibusiso', last: 'Khumalo', ci: d(12), co: d(14), adults: 2, kids: 4, method: 'card', pay: 'deposit', area: 'unfenced', setup: 'Ground tent',
+      notes: [[d(-14), 'Guest', 'Our kids are 3, 7, 10 and 14. Is there space for two big tents?'], [d(-14), 'Kyran', 'Replied: yes, the stand fits two large tents. Children under 12 stay free.']] });
+    // 11. a family reunion over three stands, one organiser
+    var reu = nextDow(5, d(19)), reuIds = [];
+    ['A', 'B', 'C'].forEach(function (x, i) {
+      var b = bk({ first: 'Marisa', last: 'Bekker', email: 'marisa.bekker@outlook.com', phone: '082 640 1188', ci: reu, co: add(reu, 2), adults: i ? 2 : 3, kids: i === 1 ? 2 : 0, area: 'unfenced', method: 'eft', pay: 'deposit', source: 'Phone', created: d(-16), setup: i === 2 ? 'Caravan' : 'Rooftop tent' });
+      if (b) reuIds.push(b);
+    });
+    reuIds.forEach(function (b, i) { b.notes.push({ at: at(d(-16), '14:20'), by: 'Sherri', text: 'Bekker family reunion, stand ' + (i + 1) + ' of ' + reuIds.length + ' (' + reuIds.map(function (x) { return x.ref; }).join(', ') + '). Marisa pays for all of them. Put them next to each other.' }); });
+    // 12. Saturday night only: an exception to the 2-night weekend rule
+    bk({ first: 'Lindiwe', last: 'Zulu', ci: sat, co: add(sat, 1), method: 'card', pay: 'full', area: 'fenced', source: 'Phone', created: d(-3),
+      cars: [{ reg: 'LZ 12 WED GP', driver: 'Lindiwe Zulu', guests: ['Sizwe Zulu'] }],
+      notes: [[d(-3), 'Sherri', 'Saturday night only. The website asks for 2 nights over a weekend; I allowed 1 night as an exception (they are at a wedding nearby on Saturday).']] });
+    // 13. booked this morning for tonight
+    bk({ first: 'Jaco', last: 'Lombard', ci: TODAY, co: d(1), adults: 1, method: 'card', pay: 'full', area: 'unfenced', created: at(TODAY, '07:05'), eta: 'After 18:00', setup: 'Rooftop tent',
+      cars: [{ reg: 'JL 07 OFF GP', driver: 'Jaco Lombard' }], ind: 'none',
+      notes: [[TODAY + ' 07:06', 'Guest', 'Spontaneous trip! I will arrive around 19:00, is that ok?']] });
+    // 14. no email: booked by phone, everything goes by WhatsApp
+    bk({ first: 'Sannie', last: 'Erasmus', email: '', phone: '083 555 0101', consent: false, ci: d(9), co: d(11), adults: 0, pens: 2, method: 'eft', pay: 'deposit', area: 'fenced', source: 'Phone', setup: 'Caravan',
+      clientNote: 'No email address. Send quotations, codes and reminders by WhatsApp.', notes: [[d(-20), 'Sherri', 'No email address: sent the quotation and bank details by WhatsApp.']] });
+    // 15. booked for someone else, invoice to a company
+    bk({ first: 'Ruan', last: 'Kruger', email: 'ruan.kruger@gmail.com', phone: '076 145 2290', ci: d(15), co: d(17), method: 'eft', pay: 'deposit', area: 'fenced', created: d(-3),
+      cars: [{ reg: 'DP 88 KL GP', driver: 'Devan Pillay', guests: ['Nisha Pillay'] }],
+      notes: [[d(-2), 'Sherri', 'Invoice made out to Kruger Logistics (Pty) Ltd, VAT 4123456789. Ruan booked it for his manager, Devan Pillay, who is the one coming.']] });
+    // 16. quotation runs out on a Saturday: kept until the end of Monday
+    var nDue = sat, nCre = add(nDue, -5); if (nCre > TODAY) nCre = TODAY;
+    bk({ first: 'Nadia', last: 'Fourie', ci: add(sat, 21), co: add(sat, 23), method: 'eft', status: 'pending', area: 'unfenced', created: nCre });
+    // 17. proof of payment uploaded after the quotation ran out: kept while Kyleu checks
+    bk({ first: 'Bongani', last: 'Dlamini', ci: d(18), co: d(20), method: 'eft', status: 'pending', area: 'fenced', created: d(-7),
+      notes: [[d(-3) + ' 20:44', 'Guest', 'Paid from my wife\'s account, the reference might say N Dlamini.']],
+      then: function (b) { b.pop = true; b.pops = [{ name: 'FNB-payment-' + b.ref + '.jpg', size: 184220, type: 'image/jpeg', data: '', at: d(-3) + ' 20:41', via: 'Website upload' }]; } });
+    // 18. "I have paid" this morning, the quotation runs out today
+    bk({ first: 'Chantel', last: 'Jacobs', ci: d(25), co: d(27), method: 'eft', status: 'pending', area: 'unfenced', created: d(-5),
+      then: function (b) { b.pop = true; b.paidClaim = { id: 'pdemo1', ref: b.ref, at: TODAY + ' 07:30', date: d(-1), amt: deposit(b), what: 'Deposit', note: '' }; b.notes.push({ at: TODAY + ' 07:30', by: 'Guest', text: 'Says they paid ' + money(deposit(b)) + ' (deposit) on ' + fd(d(-1)) + '.' }); } });
+    // 19. released by itself: the quotation was never paid
+    bk({ first: 'Craig', last: 'Daniels', ci: d(14), co: d(16), method: 'eft', status: 'cancelled', area: 'unfenced', created: d(-12),
+      then: function (b) { b.released = { at: d(-6) + ' 00:05', due: d(-7) }; b.notes.push({ at: d(-6) + ' 00:05', by: 'System', text: 'Stand released automatically: the quotation was valid until ' + fd(d(-7)) + ' and no payment came in.' }); } });
+    // 20. cancelled late: the deposit kept as credit for another stay
+    bk({ first: 'Megan', last: 'Smit', ci: d(7), co: d(9), method: 'eft', pay: 'deposit', area: 'fenced', status: 'cancelled', created: d(-35),
+      notes: [[d(-10), 'Sherri', 'Cancelled 17 days before arrival because of a family emergency. Kept the deposit as credit for a stay in the next 12 months.']],
+      then: function (b) { db.credits.push({ id: 'c-smit', email: b.guest.email, name: guestName(b), amt: paid(b), used: 0, from: b.ref, d: d(-10) }); } });
+    // 21. two more adults added after paying in full: money outstanding again
+    bk({ first: 'Pieter', last: 'Swart', ci: d(9), co: d(11), adults: 4, priced: { adults: 2, pens: 0, kids: 0 }, method: 'eft', pay: 'full', area: 'unfenced',
+      then: function (b) { var q = quote(b.stand, b.ci, b.co, b, b.extras), add2 = q.eft - b.eft; b.eft = q.eft; b.card = q.card; b.total = b.eft;
+        b.extraDue = { at: d(-1) + ' 19:22', amt: add2, why: 'Guests added after paying in full' };
+        b.notes.push({ at: d(-1) + ' 19:22', by: 'Guest', text: 'Added my sister and her husband. They share our stand.' }); } });
+    // 22. asked to move the dates a week later
+    bk({ first: 'Riaan', last: 'du Toit', ci: d(16), co: d(18), method: 'eft', pay: 'deposit', area: 'fenced',
+      then: function (b) { b.changeReq = { at: d(-1) + ' 21:10', ci: d(23), co: d(25), adults: 2, pens: 0, kids: 0, msg: 'My work trip moved. Can we shift a week later?' };
+        T('tdemo-chg', 'Change request: ' + b.ref, b, [{ from: 'guest', at: d(-1) + ' 21:10', body: 'Please change my booking ' + b.ref + ':\n\nDates: ' + fd(b.ci) + ' to ' + fd(b.co) + ', please change to ' + fd(d(23)) + ' to ' + fd(d(25)) + '\nGuests: 2 adults (no change)\n\nMy work trip moved. Can we shift a week later?\n\nRiaan', att: [] }]); } });
+    // 23. paid from Germany: the deposit arrived short because of bank charges
+    bk({ first: 'Hans', last: 'Müller', email: 'hans.mueller@web.de', phone: '+49 151 2345 6789', town: 'Munich, Germany', ci: d(30), co: d(35), method: 'eft', area: 'unfenced', setup: 'Rooftop tent', created: d(-20),
+      then: function (b) { var dep = deposit(b); b.payments.push({ d: d(-14), amt: dep - 285, m: 'eft', type: 'Deposit', ref: b.ref });
+        b.notes.push({ at: d(-14) + ' 10:05', by: 'Sherri', text: 'International transfer arrived R285 short because of bank charges. Told Hans to add it to the balance.' });
+        T('tdemo-intl', 'Deposit from Germany', b, [{ from: 'guest', at: d(-15) + ' 16:20', body: 'Hello,\n\nI have sent the deposit by SWIFT today. Please let me know when it arrives.\n\nBest regards,\nHans', att: [{ name: 'SWIFT-confirmation.pdf', size: 48210, type: 'application/pdf' }] }, { from: 'staff', by: 'Sherri', at: d(-14) + ' 10:08', body: 'Hi Hans,\n\nIt arrived, thank you! Your bank took R285 in charges, so please add that to the balance.\n\nSherri\nKyleu Bush Camp', att: [] }]); } });
+    // 24. the vehicles list more people than were booked
+    bk({ first: 'Lerato', last: 'Mahlangu', ci: d(3), co: d(5), adults: 3, method: 'card', pay: 'full', area: 'fenced', eta: '13:00-15:00',
+      cars: [{ reg: 'LM 21 AB GP', driver: 'Lerato Mahlangu', guests: ['Thandeka Mahlangu', 'Zinhle Mahlangu', 'Ayanda Mahlangu'], code: true }], ind: 'some',
+      then: function (b) { b.finalised = { at: at(d(-2), '09:40'), by: 'Guest' }; } });
+    // 25. paid twice by mistake: the second payment refunded
+    bk({ first: 'Johan', last: 'Botes', ci: d(11), co: d(13), method: 'card', pay: 'full', area: 'unfenced',
+      then: function (b) { b.payments.push({ d: d(-4), amt: b.total, m: 'eft', type: 'Payment', ref: b.ref }); b.payments.push({ d: d(-2), amt: -b.total, m: 'eft', type: 'Refund', ref: b.ref });
+        b.notes.push({ at: d(-2) + ' 11:15', by: 'Sherri', text: 'Paid by card and again by EFT by mistake. Refunded the EFT payment.' }); } });
+    // 26. finalised and arriving tomorrow, but nobody has signed the indemnity
+    bk({ first: 'Sipho', last: 'Ndlovu', ci: d(1), co: d(3), adults: 2, kids: 1, method: 'card', pay: 'full', area: 'unfenced', eta: '13:00-15:00',
+      cars: [{ reg: 'SN 64 ZZ GP', driver: 'Sipho Ndlovu', guests: ['Nomsa Ndlovu', 'Lwazi Ndlovu'], code: true }], ind: 'none',
+      then: function (b) { b.finalised = { at: at(d(-4), '21:30'), by: 'Guest' }; } });
+    // 27. left two days ago: forgot a chair, left a review
+    bk({ first: 'Ayesha', last: 'Patel', ci: d(-4), co: d(-2), method: 'card', pay: 'full', area: 'fenced', status: 'out',
+      cars: [{ reg: 'AP 10 XY GP', driver: 'Ayesha Patel', guests: ['Imran Patel'] }], ind: 'all',
+      notes: [[d(-2), 'Leuan', 'Forgot a blue camping chair at the stand: kept at reception. Collecting it on Saturday.'], [d(-1), 'Sherri', 'Left a 5-star Google review.']] });
+    // 28. a stand moved because of the geyser repair
+    bk({ first: 'Elsabé', last: 'Coetzee', ci: d(4), co: d(6), method: 'eft', pay: 'full', area: 'fenced',
+      notes: [[d(-5), 'Kyran', 'Moved from another stand because its geyser is being replaced. Told Elsabé by WhatsApp; she is happy.']] });
+  }
   function seed() {
     var r = rng(2611), pick = function (a) { return a[Math.floor(r() * a.length)]; };
-    var db = { v: 4, seeded: TODAY, vouchers: [], credits: [], gone: {}, threads: [], hol: { add: {}, del: {} }, popSeen: {}, bookings: [], blocks: [], sales: [], log: [], rates: {}, closed: {}, settings: { providerFee: 2.95 }, readEnq: {} };
+    var db = { v: 7, seeded: TODAY, vouchers: [], credits: [], gone: {}, threads: [], hol: { add: {}, del: {} }, popSeen: {}, bookings: [], blocks: [], sales: [], log: [], rates: {}, closed: {}, settings: { providerFee: 2.95 }, readEnq: {} };
     var guests = [];
     for (var i = 0; i < 420; i++) {
       var f = pick(FIRST), l = pick(LAST);
@@ -228,7 +396,7 @@
       else if (ci < TODAY && b.status !== 'pending' && b.status !== 'out') b.status = 'in';
       if (b.status !== 'in' && b.status !== 'out' && ci > TODAY && r() < .05) { b.status = 'cancelled'; b.notes.push({ at: cday, by: 'Sherri', text: 'Guest cancelled by email more than 14 days before arrival. Deposit refunded.' }); if (paid(b)) b.payments.push({ d: add(cday, 2), amt: -paid(b), m: b.payments[0].m, type: 'Refund', ref: payRef }); }
       if (opts.overdue) { b.status = 'pending'; b.payments = []; b.pop = false; }
-      if (r() < .12 && b.status !== 'cancelled') b.notes.push({ at: cday, by: pick(['Sherri', 'Devon', 'Kyran']), text: pick(['Celebrating a birthday on Saturday.', 'Asked for a stand close to the pool.', 'Arriving late, after 18:00. Gate code sent.', 'Bringing a 6 m off-road trailer.', 'First time in Dinokeng: sent gate directions.', 'Regulars, they love Stand 3.']) });
+      if (r() < .2 && b.status !== 'cancelled') b.notes.push({ at: cday, by: pick(['Sherri', 'Devon', 'Kyran']), text: pick(['Celebrating a birthday on Saturday.', 'Asked for a stand close to the pool.', 'Arriving late, after 18:00. Gate code sent.', 'Bringing a 6 m off-road trailer.', 'First time in Dinokeng: sent gate directions.', 'Regulars, they love Stand 3.', 'Asked for a late check-out on Sunday: approved until 13:00.', 'Low-slung sedan: told them which roads to avoid after rain.', 'Photographer: asked about the best time for the waterhole.', 'Booked through Q2B before the new website.', 'Gluten-free: asked where to buy food on the way in.', 'Bringing a gas fridge. Reminded them there is no electricity.']) });
       db.bookings.push(b); return b;
     }
     // overlaps() reads DB, so point DB at the new data while seeding
@@ -298,6 +466,25 @@
     if (mailB) db.threads.push(T('t3', 'Proof of payment ' + mailB.ref, guestName(mailB), mailB.guest.email, mailB.guest.phone, 'open', true, [G(TODAY + ' 06:58', 'Good morning,\n\nPlease find attached proof of payment for booking ' + mailB.ref + '.\n\nRegards,\n' + mailB.guest.first, [{ name: 'FNB-proof-of-payment-' + mailB.ref + '.pdf', size: 86214, type: 'application/pdf' }])], mailB.ref));
     var cx = db.bookings.filter(function (b) { return b.status === 'cancelled'; })[0];
     if (cx) db.credits.push({ id: 'c1', email: (cx.guest.email || '').toLowerCase(), name: guestName(cx), amt: 650, used: 0, from: cx.ref, d: add(TODAY, -12) });
+    // most guests who paid in full finalised online: number plates, who is in which car, arrival time.
+    // Dinokeng codes: sent for everyone arriving in the next 3 days, and for most finalised bookings after that.
+    var LT = 'BCDFGHJKLMNPRSTVWXYZ', regOf = function () { var l = function () { return LT[Math.floor(r() * LT.length)]; }; return l() + l() + ' ' + (10 + Math.floor(r() * 89)) + ' ' + l() + l() + ' GP'; };
+    db.bookings.forEach(function (b) {
+      var cs = ensureCars(b);
+      if (live(b) && (b.status === 'in' || b.status === 'out' || (paid(b) > 0 && balance(b) <= 0 && r() < .7))) {
+        var fa = add(b.ci, -2 - Math.floor(r() * 6)); if (fa > TODAY) fa = TODAY; if (fa < b.created.slice(0, 10)) fa = b.created.slice(0, 10);
+        b.finalised = { at: fa + ' ' + (8 + Math.floor(r() * 13)) + ':' + String(Math.floor(r() * 60)).padStart(2, '0'), by: r() < .85 ? 'Guest' : 'Sherri' };
+        if (!b.eta) b.eta = pick(['Before 13:00', '13:00-15:00', '13:00-15:00', '15:00-18:00', '15:00-18:00', 'After 18:00']);
+        var used = {}; used[guestName(b)] = 1;
+        var nm = function (last) { for (var k = 0; k < 9; k++) { var x = pick(FIRST) + ' ' + last; if (!used[x]) { used[x] = 1; return x; } } return ''; };
+        cs.forEach(function (c, i) { c.reg = regOf(); if (i && !c.driver) c.driver = nm(r() < .5 ? b.guest.last : pick(LAST)); var want = Math.max(0, (c.people || 1) - 1); c.guests = []; for (var k = 0; k < want; k++) { var x = nm(i ? c.driver.split(' ').slice(1).join(' ') : b.guest.last); if (x) c.guests.push(x); } c.people = (c.driver ? 1 : 0) + c.guests.length; });
+      }
+      if (!live(b) || b.status === 'out' && b.co < add(TODAY, -20)) return;
+      if (b.ci < add(TODAY, 3) || (b.finalised && b.ci < add(TODAY, 12) && r() < .6)) cs.forEach(function (c) { c.dgr = 'DGR' + Math.floor(r() * 2176782336).toString(36).toUpperCase().padStart(6, '0').slice(0, 6); var sa = add(b.ci, -6); if (sa > TODAY) sa = TODAY; c.dgrSent = { at: sa + ' 09:10', by: 'Sherri', code: c.dgr }; });
+    });
+    db.dgrV = 2;
+    seedStories(db, r);
+    db.bookings.sort(function (a, b) { return a.ci < b.ci ? -1 : 1; });
     var recent = db.bookings.filter(function (b) { return b.created.slice(0, 10) >= add(TODAY, -3); }).slice(-6);
     recent.forEach(function (b) { db.log.push({ at: b.created, by: b.source === 'Website' ? 'Website' : 'Sherri', text: 'New booking ' + b.ref + ' for ' + guestName(b) + ' (' + standById(b.stand).name + ')', ref: b.ref }); });
     db.log.sort(function (a, b) { return a.at < b.at ? 1 : -1; });
@@ -306,7 +493,10 @@
   function save() { try { localStorage.setItem(KEY, JSON.stringify(DB)); publishWeb(); return true; } catch (e) { return false; } }
   function loadDB() {
     try { DB = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { DB = null; }
-    if (!DB || DB.v !== 4) { DB = seed(); save(); }
+    if (!DB || DB.v !== 7) {   // new demo data: start again, with the website's demo records and the signed forms
+      try { ['kyleu-web-bookings', 'kyleu-web-pop', 'kyleu-indemnities', 'kyleu-ind-demo'].forEach(function (k) { localStorage.removeItem(k); }); } catch (e) {}
+      DB = seed(); save();
+    }
     DB.vouchers = DB.vouchers || []; DB.credits = DB.credits || [];
     DB.gone = DB.gone || {};
     if (DB.stands) { CONTENT_STANDS.forEach(function (s) { if (!DB.stands.some(function (x) { return x.id === s.id; }) && !DB.gone[s.id]) DB.stands.push(JSON.parse(JSON.stringify(s))); }); STANDS = DB.stands; }   // campsites added in the map editor join the list   // stands added or changed in this admin
@@ -571,8 +761,9 @@
     var people = [b.adults ? b.adults + ' adult' + (b.adults > 1 ? 's' : '') : '', b.pens ? b.pens + ' pensioner' + (b.pens > 1 ? 's' : '') : '', b.kids ? b.kids + ' child' + (b.kids > 1 ? 'ren' : '') : ''].filter(Boolean).join(', ');
     var pct = b.total > 0 ? Math.min(100, Math.round(pd / b.total * 100)) : 0, sb = staysBefore(b);
     // what is holding the stand (unpaid quotations)
-    var balLate = b.status === 'confirmed' && bal > 0 && balanceDue(b) < TODAY;
-    var holdTxt = b.status === 'confirmed' && bal > 0 ? (balLate ? '<b>Balance of ' + money(bal) + ' was due ' + fd(balanceDue(b)) + '</b> (' + rel(balanceDue(b)) + '). Remind ' + esc(b.guest.first) + ' or record the payment.' : 'Balance of <b>' + money(bal) + '</b> due by <b>' + fd(balanceDue(b), { weekday: 'short', day: 'numeric', month: 'short' }) + '</b> (' + rel(balanceDue(b)) + ').')
+    var balLate = b.status === 'confirmed' && bal > 0 && !b.onArrival && balanceDue(b) < TODAY;
+    var holdTxt = b.status === 'confirmed' && bal > 0 && b.onArrival ? '<b>' + money(bal) + ' to pay on arrival</b> (' + esc(String(b.onArrival.how).toLowerCase()) + '), as arranged with ' + esc(b.guest.first) + '. The stand is not released.'
+      : b.status === 'confirmed' && bal > 0 ? (balLate ? '<b>Balance of ' + money(bal) + ' was due ' + fd(balanceDue(b)) + '</b> (' + rel(balanceDue(b)) + '). Remind ' + esc(b.guest.first) + ' or record the payment.' : 'Balance of <b>' + money(bal) + '</b> due by <b>' + fd(balanceDue(b), { weekday: 'short', day: 'numeric', month: 'short' }) + '</b> (' + rel(balanceDue(b)) + ').')
       : b.status !== 'pending' ? '' : holdTxtOf(b);
     var nCars = cs0.length, nNotes = (b.notes || []).length + DB.threads.filter(function (t) { return t.ref === b.ref || t.email === b.guest.email; }).length;
     var TABS = [['overview', 'Overview'], ['vehicles', 'Vehicles & indemnity'], ['money', 'Money'], ['notes', 'Messages & notes' + (nNotes ? ' (' + nNotes + ')' : '')]];
@@ -608,7 +799,7 @@
         '<dt>Depart</dt><dd>' + fd(b.co, { weekday: 'long', day: 'numeric', month: 'long' }) + '</dd>' +
         '<dt>Guests</dt><dd>' + people + (b.kids ? ' <span class="muted">(children under 12)</span>' : '') + '</dd>' +
         '<dt>Vehicles</dt><dd>' + (b.vehTbc ? '<span class="warn-t">Not sure yet</span>' : b.vehicles + ' vehicle' + (b.vehicles > 1 ? 's' : '')) + (b.setup ? ' · ' + esc(b.setup) : '') + '</dd>' +
-        '<dt>Arrival time</dt><dd>' + (b.eta ? 'Around ' + esc(b.eta) : '<span class="muted">Not given yet</span>') + '</dd>' +
+        '<dt>Arrival time</dt><dd>' + (b.eta ? (/^\d/.test(b.eta) ? 'Around ' : '') + esc(b.eta) : '<span class="muted">Not given yet</span>') + '</dd>' +
         (live(b) ? '<dt>Indemnity</dt><dd>' + indPill(b) + ' <button type="button" class="link-btn" data-ptab="vehicles">See' + ic('chev-r') + '</button></dd>' : '') +
         '<dt>Booked</dt><dd>' + fd(b.created.slice(0, 10), { day: 'numeric', month: 'short', year: 'numeric' }) + ' via ' + esc(b.source) + '</dd></dl></section>' +
         linkSec(b) +
@@ -1587,7 +1778,7 @@
       if (b.changeReq && !b.changeReq.done && live(b)) attention.push({ i: 'cal', tone: 'warn', t: '<b>' + esc(guestName(b)) + '</b> asked to change the dates or guests (' + fd(b.ci) + ')', ref: b.ref, o: 1 });
       if (live(b) && b.status !== 'in' && b.status !== 'out' && b.ci >= TODAY && diff(TODAY, b.ci) <= 10 && paidUp(b) && !b.finalised) attention.push({ i: 'car', tone: 'warn', t: '<b>' + esc(guestName(b)) + '</b> has paid but not finalised the booking (' + fdw(b.ci) + '): ' + (diff(TODAY, b.ci) <= 7 ? 'their link is locked now, so add the vehicles and arrival time yourself (WhatsApp them) or at check-in' : 'send the finalise link or fill it in'), ref: b.ref, o: 5 });
       var ps = preShop(b); if (ps && live(b) && b.status !== 'out' && (b.ci === TODAY || b.ci === add(TODAY, 1))) attention.push({ i: 'cart', tone: 'info', t: 'Have ready for <b>' + esc(guestName(b)) + '</b> (' + (b.ci === TODAY ? 'today' : 'tomorrow') + '): ' + esc(ps.desc.replace(/^Shop order for arrival: /, '')), ref: b.ref, o: 3 });
-      if (s.k === 'pop') attention.push({ i: 'note', tone: 'info', t: 'Proof of payment from <b>' + esc(guestName(b)) + '</b>: check the bank for ' + money(deposit(b)), ref: b.ref, o: 1 });
+      if (s.k === 'pop' || (s.k === 'soft' && b.holdWhy === 'pop' && diff(TODAY, b.softHold) > 2)) attention.push({ i: 'note', tone: 'info', t: 'Proof of payment from <b>' + esc(guestName(b)) + '</b>: check the bank for ' + money(deposit(b)), ref: b.ref, o: 1 });
       if (s.k === 'overdue') attention.push({ i: 'alert', tone: 'bad', t: '<b>' + esc(guestName(b)) + '</b> has not paid the EFT deposit (due ' + fd(depositDue(b)) + '). Remind or release the stand.', ref: b.ref, o: 2 });
       if (s.k === 'baldue' && s.tone === 'bad') attention.push({ i: 'alert', tone: 'bad', t: 'Balance overdue: <b>' + esc(guestName(b)) + '</b> owes ' + money(balance(b)) + ', arriving ' + fdw(b.ci), ref: b.ref, o: 3 });
     });
@@ -3180,7 +3371,7 @@
     var out = force ? [] : K.ind.all(), seedN = 7, rnd = function () { seedN = (seedN * 16807) % 2147483647; return seedN / 2147483647; };
     var cv = document.createElement('canvas'); cv.width = 300; cv.height = 64; var g = cv.getContext('2d'), n = 0, ver = K.ind.version(indText());
     var sigOf = function (name) { g.clearRect(0, 0, 300, 64); g.fillStyle = '#1d1410'; g.font = '30px "Segoe Print", "Bradley Hand", cursive'; g.textBaseline = 'middle'; g.fillText(name, 8, 34); return cv.toDataURL('image/png'); };
-    var pick = DB.bookings.filter(function (b) { return live(b) && (b.status === 'in' || b.status === 'out' || (b.status === 'confirmed' && paidUp(b) && b.ci >= TODAY && diff(TODAY, b.ci) <= 6)); }).slice(-45);
+    var pick = DB.bookings.filter(function (b) { return !b.demoInd && live(b) && (b.status === 'in' || b.status === 'out' || (b.status === 'confirmed' && paidUp(b) && b.ci >= TODAY && diff(TODAY, b.ci) <= 6)); }).slice(-45);
     pick.forEach(function (b) {
       if (b.status === 'confirmed' && rnd() < .45) return;
       var st = standById(b.stand), names = indNames(b), adults = Math.max(1, b.adults + b.pens), signers = names.slice(0, adults), kids = names.slice(adults), via = rnd(), r0 = via < .6 ? 'Online' : via < .85 ? 'Signing link' : 'At reception';
@@ -3192,6 +3383,19 @@
           name: p.name, idNo: 'DEMO' + (10000 + n * 37), idKind: 'Passport', dob: (1958 + Math.floor(rnd() * 40)) + '-0' + (1 + Math.floor(rnd() * 9)) + '-1' + Math.floor(rnd() * 9), phone: i ? '' : b.guest.phone, email: i ? '' : b.guest.email,
           reg: p.reg || '', role: p.role || '', minors: i ? [] : kids.map(function (k) { return k.name; }), bookedBy: guestName(b), sig: sigOf(p.name), sigW: 300, sigH: 64, typed: true,
           at: at, via: r0, by: r0 === 'At reception' ? 'Front desk' : '', textV: ver, text: '', demo: true });
+      });
+    });
+    DB.bookings.forEach(function (b) {
+      var di = b.demoInd; if (!di) return; delete b.demoInd; if (di.mode === 'none' || !live(b)) return;
+      var st = standById(b.stand), kk = di.kids.map(K.ind.nkey), names = indNames(b), signers = names.filter(function (p) { return kk.indexOf(K.ind.nkey(p.name)) < 0; });
+      var kids = names.filter(function (p) { return kk.indexOf(K.ind.nkey(p.name)) >= 0; }).map(function (p) { return p.name; });
+      if (di.mode === 'some') signers = signers.slice(0, 1);
+      signers.forEach(function (p, i) {
+        var via = i ? 'Signing link' : 'Online', at = add(b.ci, -2 - i) + ' ' + (19 + i) + ':' + String(5 + i * 11).padStart(2, '0');
+        if (at.slice(0, 10) >= TODAY) at = TODAY + ' 07:' + String(10 + i * 6).padStart(2, '0');
+        n++; out.push({ id: 'inddemo' + n, no: 'IND-' + String(b.ref).replace(/[^A-Z0-9]/gi, '').toUpperCase() + '-' + (i + 1), ref: b.ref, stand: b.stand, standName: st.name, area: st.area, ci: b.ci, co: b.co, eta: b.eta || '',
+          name: p.name, idNo: 'DEMO' + (10000 + n * 37), idKind: 'Passport', dob: (1960 + (n * 7) % 40) + '-0' + (1 + n % 9) + '-1' + (n % 9), phone: i ? '' : b.guest.phone, email: i ? '' : b.guest.email,
+          reg: p.reg || '', role: p.role || '', minors: i ? [] : kids, bookedBy: guestName(b), sig: sigOf(p.name), sigW: 300, sigH: 64, typed: true, at: at, via: via, by: '', textV: ver, text: '', demo: true });
       });
     });
     try { localStorage.setItem('kyleu-indemnities', JSON.stringify(out)); localStorage.setItem(FLAG, '1'); } catch (e) {}
