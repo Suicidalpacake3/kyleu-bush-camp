@@ -1544,3 +1544,107 @@ html:has(body.lock) { overflow: hidden; }
 .ind-sigv img { max-width: min(320px, 100%); height: auto; }
 .ind-sigv small { color: var(--muted); border-top: 1px solid var(--line); padding-top: 4px; min-width: 220px; }
 .m-card .ind-risks, .m-card .ind-status { margin-top: 12px; }
+
+/* =========================================================
+   Check-in sheet: big, plain rows for the gate; phone and tablet first
+   ========================================================= */
+.hello-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.gate-days { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+.gate-days .chip { padding: 9px 16px; font-size: .9rem; }
+.gate-date input { min-height: 40px; }
+.gate-dayname { font-size: 1.05rem; margin-left: 4px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.gate-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.gate-filters { align-items: center; }
+.gate-filters .search { flex: 1 1 260px; }
+.gate-filters .search input { font-size: 1rem; min-height: 46px; }
+.gate-show { margin: 0; }
+.gate-areas { align-items: center; margin-bottom: 14px; }
+.gate-areas .chip { padding: 10px 16px; font-size: .92rem; }
+.gate-areas select { min-height: 42px; }
+.gate-quick { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.gate-list { display: grid; gap: 12px; }
+.gate-card, .site-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; box-shadow: 0 1px 2px rgba(42, 27, 18, .05); }
+.gate-card.done { opacity: .72; }
+.gate-card.late { border-color: var(--bad); box-shadow: inset 4px 0 0 var(--bad); }
+.gate-card > header, .site-card > header { display: flex; align-items: center; gap: 14px; }
+.gate-st { flex: none; min-width: 92px; background: var(--ink); color: #fff; border-radius: 12px; padding: 8px 12px; text-align: center; line-height: 1.15; }
+.gate-st b { display: block; font-size: 1.12rem; }
+.gate-st small { display: block; font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: #f4b740; font-weight: 800; }
+.gate-who { flex: 1; min-width: 0; }
+.gate-who b { display: block; font-size: 1.14rem; line-height: 1.25; }
+.gate-who small { display: block; color: var(--muted); font-size: .86rem; }
+.bad-t { color: var(--bad); }
+.gate-pay { flex: none; text-align: center; font-weight: 900; font-size: 1rem; padding: 8px 14px; border-radius: 12px; line-height: 1.15; }
+.gate-pay small { display: block; font-size: .7rem; font-weight: 700; }
+.gate-pay.ok { background: var(--ok-bg); color: var(--ok); }
+.gate-pay.owes { background: #ffe45c; color: #2a1b12; box-shadow: inset 0 0 0 2px #2a1b12; }
+.gate-cars { margin-top: 10px; display: grid; gap: 8px; }
+.gate-car { display: flex; align-items: center; gap: 14px; padding: 10px 12px; background: #faf5ed; border-radius: 12px; }
+.gate-veh { flex: 1; min-width: 0; }
+.gate-veh b { display: block; }
+.gate-veh small { display: block; color: var(--muted); font-size: .84rem; }
+.gate-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 5px; }
+.gate-act { flex: none; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.gate-act .btn { min-height: 46px; padding-inline: 18px; font-size: .98rem; }
+.gate-card > footer { display: flex; gap: 10px 16px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.gate-order { display: inline-flex; gap: 8px; align-items: flex-start; font-size: .88rem; background: var(--line-2); border-radius: 10px; padding: 7px 11px; max-width: 100%; }
+.gate-order.todo { background: var(--warn-bg); }
+.gate-order .ic { flex: none; margin-top: 2px; }
+.gate-order small { display: block; color: var(--muted); }
+.gate-foot-acts { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.gate-empty { padding: 34px 16px; background: var(--card); border: 1px dashed var(--line); border-radius: 16px; }
+.gate-paper { margin-bottom: 12px; }
+.gate-paper .btn { flex: none; }
+/* a number plate, in the two parts it is read in */
+.plate { display: inline-flex; align-items: stretch; border: 2px solid #1c120b; border-radius: 8px; overflow: hidden; background: #fff; font-family: 'Arial Narrow', Arial, sans-serif; font-weight: 800; letter-spacing: .04em; line-height: 1; white-space: nowrap; vertical-align: middle; }
+.plate b { background: #ffd83d; color: #1c120b; padding: 5px 8px; font-size: 1.02rem; }
+.plate i { font-style: normal; padding: 5px 8px; font-size: .92rem; color: #1c120b; }
+.plate.big b { font-size: 1.45rem; padding: 8px 12px; }
+.plate.big i { font-size: 1.15rem; padding: 8px 12px; display: flex; align-items: center; }
+.plate.none { border-style: dashed; border-color: var(--line); color: var(--muted); font-weight: 700; font-size: .8rem; padding: 8px 10px; letter-spacing: 0; font-family: inherit; }
+/* check-in pop-up: the shop order */
+.hand-box { border: 1.5px solid var(--sun, #e8731c); background: #fff8ef; border-radius: 14px; padding: 12px 14px; margin: 12px 0; }
+.hand-box > b { display: flex; gap: 7px; align-items: center; }
+.hand-box p { margin: 4px 0 10px; font-size: 1.02rem; font-weight: 700; }
+.hand-box p small { font-weight: 500; color: var(--muted); }
+.seg.wrap { flex-wrap: wrap; }
+/* site jobs */
+.site-card > header { margin-bottom: 8px; }
+.site-card > header .muted { flex: 1; }
+.site-line { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-top: 1px dashed var(--line); }
+.site-line > div { flex: 1; min-width: 0; }
+.site-line small { display: block; color: var(--muted); font-size: .8rem; }
+.site-line.done > div { text-decoration: line-through; color: var(--muted); }
+.site-line.done small { text-decoration: none; }
+.site-tick { flex: none; width: 26px; height: 26px; border: 2px solid var(--ink); border-radius: 7px; display: grid; place-items: center; margin-top: 1px; }
+.site-line.done .site-tick { background: var(--ok); border-color: var(--ok); color: #fff; }
+.site-tick .ic { width: 16px; height: 16px; }
+/* typing in a paper sheet */
+.paper-rows { display: grid; gap: 12px; }
+.paper-row { border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px 12px; margin: 0; min-width: 0; }
+.paper-row legend { padding: 0 6px; font-size: .95rem; }
+.paper-row legend b { background: var(--ink); color: #fff; border-radius: 7px; padding: 2px 8px; margin-right: 4px; }
+.paper-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 12px; }
+.paper-grid .fld { margin: 0; }
+.paper-wide { grid-column: 1 / -1; }
+.paper-checks { display: flex; gap: 8px 18px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
+.paper-checks .check { margin: 0; }
+@media (max-width: 760px) {
+  .gate-kpis { grid-template-columns: 1fr 1fr; }
+  .gate-card > header { flex-wrap: wrap; gap: 10px; }
+  .gate-who { flex: 1 1 60%; order: 2; }
+  .gate-st { order: 1; }
+  .gate-pay { order: 3; margin-left: auto; }
+  .gate-card > header > .icon-btn { order: 4; }
+  .gate-car { flex-wrap: wrap; }
+  .gate-act { width: 100%; }
+  .gate-act .btn { flex: 1; justify-content: center; }
+  .gate-foot-acts { margin-left: 0; width: 100%; }
+  .gate-foot-acts .btn { flex: 1; justify-content: center; }
+  .paper-grid { grid-template-columns: 1fr 1fr; }
+  .gate-dayname { width: 100%; margin: 0; }
+}
+.gate-order.note { background: #fff3b8; }
+@media (max-width: 760px) { .page-h:has(+ .gate-tabs) p.muted { display: none; } .gate-kpis .kpi-s { display: none; } }
+
