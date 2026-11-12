@@ -659,15 +659,27 @@
     { id: 'devon', name: 'Devon', role: 'Owner', email: 'devon@kyleu.co.za' },
     { id: 'kyran', name: 'Kyran', role: 'Manager', email: 'kyran@kyleu.co.za' },
     { id: 'leuan', name: 'Leuan', role: 'Front desk', email: 'leuan@kyleu.co.za' },
-    { id: 'gate', name: 'Gate', role: 'Gate', email: 'gate@kyleu.co.za' }   // the person doing check-ins: sees the check-in sheet and the shop only
+    { id: 'gate', name: 'Gate', role: 'Gate', email: 'gate@kyleu.co.za' },   // the person doing check-ins: sees the check-in sheet and the shop only
+    { id: 'thabo', name: 'Thabo', role: 'Worker', email: 'thabo@kyleu.co.za' },   // site workers: the site jobs only, never guest names or money
+    { id: 'sipho', name: 'Sipho', role: 'Worker', email: 'sipho@kyleu.co.za' }
   ];
+  // What each role may open. "cap:guests" = may see guest names, contact details, bookings and money.
   var ROLES = {
-    Owner: ['dashboard', 'gate', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'indemnities', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'rates', 'settings', 'news', 'dgrnews', 'social', 'webtext'],
-    Manager: ['dashboard', 'gate', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'indemnities', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'news', 'dgrnews', 'social', 'webtext'],
-    'Front desk': ['dashboard', 'gate', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'indemnities', 'shop', 'drives', 'news', 'dgrnews', 'social'],
-    Gate: ['gate', 'shop']
+    Owner: ['dashboard', 'gate', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'indemnities', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'rates', 'settings', 'news', 'dgrnews', 'social', 'webtext', 'cap:guests', 'cap:money', 'cap:setup'],
+    Manager: ['dashboard', 'gate', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'indemnities', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'news', 'dgrnews', 'social', 'webtext', 'cap:guests', 'cap:money'],
+    'Front desk': ['dashboard', 'gate', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'indemnities', 'shop', 'drives', 'news', 'dgrnews', 'social', 'cap:guests'],
+    Gate: ['gate', 'shop', 'cap:guests'],
+    Worker: ['site']
+  };
+  var ROLE_INFO = {
+    Owner: 'Everything, including prices, settings and who has which role.',
+    Manager: 'Everything except prices and settings.',
+    'Front desk': 'Bookings, check-ins, the inbox, the shop and the website news. No money reports and no setup.',
+    Gate: 'The check-in sheet and the shop till. For the person at the gate.',
+    Worker: 'Site jobs only: cleaning, wood, deliveries, repairs and stand notes. Never guest names, phone numbers or money.'
   };
   var NAV = [
+    { id: 'site', t: 'Site jobs', i: 'check', g: '' },
     { id: 'dashboard', t: 'Dashboard', i: 'home', g: '' },
     { id: 'gate', t: 'Check-in sheet', i: 'clip', g: 'Front desk' },
     { id: 'bookings', t: 'Bookings', i: 'list', g: 'Front desk' },
@@ -717,6 +729,7 @@
 
   var drawerRef = null;
   function openBooking(ref) {
+    if (!can('cap:guests')) return;   // site workers never see a booking
     var b = byRef(ref); if (!b) { toast('Booking ' + esc(ref) + ' not found'); return; }
     if (!drawerRef) pushLayer();
     if (drawerRef !== ref) PTAB = 'overview';
@@ -1498,7 +1511,7 @@
   /* ----- site jobs: repairs and other things reported at a stand ----- */
   function jobsDB() { DB.jobs = DB.jobs || []; return DB.jobs; }
   var JOB_KINDS = [['repair', 'Something is broken'], ['clean', 'Needs cleaning'], ['other', 'Something else']];
-  function addJob(standId, text, o) { o = o || {}; var j = { id: uid('job'), stand: standId, kind: o.kind || 'repair', text: String(text).trim(), urgent: !!o.urgent, at: nowStamp(), by: ME.name, ref: o.ref || '', done: null }; jobsDB().unshift(j); return j; }
+  function addJob(standId, text, o) { o = o || {}; var j = { id: uid('job'), stand: standId, kind: o.kind || 'repair', text: String(text).trim(), urgent: !!o.urgent, at: nowStamp(), by: ME.name, ref: o.ref || '', done: null }; jobsDB().unshift(j); siteLog(standId, 'Reported' + (j.urgent ? ' (urgent)' : '') + ': ' + j.text.slice(0, 120)); return j; }
   function issueField() { return '<label class="fld"><span>Anything wrong at the stand? (optional: it goes on the site jobs list)</span><input name="issue" placeholder="e.g. the toilet keeps flushing" autocomplete="off"></label>'; }
   function issueRead(f, b) { var t = fval(f, 'issue'); if (!t) return; addJob(b.stand, t, { ref: b.ref }); b.notes.push({ at: nowStamp(), by: ME.name, text: 'Reported at the stand: ' + t + ' (on the site jobs list).' }); }
   function actJob(standId, ref, id) {
@@ -1515,8 +1528,30 @@
         if (!tx) { toast('Write what needs to be done'); return false; }
         if (j) { j.stand = st; j.kind = kind; j.text = tx; j.urgent = !!fval(f, 'urgent'); }
         else addJob(st, tx, { kind: kind, urgent: !!fval(f, 'urgent'), ref: ref || '' });
-        log((j ? 'Site job updated: ' : 'Site job added: ') + (st === 'camp' ? 'Camp' : standById(st).name) + ', ' + tx.slice(0, 60)); save(); render(); toast(j ? 'Saved' : 'Added to the site jobs list');
+        if (j) siteLog(st, 'Job changed: ' + tx.slice(0, 120)); save(); render(); toast(j ? 'Saved' : 'Added to the site jobs list');
       });
+  }
+  // Notes left at a stand for the next person, and a log of every tick, note and report (who, when, which stand)
+  function notesDB() { DB.standNotes = DB.standNotes || []; return DB.standNotes; }
+  function standNotes(id) { return notesDB().filter(function (n) { return n.stand === id; }); }
+  function siteLog(standId, text) {
+    DB.siteLog = DB.siteLog || [];
+    DB.siteLog.unshift({ at: nowStamp(), by: ME ? ME.name : 'System', role: ME ? ME.role : '', stand: standId, text: text });
+    DB.siteLog = DB.siteLog.slice(0, 3000);
+    log((standId === 'camp' ? 'Camp' : standById(standId).name) + ': ' + text);
+  }
+  function standOptions(cur) { return '<option value="">Choose the stand</option>' + STANDS.slice().sort(function (a, b) { return standSort(a.id, b.id); }).map(function (s) { return '<option value="' + s.id + '"' + (s.id === cur ? ' selected' : '') + '>' + esc(s.name) + ' (' + AREA_SHORT[s.area] + ')</option>'; }).join('') + '<option value="camp"' + (cur === 'camp' ? ' selected' : '') + '>Somewhere else in camp (pool, lapa, road)</option>'; }
+  function actStandNote(standId) {
+    modal('Add a note to a stand', '<label class="fld"><span>Stand</span><select name="stand">' + standOptions(standId) + '</select></label>' +
+      '<label class="fld"><span>Note for whoever works at this stand next</span><textarea name="text" rows="3" placeholder="e.g. Replaced the tap washer. The gate latch is stiff, it needs oil."></textarea></label>' +
+      '<p class="hint">' + ic('info') + ' Everyone on the team can read stand notes. Your name and the time are saved with it. For something that must be fixed, use Report a problem instead, so it goes on the job list.</p>',
+      'Save the note', function (f) {
+        var st = fval(f, 'stand'), tx = fval(f, 'text');
+        if (!st) { toast('Choose the stand'); return false; }
+        if (!tx) { toast('Write the note first'); return false; }
+        notesDB().unshift({ id: uid('sn'), stand: st, text: tx, at: nowStamp(), by: ME.name });
+        siteLog(st, 'Note added: ' + tx.slice(0, 120)); save(); render(); toast('Note saved');
+      }, { noFocus: !!standId });
   }
   function jobStand(j) { return j.stand === 'camp' ? { id: 'camp', name: 'Camp', area: 'camp' } : standById(j.stand); }
   // Everything the workers do on one day, per stand: cleaning, the free bag of wood, deliveries and repairs
@@ -1607,8 +1642,10 @@
   }
   function gateBadge() { return gateList('in', TODAY).reduce(function (a, b) { return a + (b.status === 'pending' ? 0 : ensureCars(b).filter(function (c) { return c.st === 'due' && !c.noShow; }).length); }, 0); }
 
-  function vGate() {
+  function vSite() { return vGate(true); }   // the workers' page: the site jobs and nothing else
+  function vGate(siteOnly) {
     if (!GATE.day) GATE.day = TODAY;
+    var tab = siteOnly ? 'jobs' : GATE.tab;
     var tabs = [['in', 'Check in'], ['out', 'Check out'], ['jobs', 'Site jobs'], ['reports', 'Reports']], body = '', day = GATE.day;
     var dayBar = function () {
       return '<div class="gate-days"><button type="button" class="icon-btn" data-gateday="-1" aria-label="The day before">' + ic('chev-l') + '</button>' +
@@ -1620,8 +1657,8 @@
       return '<div class="chips gate-areas">' + [['', 'All areas']].concat(Object.keys(AREA_SHORT).map(function (a) { return [a, AREA_SHORT[a]]; })).map(function (a) { var n = count(a[0]); return '<button type="button" class="chip' + (GATE.area === a[0] ? ' on' : '') + '" data-gatearea="' + a[0] + '">' + a[1] + ' <span>' + n + '</span></button>'; }).join('') +
         fsel('GATE:stand', GATE.stand, [['', 'All stands']].concat(STANDS.filter(function (x) { return !GATE.area || x.area === GATE.area; }).sort(function (a, b) { return standSort(a.id, b.id); }).map(function (x) { return [x.id, x.name]; }))) + '</div>';
     };
-    if (GATE.tab === 'in' || GATE.tab === 'out') {
-      var kind = GATE.tab, all = gateList(kind, day), list = all.filter(gateHit), shown = list.filter(function (b) { return GATE.show === 'all' || (GATE.show === 'done') === gateDone(b, kind); });
+    if (tab === 'in' || tab === 'out') {
+      var kind = tab, all = gateList(kind, day), list = all.filter(gateHit), shown = list.filter(function (b) { return GATE.show === 'all' || (GATE.show === 'done') === gateDone(b, kind); });
       var cars = function (l, st) { return l.reduce(function (a, b) { return a + ensureCars(b).filter(function (c) { return !st || c.st === st; }).length; }, 0); };
       var todo = all.filter(function (b) { return !gateDone(b, kind); }), owe = all.filter(function (b) { return balance(b) > 0 && b.status !== 'out'; });
       var sheets = paperSheets();
@@ -1635,31 +1672,54 @@
         (shown.length ? '<div class="gate-list">' + shown.map(function (b) { return gateCard(b, kind); }).join('') + '</div>'
           : '<p class="empty gate-empty">' + (!all.length ? 'Nobody ' + (kind === 'in' ? 'arrives' : 'leaves') + ' on ' + fd(day, { weekday: 'long', day: 'numeric', month: 'long' }) + '.' : !list.length ? 'Nobody matches. Clear the search or pick All areas.' : GATE.show === 'todo' ? (kind === 'in' ? 'Everyone has checked in. Well done!' : 'Everyone has checked out.') : 'Nothing here yet.') + '</p>');
     }
-    if (GATE.tab === 'jobs') {
+    if (tab === 'jobs') {
       var rows = siteDay(day).filter(function (r) { return (!GATE.area || r.stand.area === GATE.area) && (!GATE.stand || r.id === GATE.stand); });
-      var mark = function (what, r, done, label, btn) { return '<div class="site-line' + (done ? ' done' : '') + '"><span class="site-tick">' + (done ? ic('check') : '') + '</span><div>' + label + (done ? '<small>Done ' + whenShort(done.at) + ' by ' + esc(done.by) + '</small>' : '') + '</div>' + btn + '</div>'; };
-      var nOpen = 0;
+      // one job: a big tick box, what to do, and a button. Ticking it is written to the work log.
+      var line = function (done, label, act, ref, word, more) {
+        return '<div class="site-line' + (done ? ' done' : '') + '"><button type="button" class="site-tick" data-act="' + act + '" data-ref="' + esc(ref) + '" aria-label="' + (done ? 'Untick: not done yet' : 'Tick: done') + '">' + (done ? ic('check') : '') + '</button><div>' + label +
+          (done ? '<small>Done ' + whenShort(done.at) + ' by ' + esc(done.by) + (done.note ? ': ' + esc(done.note) : '') + '</small>' : '') + '</div>' + (more || '') +
+          '<button type="button" class="btn ' + (done ? 'ghost' : 'green') + ' sm" data-act="' + act + '" data-ref="' + esc(ref) + '">' + (done ? 'Undo' : word) + '</button></div>';
+      };
+      var noteLine = function (n, withStand) {
+        return '<p class="site-note">' + (withStand ? '<b class="site-note-st">' + esc(n.stand === 'camp' ? 'Camp' : standById(n.stand).name) + '</b>' : '') + '<span>' + esc(n.text) + '</span><small>' + esc(n.by) + ' · ' + esc(atNice(n.at)) + '</small>' +
+          (n.by === ME.name || ME.role === 'Owner' || ME.role === 'Manager' ? '<button type="button" class="icon-btn sm" data-act="stand-note-del" data-ref="' + n.id + '" aria-label="Remove this note" title="Remove this note">' + ic('x') + '</button>' : '') + '</p>';
+      };
+      var nOpen = 0, shownIds = {};
       var cardsHtml = rows.map(function (r) {
-        var lines = [];
-        if (r.clean) { var dc = siteDone(day, r.id, 'clean'); if (!dc) nOpen++; lines.push(mark('clean', r, dc, '<b>Clean</b> ' + esc(r.clean), '<button type="button" class="btn ghost sm" data-act="site-done" data-ref="' + day + '|' + r.id + '|clean">' + (dc ? 'Undo' : 'Done') + '</button>')); }
-        if (r.wood) { var dw = siteDone(day, r.id, 'wood'); if (!dw) nOpen++; lines.push(mark('wood', r, dw, '<b>Free wood</b> 1 bag of firewood for tonight', '<button type="button" class="btn ghost sm" data-act="site-done" data-ref="' + day + '|' + r.id + '|wood">' + (dw ? 'Undo' : 'Done') + '</button>')); }
-        r.deliver.forEach(function (x) { if (!x.d.done) nOpen++; lines.push(mark('drop', r, x.d.done, '<b>Deliver</b> ' + esc(itemsTxt(x.d.items)), '<button type="button" class="btn ghost sm" data-act="drop-done" data-ref="' + x.b.ref + '|' + x.d.id + '">' + (x.d.done ? 'Undo' : 'Delivered') + '</button>')); });
-        r.fix.forEach(function (j) { if (!j.done) nOpen++; lines.push(mark('job', r, j.done, '<b>' + (j.kind === 'clean' ? 'Clean' : j.kind === 'other' ? 'Do' : 'Fix') + (j.urgent && !j.done ? ' <span class="pill bad">Urgent</span>' : '') + '</b> ' + esc(j.text) + '<small>Reported ' + atNice(j.at) + ' by ' + esc(j.by) + '</small>', '<button type="button" class="icon-btn sm" data-act="job-edit" data-ref="' + j.id + '" aria-label="Edit" title="Edit">' + ic('edit') + '</button><button type="button" class="btn ghost sm" data-act="job-done" data-ref="' + j.id + '">' + (j.done ? 'Undo' : j.kind === 'repair' ? 'Fixed' : 'Done') + '</button>')); });
-        return { html: '<article class="site-card"><header><span class="gate-st"><b>' + esc(r.stand.name) + '</b><small>' + (AREA_SHORT[r.stand.area] || '') + '</small></span><span class="muted small">' + [r.leave ? 'guests leave today' : '', r.arrive ? 'guests arrive today' : '', r.stay ? 'guests staying' : ''].filter(Boolean).join(' · ') + '</span><button type="button" class="btn ghost sm" data-act="gate-job" data-ref="' + r.id + '|">' + ic('plus') + 'Add a job</button></header>' + lines.join('') + '</article>', open: lines.some(function (l) { return l.indexOf('site-line done') < 0; }) };
+        var lines = [], open = 0;
+        if (r.clean) { var dc = siteDone(day, r.id, 'clean'); if (!dc) open++; lines.push(line(dc, '<b>Clean</b> ' + esc(r.clean), 'site-done', day + '|' + r.id + '|clean', 'Done')); }
+        if (r.wood) { var dw = siteDone(day, r.id, 'wood'); if (!dw) open++; lines.push(line(dw, '<b>Free wood</b> 1 bag of firewood for tonight', 'site-done', day + '|' + r.id + '|wood', 'Done')); }
+        r.deliver.forEach(function (x) { if (!x.d.done) open++; lines.push(line(x.d.done, '<b>Deliver</b> ' + esc(itemsTxt(x.d.items)), 'drop-done', x.b.ref + '|' + x.d.id, 'Delivered')); });
+        r.fix.forEach(function (j) {
+          if (!j.done) open++;
+          lines.push(line(j.done, '<b>' + (j.kind === 'clean' ? 'Clean' : j.kind === 'other' ? 'Do' : 'Fix') + (j.urgent && !j.done ? ' <span class="pill bad">Urgent</span>' : '') + '</b> ' + esc(j.text) + '<small>Reported ' + atNice(j.at) + ' by ' + esc(j.by) + '</small>', 'job-done', j.id, j.kind === 'repair' ? 'Fixed' : 'Done',
+            siteOnly ? '' : '<button type="button" class="icon-btn sm" data-act="job-edit" data-ref="' + j.id + '" aria-label="Edit" title="Edit">' + ic('edit') + '</button>'));
+        });
+        nOpen += open; shownIds[r.id] = 1;
+        var notes = standNotes(r.id);
+        return { open: open > 0, html: '<article class="site-card"><header><span class="gate-st"><b>' + esc(r.stand.name) + '</b><small>' + (AREA_SHORT[r.stand.area] || '') + '</small></span><span class="muted small">' + [r.leave ? 'guests leave today' : '', r.arrive ? 'guests arrive today' : '', r.stay ? 'guests staying' : ''].filter(Boolean).join(' · ') + '</span></header>' + lines.join('') +
+          (notes.length ? '<div class="site-notes"><b>' + ic('note') + 'Notes for this stand</b>' + notes.slice(0, 3).map(function (n) { return noteLine(n); }).join('') + (notes.length > 3 ? '<details><summary>' + (notes.length - 3) + ' older note' + (notes.length - 3 === 1 ? '' : 's') + '</summary>' + notes.slice(3).map(function (n) { return noteLine(n); }).join('') + '</details>' : '') + '</div>' : '') +
+          '<div class="site-acts"><button type="button" class="btn ghost sm" data-act="stand-note" data-ref="' + r.id + '">' + ic('note') + 'Add a note</button><button type="button" class="btn ghost sm" data-act="gate-job" data-ref="' + r.id + '|">' + ic('alert') + 'Report a problem</button></div></article>' };
       }).filter(function (c) { return GATE.jshow === 'all' || c.open; });
       var openJobs = jobsDB().filter(function (j) { return !j.done; });
+      var otherNotes = notesDB().filter(function (n) { return !shownIds[n.stand] || GATE.jshow !== 'all'; }).slice(0, 8);
+      var wl = (DB.siteLog || []).filter(function (l) { return l.at.slice(0, 10) === day; });
       body = '<div class="kpis gate-kpis">' + tile('Stands to look after', rows.length, 'on ' + fd(day, { weekday: 'long', day: 'numeric', month: 'short' })) + tile('Still to do', nOpen, 'cleaning, wood, deliveries, repairs', null, nOpen ? 'warn' : 'ok') + tile('Open repairs', openJobs.filter(function (j) { return j.kind === 'repair'; }).length, openJobs.filter(function (j) { return j.urgent; }).length + ' urgent', null, openJobs.some(function (j) { return j.urgent; }) ? 'bad' : '') + '</div>' +
-        '<div class="filters gate-filters"><div class="rp-tabs gate-show">' + [['open', 'Still to do'], ['all', 'Everything']].map(function (x) { return '<button type="button" class="' + (GATE.jshow === x[0] ? 'on' : '') + '" data-gatejshow="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div><button type="button" class="btn" data-act="gate-job" data-ref="|">' + ic('plus') + 'Report a problem</button></div>' +
+        '<div class="filters gate-filters"><div class="rp-tabs gate-show">' + [['open', 'Still to do'], ['all', 'Everything']].map(function (x) { return '<button type="button" class="' + (GATE.jshow === x[0] ? 'on' : '') + '" data-gatejshow="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div><button type="button" class="btn ghost" data-act="stand-note" data-ref="">' + ic('note') + 'Add a note to a stand</button><button type="button" class="btn" data-act="gate-job" data-ref="|">' + ic('plus') + 'Report a problem</button></div>' +
         areaBar(function (a) { return siteDay(day).filter(function (r) { return !a || r.stand.area === a; }).length; }) +
-        (cardsHtml.length ? '<div class="gate-list">' + cardsHtml.map(function (c) { return c.html; }).join('') + '</div>' : '<p class="empty gate-empty">' + (rows.length ? 'Everything is done for this day.' : 'No stands to look after on this day.') + '</p>') +
-        '<p class="hint">' + ic('info') + ' This list makes itself: a full clean where guests leave, a general clean where they stay, one free bag of wood for every ablution stand, the wood and ice guests asked to have delivered, and every problem that was reported. The printed workers\' sheet never shows names or money.</p>';
+        (cardsHtml.length ? '<div class="gate-list">' + cardsHtml.map(function (c) { return c.html; }).join('') + '</div>' : '<p class="empty gate-empty">' + (rows.length ? 'Everything is done for this day. Well done!' : 'No stands to look after on this day.') + '</p>') +
+        '<div class="cols site-extra"><section class="card"><header class="card-h"><h3>Latest notes from the stands</h3><span class="count">' + notesDB().length + '</span></header>' + (otherNotes.length ? otherNotes.map(function (n) { return noteLine(n, true); }).join('') : '<p class="empty">No notes yet. Use "Add a note" on a stand to leave one for the next person.</p>') + '</section>' +
+        '<section class="card"><header class="card-h"><h3>Work log for ' + fd(day, { weekday: 'long', day: 'numeric', month: 'short' }) + '</h3>' + (siteOnly ? '<span class="count">' + wl.length + '</span>' : '<button type="button" class="btn ghost sm" data-act="site-log-csv">' + ic('download') + 'Export</button>') + '</header>' +
+        (wl.length ? '<ul class="feed site-log">' + wl.slice(0, 40).map(function (l) { return '<li><span><b>' + esc(l.stand === 'camp' ? 'Camp' : standById(l.stand).name) + '</b> ' + esc(l.text) + '</span><small>' + esc(l.by) + ' · ' + esc(l.at.slice(11, 16)) + '</small></li>'; }).join('') + '</ul>' : '<p class="empty">Nothing ticked off yet on this day. Every tick, note and report is written here with the name and the time.</p>') + '</section></div>' +
+        (siteOnly ? '' : '<p class="hint">' + ic('info') + ' This list makes itself: a full clean where guests leave, a general clean where they stay, one free bag of wood for every ablution stand, the wood and ice guests asked to have delivered, and every problem that was reported. Workers sign in with the Worker role and see only this list: never names, phone numbers or money.</p>');
     }
-    if (GATE.tab === 'reports') body = gateReport();
-    var printBtn = GATE.tab === 'reports' ? '<button type="button" class="btn ghost" data-act="gate-csv">' + ic('download') + 'Export</button><button type="button" class="btn" data-act="gate-print" data-ref="report">' + ic('note') + 'Print the report</button>'
-      : '<button type="button" class="btn" data-act="gate-print" data-ref="' + GATE.tab + '">' + ic('note') + (GATE.tab === 'jobs' ? 'Print the workers\' sheet' : GATE.tab === 'in' ? 'Print the check-in sheet' : 'Print the check-out sheet') + '</button>';
+    if (tab === 'reports') body = gateReport();
+    var printBtn = tab === 'reports' ? '<button type="button" class="btn ghost" data-act="gate-csv">' + ic('download') + 'Export</button><button type="button" class="btn" data-act="gate-print" data-ref="report">' + ic('note') + 'Print the report</button>'
+      : '<button type="button" class="btn" data-act="gate-print" data-ref="' + tab + '">' + ic('note') + (tab === 'jobs' ? 'Print the workers\' sheet' : tab === 'in' ? 'Print the check-in sheet' : 'Print the check-out sheet') + '</button>';
+    if (siteOnly) return '<div class="page-h"><div><h1>Site jobs</h1><p class="muted">The jobs at each stand for the day. Tick each one when it is done.</p></div></div>' + dayBar() + body;
     return '<div class="page-h"><div><h1>Check-in sheet</h1><p class="muted">Everyone arriving and leaving, the wood and ice to hand out, and the jobs around camp, for one day at a time.</p></div><div class="ph-act">' + printBtn + '</div></div>' +
-      '<div class="rp-tabs page-tabs gate-tabs">' + tabs.map(function (t) { var n = t[0] === 'in' ? gateList('in', day).filter(function (b) { return !gateDone(b, 'in'); }).length : t[0] === 'out' ? gateList('out', day).filter(function (b) { return !gateDone(b, 'out'); }).length : 0; return '<button class="' + (GATE.tab === t[0] ? 'on' : '') + '" data-gatetab="' + t[0] + '">' + t[1] + (n ? ' <span class="tab-n">' + n + '</span>' : '') + '</button>'; }).join('') + '</div>' +
-      (GATE.tab === 'reports' ? '' : dayBar()) + body;
+      '<div class="rp-tabs page-tabs gate-tabs">' + tabs.map(function (t) { var n = t[0] === 'in' ? gateList('in', day).filter(function (b) { return !gateDone(b, 'in'); }).length : t[0] === 'out' ? gateList('out', day).filter(function (b) { return !gateDone(b, 'out'); }).length : 0; return '<button class="' + (tab === t[0] ? 'on' : '') + '" data-gatetab="' + t[0] + '">' + t[1] + (n ? ' <span class="tab-n">' + n + '</span>' : '') + '</button>'; }).join('') + '</div>' +
+      (tab === 'reports' ? '' : dayBar()) + body;
   }
 
   /* ----- reports: who came and went, by day, time, area and stand ----- */
@@ -2132,6 +2192,7 @@
   }
   function migrate() {
     ensureClients(); DB.settings = DB.settings || {}; gateSeed();
+    Object.keys(DB.staffRoles || {}).forEach(function (id) { var su = STAFF.filter(function (x) { return x.id === id; })[0]; if (su && ROLES[DB.staffRoles[id]]) su.role = DB.staffRoles[id]; });   // roles the Owner changed
     DB.vouchers = [];   // Kyleu discount vouchers were removed; only Dinokeng partner codes are used
     DB.bookings.forEach(ensureCars);
     DB.bookings.forEach(function (b) { if (!b.key) b.key = newKey(); });
@@ -3755,8 +3816,11 @@
   function vSettings() {
     var tabs = [['staff', 'Staff & access'], ['docs', 'Quotes & invoices'], ['payments', 'Payments'], ['camp', 'Check-in & Dinokeng'], ['maps', 'Maps'], ['emails', 'Email templates'], ['sig', 'Email signature'], ['data', 'Data & privacy']];
     var body = '';
-    if (SET === 'staff') body = '<section class="card flush"><table class="tbl"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Last seen</th></tr></thead><tbody>' + STAFF.map(function (s, i) { return '<tr><td data-l="Name"><b>' + s.name + '</b>' + (ME.id === s.id ? ' <span class="tag ok">You</span>' : '') + '</td><td data-l="Email">' + s.email + '</td><td data-l="Role"><select aria-label="Role for ' + s.name + '"' + (ME.role !== 'Owner' ? ' disabled' : '') + '>' + Object.keys(ROLES).map(function (r) { return '<option' + (r === s.role ? ' selected' : '') + '>' + r + '</option>'; }).join('') + '</select></td><td data-l="Last seen">' + (ME.id === s.id ? 'Now' : ['Today 07:12', 'Yesterday', '3 days ago', 'Today 09:40'][i]) + '</td></tr>'; }).join('') + '</tbody></table></section>' +
-      '<section class="card"><header class="card-h"><h3>What each role can see</h3></header><table class="tbl perm"><thead><tr><th>Section</th>' + Object.keys(ROLES).map(function (r) { return '<th>' + r + '</th>'; }).join('') + '</tr></thead><tbody>' + NAV.map(function (n) { return '<tr><td>' + n.t + '</td>' + Object.keys(ROLES).map(function (r) { return '<td>' + (ROLES[r].indexOf(n.id) >= 0 ? ic('check', 'ok-t') : '<span class="muted">No</span>') + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table><button class="btn ghost" data-act="invite">' + ic('plus') + 'Invite a staff member</button></section>';
+    if (SET === 'staff') body = '<section class="card flush"><table class="tbl"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Last seen</th></tr></thead><tbody>' + STAFF.map(function (s, i) { return '<tr><td data-l="Name"><b>' + s.name + '</b>' + (ME.id === s.id ? ' <span class="tag ok">You</span>' : '') + '</td><td data-l="Email">' + s.email + '</td><td data-l="Role"><select data-staff-role="' + s.id + '" aria-label="Role for ' + s.name + '"' + (ME.role !== 'Owner' || ME.id === s.id ? ' disabled' : '') + '>' + Object.keys(ROLES).map(function (r) { return '<option' + (r === s.role ? ' selected' : '') + '>' + r + '</option>'; }).join('') + '</select></td><td data-l="Last seen">' + (ME.id === s.id ? 'Now' : ['Today 07:12', 'Yesterday', '3 days ago', 'Today 09:40', 'Today 06:55', 'Today 07:30', 'Yesterday'][i] || 'Yesterday') + '</td></tr>'; }).join('') + '</tbody></table></section>' +
+      '<section class="card"><header class="card-h"><h3>What each role is for</h3></header><dl class="role-info">' + Object.keys(ROLES).map(function (r) { return '<div><dt>' + r + '</dt><dd>' + ROLE_INFO[r] + '</dd></div>'; }).join('') + '</dl></section>' +
+      '<section class="card"><header class="card-h"><h3>What each role can see</h3></header><table class="tbl perm"><thead><tr><th>Section</th>' + Object.keys(ROLES).map(function (r) { return '<th>' + r + '</th>'; }).join('') + '</tr></thead><tbody>' + [{ t: 'Guest names, phone numbers and bookings', has: function (r) { return ROLES[r].indexOf('cap:guests') >= 0; } }, { t: 'Money: payments, reports and what was received', has: function (r) { return ROLES[r].indexOf('cap:money') >= 0; } }, { t: 'Site jobs: cleaning, deliveries, repairs, stand notes', has: function (r) { return ROLES[r].indexOf('gate') >= 0 || ROLES[r].indexOf('site') >= 0; } }]
+        .concat(NAV.filter(function (n) { return n.id !== 'site'; }).map(function (n) { return { t: n.t, has: function (r) { return ROLES[r].indexOf(n.id) >= 0; } }; }))
+        .map(function (row, ri) { return '<tr' + (ri < 3 ? ' class="perm-key"' : '') + '><td>' + row.t + '</td>' + Object.keys(ROLES).map(function (r) { return '<td>' + (row.has(r) ? ic('check', 'ok-t') : '<span class="muted">No</span>') + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table><button class="btn ghost" data-act="invite">' + ic('plus') + 'Invite a staff member</button></section>';
     if (SET === 'payments') body = '<div class="cols"><section class="card"><header class="card-h"><h3>Card payments</h3><span class="pill warn"><i></i>Not connected</span></header><p class="muted small">Guests pay on a secure page from the card company, so card numbers never touch the Kyleu website. Choose a South African provider:</p><div class="prov">' + ['Yoco', 'PayFast', 'Peach Payments', 'Paystack'].map(function (p) { return '<button class="prov-b" data-act="connect" data-ref="' + p + '"><b>' + p + '</b><small>Connect</small></button>'; }).join('') + '</div>' +
       '<div class="grid2"><label class="fld"><span>Card fee added to card prices</span><input value="' + cardFee() + '%" disabled></label><label class="fld"><span>Provider charges (for reports)</span><input data-provfee value="' + (DB.settings.providerFee || 2.95) + '" inputmode="decimal"></label></div><p class="muted small">Change the card fee on the Rates & fees page.</p></section>' +
       '<section class="card"><header class="card-h"><h3>EFT bank details</h3></header><p class="small">The bank details printed on quotations and invoices are under <button type="button" class="link-btn" data-set="docs">Quotes &amp; invoices</button>.</p></section></div>';
@@ -3992,7 +4056,7 @@
     return { items: list.slice(p * size, p * size + size), bar: pages > 1 ? '<div class="pager"><span>' + (p * size + 1) + ' to ' + Math.min(list.length, p * size + size) + ' of ' + list.length + '</span><button class="icon-btn sm" data-pg="' + key + '|-1"' + (p ? '' : ' disabled') + ' aria-label="Previous page">' + ic('chev-l') + '</button><button class="icon-btn sm" data-pg="' + key + '|1"' + (p < pages - 1 ? '' : ' disabled') + ' aria-label="Next page">' + ic('chev-r') + '</button></div>' : '' };
   }
 
-  var VIEWS = { gate: vGate, webtext: vWeb, dgrnews: vDgr, social: vSocial, dashboard: vDashboard, bookings: vBookings, eft: vEft, calendar: vCalendar, clients: vClients, payments: vPayments, shop: vShop, drives: vDrives, products: vProducts, vouchers: vVouchers, indemnities: vIndemnities, enquiries: vEnquiries, stands: vStands, rates: vRates, reports: vReports, news: vNews, settings: vSettings };
+  var VIEWS = { site: vSite, gate: vGate, webtext: vWeb, dgrnews: vDgr, social: vSocial, dashboard: vDashboard, bookings: vBookings, eft: vEft, calendar: vCalendar, clients: vClients, payments: vPayments, shop: vShop, drives: vDrives, products: vProducts, vouchers: vVouchers, indemnities: vIndemnities, enquiries: vEnquiries, stands: vStands, rates: vRates, reports: vReports, news: vNews, settings: vSettings };
   function route() { var v = (location.hash.match(/^#\/(\w+)/) || [])[1] || 'dashboard'; if (v === 'guests') v = 'clients'; return VIEWS[v] && can(v) ? v : can('dashboard') ? 'dashboard' : ROLES[ME.role][0]; }
 
   /* ---------- shell ---------- */
@@ -4004,9 +4068,9 @@
     app.innerHTML = '<aside class="side"><a class="brand" href="#/dashboard"><img src="../assets/img/logo-small.png" alt=""><span><b>Kyleu</b><small>Staff admin</small></span></a><nav>' +
       NAV.filter(function (n) { return can(n.id); }).map(function (n, i, arr) { return (n.g && (!i || arr[i - 1].g !== n.g) ? '<span class="nav-h">' + n.g + '</span>' : '') + '<a href="#/' + n.id + '" data-nav="' + n.id + '">' + ic(n.i) + '<span>' + n.t + '</span>' + (bd[n.id] ? '<em>' + bd[n.id] + '</em>' : '') + '</a>'; }).join('') +
       '</nav><div class="side-f"><a href="../index.html" target="_blank" rel="noopener">' + ic('ext') + 'View website</a><button data-act="logout">' + ic('out') + 'Sign out</button></div></aside><div class="scrim" data-act="menu"></div>' +
-      '<div class="main"><header class="top"><button class="icon-btn menu-btn" data-act="menu" aria-label="Menu">' + ic('menu') + '</button><label class="search top-search">' + ic('search') + '<input data-global placeholder="Find a booking: name, ref or phone" aria-label="Find a booking" aria-keyshortcuts="/ Control+K"><kbd class="kbd" title="Press / to search">/</kbd><div class="sugg" data-sugg hidden></div></label>' +
+      '<div class="main"><header class="top"><button class="icon-btn menu-btn" data-act="menu" aria-label="Menu">' + ic('menu') + '</button>' + (can('cap:guests') ? '<label class="search top-search">' + ic('search') + '<input data-global placeholder="Find a booking: name, ref or phone" aria-label="Find a booking" aria-keyshortcuts="/ Control+K"><kbd class="kbd" title="Press / to search">/</kbd><div class="sugg" data-sugg hidden></div></label>' : '<span class="top-fill"></span>') +
       '<span class="demo-badge">Demo data</span><div class="me"><span class="avatar">' + ME.name[0] + '</span><span class="me-t"><b>' + ME.name + '</b><small>' + ME.role + '</small></span></div></header><main id="view" tabindex="-1"></main></div>' +
-      '<nav class="bottom">' + (ME.role === 'Gate' ? ['gate', 'shop'] : ['dashboard', 'bookings', 'eft', 'calendar']).filter(can).map(function (id) { var n = NAV.filter(function (x) { return x.id === id; })[0]; return '<a href="#/' + id + '" data-nav="' + id + '">' + ic(n.i) + '<span>' + (id === 'eft' ? 'EFT' : n.t) + '</span>' + (bd[id] ? '<em>' + bd[id] + '</em>' : '') + '</a>'; }).join('') + '<button data-act="menu">' + ic('menu') + '<span>More</span></button></nav>' +
+      '<nav class="bottom">' + (ME.role === 'Gate' ? ['gate', 'shop'] : ME.role === 'Worker' ? ['site'] : ['dashboard', 'bookings', 'eft', 'calendar']).filter(can).map(function (id) { var n = NAV.filter(function (x) { return x.id === id; })[0]; return '<a href="#/' + id + '" data-nav="' + id + '">' + ic(n.i) + '<span>' + (id === 'eft' ? 'EFT' : n.t) + '</span>' + (bd[id] ? '<em>' + bd[id] + '</em>' : '') + '</a>'; }).join('') + '<button data-act="menu">' + ic('menu') + '<span>More</span></button></nav>' +
       '<div id="drawer" hidden></div><div id="modal" hidden></div><div class="toasts" aria-live="polite"></div><div class="tip" hidden></div>';
   }
   function render() {
@@ -4191,9 +4255,33 @@
     if (act === 'gate-job') { var gj = String(ref || '').split('|'); return actJob(gj[0], gj[1]); }
     if (act === 'job-edit') return actJob('', '', ref);
     if (act === 'gate-note') { var gnb = byRef(ref); if (!gnb) return; modal('Note for the gate', '<p class="muted small">' + esc(guestName(gnb)) + ' · ' + esc(standById(gnb.stand).name) + '. Shown on the check-in sheet and printed in the Notes column.</p><label class="fld"><span>Note</span><textarea name="note" rows="3" placeholder="e.g. Extra guests coming on Saturday. 4 wood and 1 sticker already paid.">' + esc(gnb.gateNote || '') + '</textarea></label>', 'Save', function (f) { gnb.gateNote = fval(f, 'note'); log('Gate note ' + (gnb.gateNote ? 'saved' : 'cleared') + ' for ' + guestName(gnb), gnb.ref); save(); render(); toast('Saved'); }); return; }
-    if (act === 'job-done') { var jd = jobsDB().filter(function (x) { return x.id === ref; })[0]; if (!jd) return; jd.done = jd.done ? null : { at: nowStamp(), by: ME.name }; log((jd.done ? 'Site job done: ' : 'Site job reopened: ') + jobStand(jd).name + ', ' + jd.text.slice(0, 60)); save(); render(); toast(jd.done ? 'Marked as done' : 'Back on the list'); return; }
-    if (act === 'site-done') { DB.siteDone = DB.siteDone || {}; if (DB.siteDone[ref]) delete DB.siteDone[ref]; else DB.siteDone[ref] = { at: nowStamp(), by: ME.name }; save(); render(); return; }
-    if (act === 'drop-done') { var dp = String(ref).split('|'), db2 = byRef(dp[0]), dd = db2 && drops(db2).filter(function (x) { return x.id === dp[1]; })[0]; if (!dd) return; dd.done = dd.done ? null : { at: nowStamp(), by: ME.name }; if (dd.done) log('Delivered to ' + standById(db2.stand).name + ': ' + itemsTxt(dd.items), db2.ref); save(); render(); toast(dd.done ? 'Marked as delivered' : 'Back on the list'); return; }
+    if (act === 'job-done') {
+      var jd = jobsDB().filter(function (x) { return x.id === ref; })[0]; if (!jd) return;
+      if (jd.done) { jd.done = null; siteLog(jd.stand, 'Reopened: ' + jd.text.slice(0, 120)); save(); render(); toast('Back on the list'); return; }
+      modal(jd.kind === 'repair' ? 'Mark as fixed' : 'Mark as done', '<p><b>' + esc(jobStand(jd).name) + ':</b> ' + esc(jd.text) + '</p><label class="fld"><span>What did you do? (optional, but it helps the next person)</span><textarea name="note" rows="2" placeholder="e.g. Replaced the float valve in the cistern."></textarea></label>',
+        jd.kind === 'repair' ? 'Yes, it is fixed' : 'Yes, it is done', function (f) {
+          var nt = fval(f, 'note'); jd.done = { at: nowStamp(), by: ME.name, note: nt };
+          siteLog(jd.stand, (jd.kind === 'repair' ? 'Fixed: ' : 'Done: ') + jd.text.slice(0, 100) + (nt ? ' (' + nt.slice(0, 100) + ')' : '')); save(); render(); toast('Marked as done');
+        }, { noFocus: true });
+      return;
+    }
+    if (act === 'site-done') {
+      DB.siteDone = DB.siteDone || {}; var sdp = String(ref).split('|'), sdw = sdp[2] === 'wood' ? 'Free bag of wood delivered' : 'Stand cleaned', sdd = sdp[0] === TODAY ? '' : ' (for ' + fdw(sdp[0]) + ')';
+      if (DB.siteDone[ref]) { delete DB.siteDone[ref]; siteLog(sdp[1], 'Unticked: ' + sdw.toLowerCase() + sdd); } else { DB.siteDone[ref] = { at: nowStamp(), by: ME.name }; siteLog(sdp[1], sdw + sdd); }
+      save(); render(); return;
+    }
+    if (act === 'drop-done') {
+      var dp = String(ref).split('|'), db2 = byRef(dp[0]), dd = db2 && drops(db2).filter(function (x) { return x.id === dp[1]; })[0]; if (!dd) return;
+      dd.done = dd.done ? null : { at: nowStamp(), by: ME.name };
+      siteLog(db2.stand, (dd.done ? 'Delivered: ' : 'Unticked delivery: ') + itemsTxt(dd.items)); save(); render(); toast(dd.done ? 'Marked as delivered' : 'Back on the list'); return;
+    }
+    if (act === 'stand-note') return actStandNote(ref || '');
+    if (act === 'stand-note-del') {
+      var sn = notesDB().filter(function (x) { return x.id === ref; })[0]; if (!sn) return;
+      if (sn.by !== ME.name && ME.role !== 'Owner' && ME.role !== 'Manager') { toast('Only the person who wrote it, or a manager, can remove a note'); return; }
+      notesDB().splice(notesDB().indexOf(sn), 1); siteLog(sn.stand, 'Note removed: ' + sn.text.slice(0, 80)); save(); render(); toast('Note removed'); return;
+    }
+    if (act === 'site-log-csv') { csv('kyleu-site-work-log.csv', [['Date', 'Time', 'Who', 'Role', 'Stand', 'What']].concat((DB.siteLog || []).map(function (l) { return [l.at.slice(0, 10), l.at.slice(11, 16), l.by, l.role || '', l.stand === 'camp' ? 'Camp' : standById(l.stand).name, l.text]; }))); return; }
     if (act === 'gate-print') return gatePrint(ref);
     if (act === 'gate-csv') return gateCsv();
     if (act === 'gate-paper') { var gpp = String(ref).split('|'); return actPaper(gpp[0], gpp[1]); }
@@ -4285,6 +4373,13 @@
   }
   function onChange(e) {
     var wt = e.target;
+    // the Owner changes what someone may see by changing their role
+    if (wt.matches && wt.matches('[data-staff-role]')) {
+      var su = STAFF.filter(function (x) { return x.id === wt.dataset.staffRole; })[0];
+      if (!su || ME.role !== 'Owner' || su.id === ME.id || !ROLES[wt.value]) { render(); return; }
+      var was = su.role; su.role = wt.value; DB.staffRoles = DB.staffRoles || {}; DB.staffRoles[su.id] = wt.value;
+      log('Role of ' + su.name + ' changed from ' + was + ' to ' + wt.value); save(); render(); toast(esc(su.name) + ' is now ' + esc(wt.value) + '. It applies the next time they sign in.'); return;
+    }
     if (wt.matches && wt.matches('[data-wt]')) {
       var wx = webFind(wt.dataset.wt), ww = webDB(), wv = wt.value.replace(/\r/g, '').trim(); if (!wx) return;
       if (!wv || wv === wx.def) { if (ww.text[wx.key] == null) { wt.value = wx.def; return; } delete ww.text[wx.key]; log('Website wording put back to the original: "' + wx.def.slice(0, 60) + '"'); }

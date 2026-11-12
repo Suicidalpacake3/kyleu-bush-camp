@@ -1648,3 +1648,31 @@ html:has(body.lock) { overflow: hidden; }
 .gate-order.note { background: #fff3b8; }
 @media (max-width: 760px) { .page-h:has(+ .gate-tabs) p.muted { display: none; } .gate-kpis .kpi-s { display: none; } }
 
+/* ---------- site jobs for workers: big ticks, stand notes, work log; roles ---------- */
+.top-fill { flex: 1; }
+button.site-tick { cursor: pointer; background: #fff; padding: 0; width: 34px; height: 34px; border-radius: 9px; color: #fff; transition: background .15s, border-color .15s; }
+button.site-tick:hover { border-color: var(--ok); background: var(--ok-bg); }
+button.site-tick:focus-visible { outline: 3px solid #f4b740; outline-offset: 2px; }
+.site-line { align-items: center; }
+.site-line .btn.green { min-height: 40px; padding-inline: 16px; }
+.site-notes { margin-top: 10px; padding: 10px 12px; background: #fff8d9; border-radius: 12px; }
+.site-notes > b { display: flex; gap: 6px; align-items: center; font-size: .82rem; margin-bottom: 4px; }
+.site-notes details { margin-top: 6px; } .site-notes summary { cursor: pointer; font-size: .82rem; font-weight: 700; color: var(--muted); }
+.site-note { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; margin: 0; padding: 6px 0; border-top: 1px dashed rgba(42, 27, 18, .14); }
+.site-notes > .site-note:first-of-type { border-top: 0; }
+.site-note span { flex: 1 1 60%; min-width: 0; }
+.site-note small { color: var(--muted); font-size: .78rem; white-space: nowrap; }
+.site-note .icon-btn { align-self: center; }
+.site-note-st { background: var(--ink); color: #fff; border-radius: 7px; padding: 1px 8px; font-size: .78rem; }
+.site-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.site-extra { margin-top: 18px; }
+.site-extra .site-note { padding: 8px 2px; }
+.site-log li span b { margin-right: 4px; }
+.role-info { margin: 0; display: grid; gap: 10px; }
+.role-info > div { display: grid; grid-template-columns: 110px 1fr; gap: 10px; }
+.role-info dt { font-weight: 800; } .role-info dd { margin: 0; color: var(--ink-2); }
+.perm-key td { background: #fff8ef; font-weight: 700; }
+@media (max-width: 760px) { .site-acts .btn { flex: 1; justify-content: center; } .site-line { flex-wrap: wrap; } .site-line > div { flex: 1 1 60%; } .role-info > div { grid-template-columns: 1fr; gap: 2px; } }
+
+.site-line.done small { display: inline-block; width: 100%; text-decoration: none; }
+@media (max-width: 760px) { .site-card > header .muted { order: 2; } }
