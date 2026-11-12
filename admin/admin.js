@@ -1096,7 +1096,7 @@
           : 'We have given you a credit of ' + money(c.amt) + ' for your next stay at Kyleu.') + '\n\n' +
         'Your credit code: ' + c.code + '\n' +
         'Credit: ' + money(c.amt) + (c.used ? ' (' + money(creditRest(c)) + ' still to use)' : '') + '\n' +
-        'Use by: ' + (c.until ? fd(c.until, { day: 'numeric', month: 'long', year: 'numeric' }) : 'no end date') + '\n\n' +
+        (c.until ? 'Use by: ' + fd(c.until, { day: 'numeric', month: 'long', year: 'numeric' }) : 'Your credit does not run out: use it whenever it suits you.') + '\n\n' +
         'Book your next stay on our website and type this code under \'Have a credit?\' when you check your booking, or open this link:\n' + creditLink(c) + '\n\n' +
         'You can also tell us the code when you book by WhatsApp or phone.\n\n' +
         'The credit must be used with the same email address as ' + (c.from ? 'the cancelled booking' : 'this email') + ': ' + c.email + '\n\n' +
