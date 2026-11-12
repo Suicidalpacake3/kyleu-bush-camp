@@ -327,7 +327,7 @@
     // 20. cancelled late: the deposit kept as credit for another stay
     bk({ first: 'Megan', last: 'Smit', ci: d(7), co: d(9), method: 'eft', pay: 'deposit', area: 'fenced', status: 'cancelled', created: d(-35),
       notes: [[d(-10), 'Sherri', 'Cancelled 17 days before arrival because of a family emergency. Kept the deposit as credit for a stay in the next 12 months.']],
-      then: function (b) { db.credits.push({ id: 'c-smit', email: b.guest.email, name: guestName(b), amt: paid(b), used: 0, from: b.ref, d: d(-10) }); } });
+      then: function (b) { db.credits.push(creditFix({ id: 'c-smit', email: b.guest.email, name: guestName(b), amt: paid(b), used: 0, from: b.ref, d: d(-10), until: d(355) }, db.credits)); } });
     // 21. two more adults added after paying in full: money outstanding again
     bk({ first: 'Pieter', last: 'Swart', ci: d(9), co: d(11), adults: 4, priced: { adults: 2, pens: 0, kids: 0 }, method: 'eft', pay: 'full', area: 'unfenced',
       then: function (b) { var q = quote(b.stand, b.ci, b.co, b, b.extras), add2 = q.eft - b.eft; b.eft = q.eft; b.card = q.card; b.total = b.eft;
@@ -479,7 +479,7 @@
     ];
     if (mailB) db.threads.push(T('t3', 'Proof of payment ' + mailB.ref, guestName(mailB), mailB.guest.email, mailB.guest.phone, 'open', true, [G(TODAY + ' 06:58', 'Good morning,\n\nPlease find attached proof of payment for booking ' + mailB.ref + '.\n\nRegards,\n' + mailB.guest.first, [{ name: 'FNB-proof-of-payment-' + mailB.ref.replace(/\s/g, '') + '.pdf', size: 86214, type: 'application/pdf' }])], mailB.ref));
     var cx = db.bookings.filter(function (b) { return b.status === 'cancelled'; })[0];
-    if (cx) db.credits.push({ id: 'c1', email: (cx.guest.email || '').toLowerCase(), name: guestName(cx), amt: 650, used: 0, from: cx.ref, d: add(TODAY, -12) });
+    if (cx) db.credits.push(creditFix({ id: 'c1', email: (cx.guest.email || '').toLowerCase(), name: guestName(cx), amt: 650, used: 0, from: cx.ref, d: add(TODAY, -12) }, db.credits));
     // most guests who paid in full finalised online: number plates, who is in which car, arrival time.
     // Dinokeng codes: sent for everyone arriving in the next 3 days, and for most finalised bookings after that.
     var LT = 'BCDFGHJKLMNPRSTVWXYZ', regOf = function () { var l = function () { return LT[Math.floor(r() * LT.length)]; }; return l() + l() + ' ' + (10 + Math.floor(r() * 89)) + ' ' + l() + l() + ' GP'; };
@@ -677,10 +677,22 @@
     list.forEach(function (w) {
       if (!w || !w.ref || !w.stand || !w.ci || !w.co || byRef(w.ref)) return;
       if (!w.created) w.created = nowStamp();
-      var card = w.pay === 'deposit' || w.pay === 'full', nowPaid = w.paid || 0;
+      var card = w.pay === 'deposit' || w.pay === 'full', nowPaid = +w.paid || 0, day = w.created.slice(0, 10);
+      // a credit from a cancelled booking, typed on the website: "paid" includes it
+      var wc = w.credit && +w.credit.amt > 0 ? w.credit : null, want = wc ? Math.min(+wc.amt, nowPaid) : 0, took = 0, cr = wc ? creditById(wc.id) || creditByCode(wc.code) : null;
       var b = { ref: w.ref, created: w.created, source: 'Website', guest: { first: w.first, last: w.last, email: w.email, phone: w.phone, consent: !!w.consent }, stand: w.stand, ci: w.ci, co: w.co, adults: w.adults, pens: w.pens, kids: w.kids, vehicles: Math.max(1, +w.vehicles || 1), vehTbc: !!w.vehTbc, eta: w.eta || '', key: w.key || newKey(), setup: w.setup || '', extras: w.extras || {},
-        method: card ? 'card' : 'eft', eft: w.eft, card: w.card, total: card ? w.card : w.eft, payments: [], status: nowPaid ? 'confirmed' : 'pending', notes: w.notes ? [{ at: w.created, by: 'Guest', text: w.notes }] : [], pop: false, isNew: true };
-      if (nowPaid) b.payments.push({ d: w.created.slice(0, 10), amt: nowPaid, m: card ? 'card' : 'eft', type: w.pay === 'full' ? 'Full payment' : 'Deposit', ref: card ? 'Card (website)' : 'Instant EFT' });
+        method: card ? 'card' : 'eft', eft: w.eft, card: w.card, total: card ? w.card : w.eft, payments: [], status: 'pending', notes: w.notes ? [{ at: w.created, by: 'Guest', text: w.notes }] : [], pop: false, isNew: true };
+      if (wc) {
+        // the credit part is its own payment line (never new income: that money came in on the cancelled booking)
+        var crWhy = !cr ? 'that credit was not found' : cr.void ? 'that credit was cancelled' : cr.until && cr.until < day ? 'it could only be used until ' + fdy(cr.until) : '';
+        if (cr && !crWhy) took = creditPay(b, cr, want, day);
+        if (took) b.notes.push({ at: w.created, by: 'System', text: 'Paid ' + money(took) + ' with credit ' + cr.code + (cr.from ? ' from booking ' + cr.from : '') + '.' });
+        if (took < want) b.notes.push({ at: w.created, by: 'System', text: 'The guest used credit ' + (cr ? cr.code : String(wc.code || '')) + ' for ' + money(want) + ' on the website, but ' + (crWhy ? crWhy + ', so nothing was taken' : 'only ' + money(took) + ' was left') + '. ' + money(want - took) + ' is still owing.' });
+      }
+      if (nowPaid - want > 0) b.payments.push({ d: day, amt: nowPaid - want, m: card ? 'card' : 'eft', type: w.pay === 'full' ? 'Full payment' : 'Deposit', ref: card ? 'Card (website)' : 'Instant EFT' });
+      // confirmed only when what is paid covers the first payment that was due (a credit can be smaller than the deposit)
+      var due1 = w.invoice && w.invoice.payFull ? b.total : w.invoice && +w.invoice.deposit > 0 ? +w.invoice.deposit : Math.round(b.total * .5);
+      if (paid(b) > 0 && paid(b) >= due1) b.status = 'confirmed';
       linkBooking(b);
       if (w.cars && w.cars.length) b.cars = w.cars.map(function (c, i) { var dr = c.driver || (i ? '' : w.first + ' ' + w.last), gs = (c.guests || []).slice(); return newCar({ reg: String(c.reg || '').toUpperCase(), driver: dr, phone: i ? '' : w.phone, guests: gs, minors: minorsOf(c.minors, gs), people: (dr ? 1 : 0) + gs.length }); });
       if (w.overCap) setSizeCheck(b, w.overCap, w.created);   // more people than the stand usually takes: Kyleu's call
@@ -690,6 +702,7 @@
       ensureCars(b); DB.bookings.push(b); added++;
       if (w.invoice) { b.invoices = [Object.assign(JSON.parse(JSON.stringify(w.invoice)), { by: 'Website', sent: { at: w.created, via: 'Email (automatic)', to: w.email } })]; autoMail(b, w.invoice, w.created, 'Your Kyleu reservation ' + b.ref + ' (' + docTag(w.invoice, b.ref) + ')', invMailBody(b, w.invoice)); }
       DB.log.unshift({ at: w.created, by: 'Website', text: 'New website booking ' + b.ref + ' for ' + guestName(b), ref: b.ref });
+      if (took) DB.log.unshift({ at: w.created, by: 'Website', text: money(took) + ' of credit ' + cr.code + ' used on ' + b.ref, ref: b.ref });
     });
     if (added) { DB.bookings.sort(function (a, b) { return a.ci < b.ci ? -1 : 1; }); save(); }
     return added;
@@ -851,7 +864,8 @@
       (b.paidClaim ? '<div class="callout info cflex claim">' + ic('bank') + '<div><b>' + esc(b.guest.first) + ' says they paid ' + money(b.paidClaim.amt) + '</b> (' + esc(String(b.paidClaim.what || 'payment').toLowerCase()) + ') on ' + fd(b.paidClaim.date) + (b.paidClaim.note ? ': "' + esc(b.paidClaim.note) + '"' : '') + '.' + ((b.paidClaim.parts || []).length > 1 ? ' That is ' + b.paidClaim.parts.length + ' payments added together: ' + b.paidClaim.parts.map(function (x) { return money(x.amt) + ' on ' + fd(x.date); }).join(', ') + '.' : '') + ' Check the bank, then confirm it.<div class="row-btns"><button type="button" class="btn sm" data-act="pay" data-ref="' + b.ref + '">' + ic('check') + 'Confirm payment</button><button type="button" class="btn ghost sm" data-act="claim-no" data-ref="' + b.ref + '">Not in the bank yet</button></div></div></div>' : '') +
       (extraDue(b) ? '<div class="callout bad cflex">' + ic('alert') + '<div><b>' + money(bal) + ' outstanding.</b> ' + esc(b.extraDue.why || 'The total went up after paying in full') + ' (' + esc(atNice(b.extraDue.at)) + '). Send ' + esc(b.guest.first) + ' the new invoice for just this amount.<div class="row-btns"><button type="button" class="btn sm" data-act="send-doc" data-ref="' + b.ref + '|extra">' + ic('send') + 'Send new invoice</button></div></div></div>' : '') +
       (b.guestEdit && b.guestEdit.at >= add(TODAY, -14) ? '<p class="callout info cflex">' + ic('edit') + '<span><b>Changed by ' + esc(b.guest.first) + ' on the website</b> ' + esc(atNice(b.guestEdit.at)) + ': ' + esc(b.guestEdit.what.join('; ')) + '.</span></p>' : '') +
-      (b.released ? '<p class="callout cflex">' + ic('info') + '<span><b>Released automatically</b> on ' + esc(atNice(b.released.at)) + ': the quotation (valid until ' + fd(b.released.due) + ') was not paid.</span></p>' : '');
+      (b.released ? '<p class="callout cflex">' + ic('info') + '<span><b>Released automatically</b> on ' + esc(atNice(b.released.at)) + ': the quotation (valid until ' + fd(b.released.due) + ') was not paid.</span></p>' : '') +
+      creditFromHTML(b);
     var body = '';
     if (PTAB === 'overview') {
       var cl = clientById(b.cid);
@@ -880,7 +894,8 @@
         '<div class="ln tot"><span>Total' + (sameCard ? '' : ' · paying by ' + methodLabel(b.method)) + '</span><span>' + money(b.total) + '</span></div>' +
         '<div class="ln"><span>Paid</span><span class="ok-t">' + money(pd) + '</span></div>' +
         (cancelled ? '' : '<div class="ln tot"><span>Still to pay</span><span class="' + (bal ? 'warn-t' : 'ok-t') + '">' + money(bal) + '</span></div>') + '</div>' +
-        (pd > b.total && b.total > 0 ? '<p class="note bad-t">' + ic('alert') + '<span><b>' + money(pd - b.total) + ' more was paid than the total.</b> Keep it as credit or refund it, or remove a payment that was entered by mistake.</span></p>' : '') + '</section>' +
+        (pd > b.total && b.total > 0 ? '<p class="note bad-t">' + ic('alert') + '<span><b>' + money(pd - b.total) + ' more was paid than the total.</b> Keep it as credit or refund it, or remove a payment that was entered by mistake.</span></p>' : '') +
+        (!cancelled && creditLeft(b.guest.email) ? '<p class="note cr">' + ic('gift') + '<span>' + esc(b.guest.first) + ' has credit to use: ' + creditList(b.guest.email) + '.</span></p>' : '') + '</section>' +
         '<section class="d-sec"><h4>Payments</h4>' + ((b.pops || []).length ? '<h5>Proof of payment</h5>' + popChips(b) : '') +
         ((b.payments || []).length ? '<ul class="timeline">' + b.payments.map(function (p, i) { return '<li><span class="dot ' + (p.amt < 0 ? 'bad' : 'pm-' + p.m) + '"></span><div><b>' + money(p.amt) + '</b> ' + esc(p.type) + ' · ' + methodLabel(p.m) + '<div class="muted small">' + fd(p.d, { day: 'numeric', month: 'short', year: 'numeric' }) + (p.ref ? ' · ' + esc(p.ref) : '') + '</div></div>' + (can('payments') && b.status !== 'cancelled' ? '<button type="button" class="icon-btn sm" data-act="pay-del" data-ref="' + b.ref + '|' + i + '" aria-label="Remove this payment" title="Remove this payment (entered by mistake)">' + ic('x') + '</button>' : '') + '</li>'; }).join('') + '</ul>' : '<p class="muted small">No payments yet.</p>') + '</section>' +
         invSec(b);
@@ -919,7 +934,7 @@
   }
   function actPay(ref) {
     var b = byRef(ref), bal = balance(b), isPend = b.status === 'pending';
-    var cl = b.paidClaim, dueNow = cl ? cl.amt : isPend ? deposit(b) : bal;
+    var cl = b.paidClaim, dueNow = cl ? cl.amt : isPend ? Math.max(0, deposit(b) - paid(b)) || bal : bal;   // part of the deposit can already be paid with a credit
     var cardBal = isPend ? Math.round(b.card * depPct() / 100) : Math.max(0, b.card - paid(b));
     modal(isPend ? 'EFT payment received' : 'Record a payment',
       '<p class="muted small">' + esc(guestName(b)) + ' · ' + esc(b.ref) + ' · ' + esc(standById(b.stand).name) + '</p>' +
@@ -982,25 +997,213 @@
   }
   function actRemind(ref) { var b = byRef(ref); sendTemplate(b, defaultTemplate(b)); }
   function actCancel(ref) {
-    var b = byRef(ref), pd = paid(b);
+    var b = byRef(ref), pd = paid(b), mayRefund = pd > 0 && can('payments'), first = b.guest.first;
     modal('Cancel ' + esc(b.ref) + '?', '<p>' + esc(guestName(b)) + ' · ' + esc(standById(b.stand).name) + ' · arriving ' + fdw(b.ci) + ' (' + rel(b.ci) + ').</p>' +
       '<div class="callout"><b>Cancellation policy</b><br>No refunds. What the guest has paid is kept as a credit to use on another date that suits Kyleu and the guest. Offer to move the booking first.</div>' +
-      '<div class="lines"><div class="ln"><span>Paid so far</span><span>' + money(pd) + '</span></div><div class="ln tot"><span>Credit for ' + esc(b.guest.first) + '</span><span data-credit-amt>' + money(pd) + '</span></div></div>' +
-      (pd > 0 && can('payments') ? '<label class="check"><input type="checkbox" name="refund"><span>Refund the money instead (a management decision)</span></label>' : pd > 0 ? '<p class="muted small">' + ic('info') + ' A refund instead of credit is a management decision: ask an owner or manager.</p>' : '') +
+      (pd > 0 ? '<div class="lines"><div class="ln tot"><span>Paid so far</span><span>' + money(pd) + '</span></div></div>' +
+        '<span class="fld-l">What happens to the money?</span><div class="cr-opts">' +
+        '<label class="cr-opt"><input type="radio" name="what" value="credit" checked><span><b>Keep it as a credit for another stay</b><small>' + esc(first) + ' gets a credit code to use on the website, or to give you when booking by WhatsApp or phone.</small></span></label>' +
+        '<div class="cr-sub" data-credit-flds><div class="grid2"><label class="fld"><span>Credit amount (R)</span><input name="camt" inputmode="decimal" value="' + pd + '"></label><label class="fld"><span>Use by (empty = no end date)</span><input type="date" name="until" min="' + TODAY + '"></label></div>' +
+        '<p class="hint" data-credit-hint></p>' + (b.guest.email ? '' : '<p class="muted small">' + ic('info') + ' There is no email address on this booking, so the code cannot be emailed. Give it to ' + esc(first) + ' by WhatsApp or phone.</p>') + '</div>' +
+        (mayRefund ? '<label class="cr-opt"><input type="radio" name="what" value="refund"><span><b>Refund the money instead (a management decision)</b><small>No credit is given. A refund of ' + money(pd) + ' is recorded on the booking.</small></span></label>' : '') + '</div>' +
+        (mayRefund ? '' : '<p class="muted small">' + ic('info') + ' A refund instead of credit is a management decision: ask an owner or manager.</p>') : '') +
       '<label class="fld"><span>Reason</span><input name="why" placeholder="e.g. Guest emailed, family emergency"></label>',
       'Cancel booking', function (f) {
-        var refund = pd > 0 && fval(f, 'refund');
+        var pick = $('[name=what]:checked', f), refund = mayRefund && !!pick && pick.value === 'refund', camt = 0, until = '', cr = null;
+        if (pd > 0 && !refund) {
+          camt = randOf(fval(f, 'camt')); until = fval(f, 'until');
+          if (isNaN(camt)) { toast('Enter the credit amount (0 for no credit)'); return false; }
+          if (camt > pd) { toast('The credit cannot be more than the ' + money(pd) + ' that was paid'); return false; }
+          if (until && until < TODAY) { toast('The use by date cannot be in the past'); return false; }
+        }
         b.status = 'cancelled'; b.pop = false;
         if (b.cancelReq && !b.cancelReq.done) b.cancelReq.done = { at: nowStamp(), by: ME.name };   // the guest's cancellation request is dealt with
-        if (pd > 0 && refund) b.payments.push({ d: TODAY, amt: -pd, m: b.payments.length ? b.payments[0].m : 'eft', type: 'Refund', ref: 'Refund ' + b.ref });
-        else if (pd > 0) DB.credits.push({ id: uid('c'), email: (b.guest.email || '').toLowerCase(), name: guestName(b), amt: pd, used: 0, from: b.ref, d: TODAY });
-        b.notes.push({ at: nowStamp(), by: ME.name, text: 'Cancelled. ' + (fval(f, 'why') || '') + (pd > 0 ? (refund ? ' Refunded ' + money(pd) + '.' : ' ' + money(pd) + ' kept as credit for another stay.') : '') });
-        log('Booking ' + b.ref + ' cancelled', b.ref); save(); refresh();
-        toast('Booking cancelled. ' + (pd > 0 && !refund ? money(pd) + ' kept as credit for ' + esc(b.guest.first) + '.' : 'The stand is free again.'));
-      }, { danger: true, cancelLabel: 'Keep the booking', onOpen: function (f) { var c = f.elements.refund; if (c) c.addEventListener('change', function () { $('[data-credit-amt]', f).textContent = c.checked ? money(0) : money(pd); }); } });
+        if (refund) b.payments.push({ d: TODAY, amt: -pd, m: (b.payments.filter(function (p) { return p.m !== 'credit'; })[0] || { m: 'eft' }).m, type: 'Refund', ref: 'Refund ' + b.ref });
+        else if (camt > 0) { cr = creditFix({ id: uid('c'), code: creditCode(), email: b.guest.email, name: guestName(b), amt: camt, used: 0, from: b.ref, d: TODAY, until: until, note: '' }); DB.credits.push(cr); }
+        var mailed = cr ? creditMail(cr) : false;
+        b.notes.push({ at: nowStamp(), by: ME.name, text: 'Cancelled. ' + (fval(f, 'why') || '') + (pd > 0 ? (refund ? ' Refunded ' + money(pd) + '.'
+          : cr ? ' ' + money(camt) + ' kept as credit' + (camt < pd ? ', ' + money(pd - camt) + ' not credited' : '') + ' for another stay. Credit code ' + cr.code + ', ' + (until ? 'use by ' + fdy(until) : 'no end date') + '.' + (mailed ? ' The code was emailed to ' + cr.email + '.' : ' No email address, so the code was not emailed.')
+          : ' ' + money(pd) + ' not credited.') : '') });
+        log('Booking ' + b.ref + ' cancelled' + (cr ? ': ' + money(camt) + ' kept as credit ' + cr.code + (camt < pd ? ', ' + money(pd - camt) + ' not credited' : '') : refund ? ': ' + money(pd) + ' refunded' : pd > 0 ? ': ' + money(pd) + ' not credited' : ''), b.ref); save(); refresh();
+        toast('Booking cancelled. ' + (cr ? money(camt) + ' kept as credit for ' + esc(first) + ', code <b>' + esc(cr.code) + '</b>' + (until ? ', use by ' + fdy(until) : '') + '.' + (mailed ? ' The code was emailed.' : '') : refund ? money(pd) + ' refunded. The stand is free again.' : 'The stand is free again.'));
+      }, { danger: true, cancelLabel: 'Keep the booking', onOpen: function (f) {
+        if (pd <= 0) return;
+        var upd = function () {
+          var pick = $('[name=what]:checked', f), refund = !!pick && pick.value === 'refund', a = randOf(fval(f, 'camt'));
+          $('[data-credit-flds]', f).hidden = refund;
+          $('[data-credit-hint]', f).innerHTML = refund || isNaN(a) ? '' : a > pd ? '<span class="bad-t">The credit cannot be more than the ' + money(pd) + ' that was paid.</span>'
+            : a < pd ? '<b>' + money(pd - a) + '</b> is not credited: ' + esc(first) + ' gets ' + (a > 0 ? 'a credit of <b>' + money(a) + '</b>.' : 'no credit.') : esc(first) + ' gets the full <b>' + money(pd) + '</b> as a credit.';
+        };
+        $$('input', f).forEach(function (x) { x.addEventListener('input', upd); x.addEventListener('change', upd); }); upd();
+      } });
   }
-  function creditsFor(email) { email = (email || '').toLowerCase(); return email ? DB.credits.filter(function (c) { return c.email === email && c.amt - c.used > 0; }) : []; }
+
+  /* ---------- credits: money kept from a cancelled booking (no refunds), used on the guest's next stay ----------
+     DB.credits[i] = { id, code, email, name, amt, used, from, d, until, note, void }. The website reads the same list:
+     the guest types the code under "Have a credit?" (or opens stay.html?credit=CODE), with the email it was given to. */
+  function randOf(v) { var n = parseFloat(String(v).replace(/[^\d.]/g, '')); return isNaN(n) ? NaN : Math.round(n * 100) / 100; }
+  function fdy(s) { return fd(s, { day: 'numeric', month: 'short', year: 'numeric' }); }
+  // the code a guest types: "KC-" and 6 characters (no 0, O, 1, I or L: they look alike). With a seed it is the same every time (demo data).
+  function creditCode(seed, list) {
+    var abc = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789', s = String(seed || ''), h = 7, i, r, code;
+    list = list || (DB && DB.credits) || [];
+    for (i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+    r = s ? rng(h) : Math.random;
+    do { code = 'KC-'; for (i = 0; i < 6; i++) code += abc.charAt(Math.floor(r() * abc.length)); } while (list.some(function (c) { return c.code === code; }));
+    return code;
+  }
+  // every credit has all its fields (older ones had no code, end date or note)
+  function creditFix(c, list) { c.email = normEmail(c.email); if (!c.code) c.code = creditCode(c.id, list); c.amt = +c.amt || 0; c.used = +c.used || 0; c.from = c.from || ''; c.until = c.until || ''; c.note = c.note || ''; return c; }
+  function creditById(id) { return id ? DB.credits.filter(function (c) { return c.id === id; })[0] : null; }
+  function creditByCode(code) { var k = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); return k ? DB.credits.filter(function (c) { return String(c.code || '').replace(/[^A-Z0-9]/g, '') === k; })[0] : null; }
+  function creditRest(c) { return Math.max(0, (c.amt || 0) - (c.used || 0)); }
+  // usable: not cancelled by staff, something left, and not past its last day
+  function creditOk(c) { return !c.void && c.amt - c.used > 0 && (!c.until || c.until >= TODAY); }
+  function creditState(c) { return c.void ? { k: 'void', t: 'Cancelled', tone: 'muted' } : c.amt - c.used <= 0 ? { k: 'used', t: 'Used up', tone: 'muted' } : c.until && c.until < TODAY ? { k: 'expired', t: 'Expired', tone: 'bad' } : { k: 'open', t: 'Open', tone: 'ok' }; }
+  // a guest's usable credits, the one that runs out first on top (it is used first)
+  function creditsFor(email) { email = normEmail(email); return email ? DB.credits.filter(function (c) { return c.email === email && creditOk(c); }).sort(function (a, b) { return (a.until || '9') < (b.until || '9') ? -1 : (a.until || '9') > (b.until || '9') ? 1 : 0; }) : []; }
   function creditLeft(email) { return creditsFor(email).reduce(function (a, c) { return a + c.amt - c.used; }, 0); }
+  // pay (part of) a booking with a credit: its own payment line, never new income in the reports (that money came in on the cancelled booking)
+  function creditPay(b, c, amt, day) {
+    var take = Math.min(amt, creditRest(c)); if (!(take > 0)) return 0;
+    c.used += take;
+    b.payments.push({ d: day || TODAY, amt: take, m: 'credit', type: 'Credit', ref: 'Credit ' + c.code + (c.from ? ' from ' + c.from : ''), credit: c.id });
+    return take;
+  }
+  // the bookings a credit was used on
+  function creditUses(c) { var out = []; DB.bookings.forEach(function (b) { (b.payments || []).forEach(function (p) { if (p.m === 'credit' && (p.credit === c.id || String(p.ref || '').indexOf('Credit ' + c.code) === 0)) out.push({ ref: b.ref, amt: p.amt }); }); }); return out; }
+  // "R650 (code KC-AB12CD, use by 12 Nov 2027)" for every credit the guest can still use
+  function creditList(email, sep) { return creditsFor(email).map(function (c) { return '<b>' + money(creditRest(c)) + '</b> (code <span class="code">' + esc(c.code) + '</span>, ' + (c.until ? 'use by ' + fdy(c.until) : 'no end date') + ')'; }).join(sep || ' and '); }
+  function creditCopy(c) { return '<span class="code">' + esc(c.code) + '</span> <button type="button" class="link-btn" data-copy="' + esc(c.code) + '">Copy code</button>'; }
+  // on the booking a credit came from: what was kept, the code, what is left
+  function creditFromHTML(b) {
+    return DB.credits.filter(function (c) { return c.from === b.ref; }).map(function (c) {
+      var s = creditState(c), uses = creditUses(c);
+      return '<div class="callout cflex cr-box' + (s.k === 'open' ? ' ok' : '') + '">' + ic('gift') + '<div><b>' + money(c.amt) + ' kept as a credit for another stay</b> ' + pill(s) +
+        '<br>Code ' + creditCopy(c) + '<br>' +
+        (c.void ? 'This credit was cancelled' + (c.voided ? ' by ' + esc(c.voided.by) + ' (' + esc(atNice(c.voided.at)) + ')' + (c.voided.why ? ': ' + esc(c.voided.why) : '') : '') + '.'
+          : '<b>' + money(creditRest(c)) + ' left</b>' + (c.used ? ', ' + money(c.used) + ' used' + (uses.length ? ' on ' + uses.map(function (u) { return '<button type="button" class="link-btn" data-open="' + esc(u.ref) + '">' + esc(u.ref) + '</button>'; }).join(', ') : '') : '') + ' · ' + (c.until ? 'use by ' + fdy(c.until) : 'no end date')) +
+        (s.k === 'open' && c.email || (can('payments') && !c.void) ? '<div class="row-btns">' + (s.k === 'open' && c.email ? '<button type="button" class="btn ghost sm" data-act="credit-mail" data-ref="' + esc(c.id) + '">' + ic('send') + 'Email the code again</button>' : '') + (can('payments') && !c.void ? '<button type="button" class="btn ghost sm" data-act="credit-edit" data-ref="' + esc(c.id) + '">' + ic('edit') + 'Change</button>' : '') + '</div>' : '') + '</div></div>';
+    }).join('');
+  }
+  function creditLink(c) { return new URL('../stay.html?credit=' + encodeURIComponent(c.code), location.href).href; }
+  // the email that tells the guest about their credit and how to use it
+  function creditMsg(c) {
+    var b = c.from ? byRef(c.from) : null, first = b ? b.guest.first : String(c.name || '').split(' ')[0], WD = { weekday: 'long', day: 'numeric', month: 'long' };
+    return { subject: c.from ? 'Booking ' + c.from + ' cancelled: your Kyleu credit ' + c.code : 'Your Kyleu credit ' + c.code,
+      body: 'Hi ' + (first || 'there') + ',\n\n' +
+        (c.from ? 'Your booking ' + c.from + (b ? ' (' + standById(b.stand).name + ', ' + fd(b.ci, WD) + ' to ' + fd(b.co, WD) + ')' : '') + ' is cancelled.\n\nWe do not give refunds, so ' + money(c.amt) + ' is kept as a credit for your next stay at Kyleu.'
+          : 'We have given you a credit of ' + money(c.amt) + ' for your next stay at Kyleu.') + '\n\n' +
+        'Your credit code: ' + c.code + '\n' +
+        'Credit: ' + money(c.amt) + (c.used ? ' (' + money(creditRest(c)) + ' still to use)' : '') + '\n' +
+        'Use by: ' + (c.until ? fd(c.until, { day: 'numeric', month: 'long', year: 'numeric' }) : 'no end date') + '\n\n' +
+        'Book your next stay on our website and type this code under \'Have a credit?\' when you check your booking, or open this link:\n' + creditLink(c) + '\n\n' +
+        'You can also tell us the code when you book by WhatsApp or phone.\n\n' +
+        'The credit must be used with the same email address as ' + (c.from ? 'the cancelled booking' : 'this email') + ': ' + c.email + '\n\n' +
+        'The Kyleu team' };
+  }
+  // sent like any other staff email: it shows in the Inbox and under the booking's messages
+  function creditMail(c) {
+    if (!c.email) return false;
+    var m = creditMsg(c), b = c.from ? byRef(c.from) : null, body = m.body + (mySig() ? '\n\n--\n' + sigText(mySig()) : ''), cl;
+    if (b) logEmail(b, m.subject, body, [], c.email);
+    else { cl = findClient(c.email, ''); DB.threads.push({ id: uid('t'), subject: m.subject, name: c.name || c.email, email: c.email, phone: cl ? cl.phone : '', status: 'waiting', unread: false, ref: '', msgs: [{ from: 'staff', by: ME.name, at: nowStamp(), body: body, att: [] }] }); }
+    c.sent = { at: nowStamp(), by: ME.name };
+    return true;
+  }
+  function actCreditMail(id) {
+    var c = creditById(id); if (!c) return;
+    var k = creditState(c).k;
+    if (k !== 'open') { toast(k === 'expired' ? 'This credit has run out. Change the use by date first.' : k === 'void' ? 'This credit was cancelled' : 'This credit is used up'); return; }
+    if (!c.email) { toast('There is no email address for this credit'); return; }
+    modal('Email the code again?', '<p>To <b>' + esc(c.email) + '</b></p><div class="callout cr-msg">' + esc(creditMsg(c).body) + '</div>', 'Send email', function () {
+      creditMail(c); log('Credit code ' + c.code + ' emailed again to ' + c.email, c.from); save(); refresh();
+      toast('Code emailed to ' + esc(c.email) + ' (demo: nothing really leaves this browser)');
+    }, { noFocus: true });
+  }
+  function actCreditEdit(id) {
+    var c = creditById(id); if (!c || !can('payments')) return;
+    modal('Change credit ' + esc(c.code), '<p class="muted small">' + esc(c.name || c.email) + ' · ' + (c.from ? 'from booking ' + esc(c.from) : 'given by hand') + ' · ' + money(c.used) + ' used so far</p>' +
+      '<div class="grid2"><label class="fld"><span>Amount (R)</span><input name="amt" inputmode="decimal" value="' + c.amt + '"></label><label class="fld"><span>Use by (empty = no end date)</span><input type="date" name="until" value="' + esc(c.until) + '"></label></div>' +
+      '<label class="fld"><span>Note (only staff see it)</span><input name="note" value="' + esc(c.note) + '" placeholder="e.g. Agreed with Sherri"></label>',
+      'Save', function (f) {
+        var amt = randOf(fval(f, 'amt')), until = fval(f, 'until'), note = fval(f, 'note'), ch = [];
+        if (isNaN(amt) || amt <= 0) { toast('Enter the credit amount'); return false; }
+        if (amt < c.used) { toast(money(c.used) + ' of this credit is already used, so it cannot be less than that'); return false; }
+        if (amt !== c.amt) ch.push('amount ' + money(c.amt) + ' to ' + money(amt));
+        if (until !== c.until) ch.push('use by ' + (c.until ? fdy(c.until) : 'no end date') + ' to ' + (until ? fdy(until) : 'no end date'));
+        if (note !== c.note) ch.push('note ' + (note ? '"' + note + '"' : 'removed'));
+        if (!ch.length) return;
+        c.amt = amt; c.until = until; c.note = note;
+        log('Credit ' + c.code + ' for ' + (c.name || c.email) + ' changed: ' + ch.join(', '), c.from); save(); refresh(); toast('Credit ' + esc(c.code) + ' changed');
+      });
+  }
+  function actCreditVoid(id) {
+    var c = creditById(id); if (!c || c.void || !can('payments')) return;
+    var rest = creditRest(c), who = c.name || c.email;
+    modal('Cancel credit ' + esc(c.code) + '?', '<p><b>' + money(rest) + '</b> of ' + esc(who) + '\'s credit can then no longer be used, and the code stops working on the website.' + (c.used ? ' The ' + money(c.used) + ' already used stays as it is.' : '') + '</p>' +
+      '<label class="fld"><span>Reason</span><input name="why" placeholder="e.g. Refunded instead, given by mistake"></label>',
+      'Cancel credit', function (f) {
+        var why = fval(f, 'why'), fb = c.from ? byRef(c.from) : null; if (!why) { toast('Say why the credit is cancelled'); return false; }
+        c.void = true; c.voided = { at: nowStamp(), by: ME.name, why: why };
+        if (fb) fb.notes.push({ at: nowStamp(), by: ME.name, text: 'Credit ' + c.code + ' cancelled (' + money(rest) + ' was left): ' + why });
+        log('Credit ' + c.code + ' for ' + who + ' cancelled (' + money(rest) + ' was left): ' + why, c.from); save(); refresh(); toast('Credit ' + esc(c.code) + ' cancelled');
+      }, { danger: true, cancelLabel: 'Keep the credit' });
+  }
+  // a goodwill credit that does not come from a cancelled booking
+  function actCreditNew() {
+    if (!can('payments')) return;
+    var gs = guestsList().filter(function (g) { return g.email; });
+    modal('Give a credit', '<p class="muted small">For a goodwill credit that does not come from a cancelled booking. The guest gets a code to use on their next booking.</p>' +
+      '<label class="fld"><span>Guest\'s email</span><input name="email" type="email" list="credit-emails" autocomplete="off" placeholder="Pick a client or type an email address"><datalist id="credit-emails">' + gs.map(function (g) { return '<option value="' + esc(g.email) + '">' + esc(g.name) + '</option>'; }).join('') + '</datalist></label>' +
+      '<label class="fld"><span>Guest\'s name</span><input name="name" autocomplete="off"></label>' +
+      '<div class="grid2"><label class="fld"><span>Amount (R)</span><input name="amt" inputmode="decimal"></label><label class="fld"><span>Use by (empty = no end date)</span><input type="date" name="until" min="' + TODAY + '"></label></div>' +
+      '<label class="fld"><span>Note (only staff see it)</span><input name="note" placeholder="e.g. Sorry for the water problem at Stand 4"></label>' +
+      '<label class="check"><input type="checkbox" name="mail" checked><span>Email the code to the guest</span></label>',
+      'Give credit', function (f) {
+        var email = normEmail(fval(f, 'email')), name = fval(f, 'name'), amt = randOf(fval(f, 'amt')), until = fval(f, 'until');
+        if (!/.+@.+\..+/.test(email)) { toast('Enter the guest\'s email address'); return false; }
+        if (!name) { toast('Enter the guest\'s name'); return false; }
+        if (isNaN(amt) || amt <= 0) { toast('Enter the credit amount'); return false; }
+        if (until && until < TODAY) { toast('The use by date cannot be in the past'); return false; }
+        var c = creditFix({ id: uid('c'), code: creditCode(), email: email, name: name, amt: amt, used: 0, from: '', d: TODAY, until: until, note: fval(f, 'note'), by: ME.name });
+        DB.credits.push(c);
+        var mailed = fval(f, 'mail') && creditMail(c);
+        log('Credit ' + c.code + ' of ' + money(amt) + ' given to ' + name + (until ? ', use by ' + fdy(until) : '') + (c.note ? ': ' + c.note : '')); save(); refresh();
+        toast('Credit of ' + money(amt) + ' given to ' + esc(name) + ', code <b>' + esc(c.code) + '</b>.' + (mailed ? ' The code was emailed.' : ''));
+      }, { onOpen: function (f) {
+        // picking a known client fills in their name
+        var em = f.elements.email, nm = f.elements.name, fillName = function () { var g = gs.filter(function (x) { return normEmail(x.email) === normEmail(em.value); })[0]; if (g && (!nm.value || nm.dataset.auto === '1')) { nm.value = g.name; nm.dataset.auto = '1'; } };
+        em.addEventListener('input', fillName); em.addEventListener('change', fillName); nm.addEventListener('input', function () { nm.dataset.auto = ''; });
+      } });
+  }
+  // Payments > Credits: every credit, what is left of it, and what staff can do with it
+  function creditsHTML() {
+    var all = DB.credits.slice().sort(function (a, b) { return a.d < b.d ? 1 : a.d > b.d ? -1 : 0; }), q = PAYF.q.toLowerCase(), qk = q.replace(/[\s\-]/g, '');
+    var tot = function (l, f) { return money(l.reduce(function (a, c) { return a + f(c); }, 0)); }, n = function (l) { return l.length + ' credit' + (l.length === 1 ? '' : 's'); };
+    var open = all.filter(creditOk), soon = open.filter(function (c) { return c.until && diff(TODAY, c.until) <= 30; }), usedL = all.filter(function (c) { return c.used > 0; });
+    var list = all.filter(function (c) { var h = (c.name + ' ' + c.email + ' ' + c.code + ' ' + c.from + ' ' + c.note).toLowerCase(); return (!PAYF.cst || creditState(c).k === PAYF.cst) && (!q || h.indexOf(q) >= 0 || (qk && h.replace(/[\s\-]/g, '').indexOf(qk) >= 0)); });
+    return '<div class="kpis">' + tile('Open credits', tot(open, creditRest), n(open) + ' still to use') + tile('Used so far', tot(usedL, function (c) { return c.used; }), 'paid for other stays') + tile('Run out in the next 30 days', tot(soon, creditRest), n(soon), null, soon.length ? 'warn' : '') + '</div>' +
+      '<div class="filters"><label class="search">' + ic('search') + '<input type="search" data-payq placeholder="Search name, email, code or booking" value="' + esc(PAYF.q) + '" aria-label="Search credits"></label></div>' +
+      '<div class="chips">' + [['', 'All'], ['open', 'Open'], ['used', 'Used up'], ['expired', 'Expired'], ['void', 'Cancelled']].map(function (o) { return '<button class="chip' + (PAYF.cst === o[0] ? ' on' : '') + '" data-crst="' + o[0] + '">' + o[1] + ' <span>' + all.filter(function (c) { return !o[0] || creditState(c).k === o[0]; }).length + '</span></button>'; }).join('') + '</div>' +
+      '<div class="card flush"><table class="tbl ledger credits" data-sort-key="credits"><thead><tr><th>Guest</th><th>Code</th><th>Given</th><th class="r">Amount</th><th class="r">Used</th><th class="r">Left</th><th>Use by</th><th>State</th><th></th></tr></thead><tbody>' +
+      (list.length ? list.map(function (c) {
+        var s = creditState(c), fb = c.from ? byRef(c.from) : null, uses = creditUses(c), id = esc(c.id);
+        return '<tr' + (c.void ? ' class="off"' : '') + '><td data-l="Guest"><b>' + esc(c.name || 'No name') + '</b><small>' + esc(c.email || 'No email address') + '</small>' + (c.note ? '<small class="cr-note">' + esc(c.note) + '</small>' : '') + '</td>' +
+          '<td data-l="Code"><span class="code">' + esc(c.code) + '</span><button type="button" class="icon-btn sm" data-copy="' + esc(c.code) + '" aria-label="Copy the code ' + esc(c.code) + '" title="Copy code">' + ic('note') + '</button>' +
+          '<small>' + (c.from ? 'From ' + (fb ? '<button type="button" class="link-btn" data-open="' + esc(c.from) + '">' + esc(c.from) + '</button>' : esc(c.from)) : 'Given by hand' + (c.by ? ' by ' + esc(c.by) : '')) + '</small></td>' +
+          '<td data-l="Given" data-s="' + esc(c.d) + '">' + fdy(c.d) + '</td>' +
+          '<td data-l="Amount" class="r amt">' + money(c.amt) + '</td>' +
+          '<td data-l="Used" class="r">' + money(c.used) + (uses.length ? '<small>' + uses.map(function (u) { return '<button type="button" class="link-btn" data-open="' + esc(u.ref) + '">' + esc(u.ref) + '</button>'; }).join(' ') + '</small>' : '') + '</td>' +
+          '<td data-l="Left" class="r amt">' + (c.void ? '<s>' + money(creditRest(c)) + '</s>' : money(creditRest(c))) + '</td>' +
+          '<td data-l="Use by" data-s="' + esc(c.until || '9999-12-31') + '">' + (c.until ? fdy(c.until) + (s.k === 'open' && diff(TODAY, c.until) <= 30 ? '<small class="warn-t">' + rel(c.until) + '</small>' : '') : '<span class="muted">No end date</span>') + '</td>' +
+          '<td data-l="State">' + pill(s) + (c.void && c.voided && c.voided.why ? '<small>' + esc(c.voided.why) + '</small>' : '') + '</td>' +
+          '<td class="r row-btn">' + (s.k === 'open' && c.email ? '<button type="button" class="btn sm ghost" data-act="credit-mail" data-ref="' + id + '" title="Email the code again">' + ic('send') + 'Email the code again</button>' : '') +
+          (c.void ? '' : '<button type="button" class="btn sm ghost" data-act="credit-edit" data-ref="' + id + '">' + ic('edit') + 'Change</button>') +
+          (c.void || s.k === 'used' ? '' : '<button type="button" class="btn sm ghost" data-act="credit-void" data-ref="' + id + '">' + ic('x') + 'Cancel credit</button>') + '</td></tr>';
+      }).join('') : '<tr><td colspan="9" class="empty">' + (all.length ? 'No credits match.' : 'No credits yet. A credit is made when a paid booking is cancelled, or with Give a credit.') + '</td></tr>') + '</tbody></table></div>' +
+      '<p class="demo-note">' + ic('info') + 'No refunds: when a paid booking is cancelled, the money is kept as a credit. The guest uses the code on the website under "Have a credit?", or gives it to you when booking by WhatsApp or phone. Money paid with a credit is not counted as income again.</p>';
+  }
   function actEdit(ref) {
     var b = byRef(ref), cl = clientById(b.cid), closed = b.status === 'out' || b.status === 'cancelled', inCamp = b.status === 'in';
     var lockAll = closed ? ' disabled' : '', lockCi = closed || inCamp ? ' disabled' : '', n = cl ? clientBookings(cl).length : 1, ex = b.extras || {};
@@ -1127,7 +1330,12 @@
         if (!cl) { cl = findClient(ng.email, ng.phone); linked = !!cl; if (!cl) cl = newClient(ng); }
         var b = { ref: K.takeNo('Ref'), created: nowStamp(), source: fval(f, 'source'), cid: cl.id, guest: { first: cl.first, last: cl.last, email: cl.email, phone: cl.phone, consent: cl.consent }, stand: sid, ci: a, co: z, adults: g.adults, pens: g.pens, kids: g.kids, vehicles: Math.max(1, Math.min(20, +fval(f, 'veh') || 1)), setup: '', extras: ex, method: m, eft: q.eft, card: q.card, total: m === 'card' ? q.card : q.eft, payments: [], status: 'pending', notes: [], pop: false };
         if (m !== 'eft') b.status = 'confirmed';
-        if (fval(f, 'usecredit')) { var need = b.total; creditsFor(b.guest.email).forEach(function (c) { var take = Math.min(need, c.amt - c.used); if (take <= 0) return; c.used += take; need -= take; b.payments.push({ d: TODAY, amt: take, m: 'credit', type: 'Credit', ref: 'Credit from ' + c.from }); }); if (paid(b) >= deposit(b)) b.status = 'confirmed'; }
+        if (fval(f, 'usecredit')) {   // the credit that runs out first is used first; what is not needed stays on the credit
+          var need = b.total, usedC = [];
+          creditsFor(b.guest.email).forEach(function (c) { var take = creditPay(b, c, need); if (!take) return; need -= take; usedC.push(money(take) + ' with credit ' + c.code + (c.from ? ' from booking ' + c.from : '')); log(money(take) + ' of credit ' + c.code + ' used on ' + b.ref, b.ref); });
+          if (usedC.length) b.notes.push({ at: nowStamp(), by: ME.name, text: 'Paid ' + usedC.join(' and ') + '.' });
+          if (paid(b) > 0 && paid(b) >= deposit(b)) b.status = 'confirmed';
+        }
         if (fval(f, 'note')) b.notes.push({ at: nowStamp(), by: ME.name, text: fval(f, 'note') });
         if (overUsual) b.notes.push({ at: nowStamp(), by: ME.name, text: 'Booked for ' + nPpl + ' people on a stand that usually takes ' + (st1.guests || 8) + (nPpl > standMax(st1) ? ' (the most it can take is ' + standMax(st1) + ')' : '') + '.' });
         // cash on arrival (arranged with a regular): confirmed without a deposit, an invoice that says so, never released
@@ -1155,8 +1363,8 @@
             '<div class="qb-row"><span>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + '</span><span class="price-pair">' + (!hasFee() ? '<b>' + money(q.eft) + '</b>' : m === 'card' ? '<b>' + money(q.card) + '</b> <small>card price</small>' : '<s>' + money(q.card) + '</s> <b>' + money(q.eft) + '</b> <small>' + methodLabel(m) + '</small>') + '</span></div>' +
             '<div class="muted small">' + (full ? 'Arrives within 12 days, so the full amount secures the stand' : 'Deposit ' + depPct() + '%: ' + money(Math.round((m === 'card' ? q.card : q.eft) * depPct() / 100))) + ' · ' + nFree + ' of ' + STANDS.length + ' stands free for these dates</div>' +
             (halfWeekend ? '<div class="small warn-t">' + ic('info') + ' Only one weekend night: weekend stays are normally at least 2 nights (Friday and Saturday, or Saturday and Sunday). Fine if you agreed it with the guest.</div>' : '');
-          var pc = clientById(fval(f, 'cid')), cl = creditLeft(pc ? pc.email : fval(f, 'email')), cb = $('[data-credit-box]', f), was = f.elements.usecredit ? f.elements.usecredit.checked : true;
-          cb.innerHTML = cl ? '<label class="check credit-use"><input type="checkbox" name="usecredit"' + (was ? ' checked' : '') + '><span>Use <b>' + money(cl) + '</b> credit from a cancelled booking</span></label>' : '';
+          var pc = clientById(fval(f, 'cid')), ce = pc ? pc.email : fval(f, 'email'), cl = creditLeft(ce), cb = $('[data-credit-box]', f), was = f.elements.usecredit ? f.elements.usecredit.checked : true;
+          cb.innerHTML = cl ? '<label class="check credit-use"><input type="checkbox" name="usecredit"' + (was ? ' checked' : '') + '><span>Use <b>' + money(cl) + '</b> credit <small class="muted">' + creditsFor(ce).map(function (c) { return 'code ' + esc(c.code) + (c.until ? ', use by ' + fdy(c.until) : ', no end date'); }).join(' and ') + '</small></span></label>' : '';
         };
         f._picked = !!pre.stand; f.elements.stand.addEventListener('change', function () { f._picked = true; });
         $$('input,select', f).forEach(function (x) { if (x.name === 'clq') return; x.addEventListener('input', u); x.addEventListener('change', u); });
@@ -1172,7 +1380,7 @@
       var c = clientById(id); if (!c) return; var s = clientStats(c), cr = creditLeft(c.email); cid.value = c.id;
       chosen.innerHTML = '<div class="cl-card"><div class="cl-r">' + line(c) + '<button type="button" class="btn ghost sm" data-clchange>Change</button></div>' +
         (s.stays ? '<p class="small cl-hist">' + ic('return') + '<span>' + (s.stays > 1 ? 'Returning client: ' : '') + s.stays + ' stay' + (s.stays === 1 ? '' : 's') + ', ' + s.nights + ' nights' + (s.last ? ', last here ' + fd(s.last, { day: 'numeric', month: 'short', year: 'numeric' }) : '') + (s.next ? '. Already booked for ' + fd(s.next) : '') + '.</span></p>' : '<p class="small muted">No stays yet.</p>') +
-        (c.notes ? '<p class="cl-note">' + ic('note') + '<span>' + esc(c.notes) + '</span></p>' : '') + (cr ? '<p class="small"><b>' + money(cr) + '</b> credit to use.</p>' : '') + '</div>';
+        (c.notes ? '<p class="cl-note">' + ic('note') + '<span>' + esc(c.notes) + '</span></p>' : '') + (cr ? '<p class="small">Credit to use: ' + creditList(c.email) + '.</p>' : '') + '</div>';
       show('chosen'); onChange();
     };
     var search = function () {
@@ -1368,7 +1576,7 @@
           '<button type="button" class="btn ghost sm" data-act="dgr-send" data-ref="' + k + '">' + ic('send') + (c.dgrSent ? 'Send again' : 'Send to client') + '</button></div>';
       }).join('') + '</div>' +
       '<div class="row-btns dgr-acts"><span class="muted small">Opens a preview, then send by WhatsApp or email</span><button type="button" class="btn ghost sm" data-act="dgr-send-sel" data-ref="' + b.ref + '">' + ic('send') + 'Send ticked cars to client</button><button type="button" class="btn sm" data-act="dgr-send-all" data-ref="' + b.ref + '">' + ic('send') + 'Send all codes to client</button></div>' +
-      (creditLeft(b.guest.email) ? '<p class="small" style="margin-top:10px">' + ic('info') + ' This guest has <b>' + money(creditLeft(b.guest.email)) + '</b> credit from a cancelled booking.</p>' : '') + '</section>';
+      (creditLeft(b.guest.email) ? '<p class="small" style="margin-top:10px">' + ic('info') + ' This guest has credit to use: ' + creditList(b.guest.email) + '.</p>' : '') + '</section>';
   }
   // save a pasted code without redrawing the panel (so a click on Send still lands)
   function saveCode(key, val) {
@@ -2257,6 +2465,9 @@
     DB.vouchers = [];   // Kyleu discount vouchers were removed; only Dinokeng partner codes are used
     DB.bookings.forEach(ensureCars);
     DB.bookings.forEach(function (b) { if (!b.key) b.key = newKey(); });
+    // credits made before they had a code: give each one a code now, so the guest can use it on the website
+    DB.credits = DB.credits || []; var noCode = DB.credits.filter(function (c) { return !c.code; }).length;
+    DB.credits.forEach(function (c) { creditFix(c); }); if (noCode) save();
     if ((DB.dgrV || 0) < 2) { DB.dgrV = 2; DB.bookings.forEach(function (b) { var was = b.dgr; delete b.dgr; if (!live(b) || !(was || b.ci < add(TODAY, 3))) return; b.cars.forEach(function (c) { if (c.dgr) return; c.dgr = 'DGR' + Math.random().toString(36).slice(2, 8).toUpperCase(); c.dgrSent = { at: add(b.ci, -6) + ' 09:10', by: 'Sherri', code: c.dgr }; }); }); }
     newsDB();
   }
@@ -2295,9 +2506,9 @@
   function vDashboard() {
     var arr = DB.bookings.filter(function (b) { return live(b) && b.ci === TODAY && b.status !== 'pending'; }), dep = DB.bookings.filter(function (b) { return b.co === TODAY && (b.status === 'in' || b.status === 'out'); });
     var tonight = standsBookedOn(TODAY), nT = Object.keys(tonight).length;
-    var pend = DB.bookings.filter(function (b) { return b.status === 'pending'; }), pendAmt = pend.reduce(function (a, b) { return a + deposit(b); }, 0);
+    var pend = DB.bookings.filter(function (b) { return b.status === 'pending'; }), pendAmt = pend.reduce(function (a, b) { return a + Math.max(0, deposit(b) - paid(b)); }, 0);
     var balSoon = DB.bookings.filter(function (b) { return b.status === 'confirmed' && balance(b) > 0 && diff(TODAY, balanceDue(b)) <= 7; }), balAmt = balSoon.reduce(function (a, b) { return a + balance(b); }, 0);
-    var month = TODAY.slice(0, 7), recv = 0; DB.bookings.forEach(function (b) { (b.payments || []).forEach(function (p) { if (p.d.slice(0, 7) === month) recv += p.amt; }); }); DB.sales.forEach(function (s) { if (s.d.slice(0, 7) === month) recv += s.amt; });
+    var month = TODAY.slice(0, 7), recv = 0; DB.bookings.forEach(function (b) { (b.payments || []).forEach(function (p) { if (p.d.slice(0, 7) === month && p.m !== 'credit') recv += p.amt; }); });   // paid with a credit: that money came in on the cancelled booking DB.sales.forEach(function (s) { if (s.d.slice(0, 7) === month) recv += s.amt; });
     var h = new Date().getHours();
     var attention = [];
     DB.bookings.forEach(function (b) {
@@ -2399,7 +2610,7 @@
     if (h.why === 'pop') return '<b>Proof of payment uploaded ' + fd(pa) + '.</b> The stand is kept until ' + end + ' (' + holdRules().popDays + ' days after the upload) while you check the bank. The guest is only told we are checking and keeping their stand. Press Money is in once it shows, or the stand is released after that.';
     if (h.state === 'soft') return '<b>' + esc(b.guest.first) + ' says they paid.</b> The stand is kept until ' + end + ' while you check the bank. Confirm the payment, or the stand is released automatically.';
     if (h.state === 'grace') return '<b>The quotation ran out on ' + fdw(h.due) + '.</b> That was over a weekend, so the stand is kept until ' + end + '. Record the payment if it came in, or the stand is released automatically.';
-    return 'Quotation valid until <b>' + fdw(h.due) + '</b> (' + rel(h.due) + '). ' + (payFullOf(b) ? 'The full amount' : 'A deposit of') + ' <b>' + money(deposit(b)) + '</b> secures the stand.' + (h.why === 'weekend' ? ' It runs out over a weekend, so the stand is kept until ' + end + '.' : '');
+    return 'Quotation valid until <b>' + fdw(h.due) + '</b> (' + rel(h.due) + '). ' + (payFullOf(b) ? 'The full amount' : 'A deposit of') + ' <b>' + money(deposit(b)) + '</b> secures the stand.' + (paid(b) > 0 ? ' ' + money(paid(b)) + ' is already paid, so <b>' + money(Math.max(0, deposit(b) - paid(b))) + '</b> is still needed.' : '') + (h.why === 'weekend' ? ' It runs out over a weekend, so the stand is kept until ' + end + '.' : '');
   }
   function vEft() {
     var pend = DB.bookings.filter(function (b) { return b.status === 'pending'; });
@@ -2479,7 +2690,7 @@
       '<dt>Client since</dt><dd>' + fd(c.created.slice(0, 10), { day: 'numeric', month: 'short', year: 'numeric' }) + '</dd>' +
       '<dt>Mailing list</dt><dd>' + (c.consent ? 'Yes, agreed to news and specials' : 'No') + '</dd></dl>' +
       (c.notes ? '<p class="cl-note">' + ic('note') + '<span>' + esc(c.notes) + '</span></p>' : '') +
-      (cr ? '<p class="callout"><b>' + money(cr) + ' credit</b> from a cancelled booking. It is offered on their next booking.</p>' : '') +
+      (cr ? '<p class="callout"><b>' + money(cr) + ' credit</b> to use on another stay. It is offered on their next booking.<br>' + creditList(c.email, '<br>') + '</p>' : '') +
       '<div class="chips">' + (c.phone ? '<a class="chip" href="tel:' + esc(c.phone.replace(/\s/g, '')) + '">' + ic('phone') + 'Call</a><a class="chip" target="_blank" rel="noopener" href="https://wa.me/' + wa + '">' + ic('wa') + 'WhatsApp</a>' : '') + (c.email ? '<button type="button" class="chip" data-act="client-mail" data-ref="' + c.id + '">' + ic('mail') + 'Email</button>' : '') + '</div>' +
       '<h5>Stays</h5>' + (bs.length ? '<div class="list">' + bs.map(function (b) { return '<button type="button" class="brow" data-open="' + b.ref + '"><span class="brow-st">' + esc(standById(b.stand).name) + '</span><span class="brow-g"><b>' + fd(b.ci, { day: 'numeric', month: 'short', year: 'numeric' }) + '</b><small>' + esc(b.ref) + ' · ' + diff(b.ci, b.co) + ' night' + (diff(b.ci, b.co) === 1 ? '' : 's') + ' · ' + people(b) + ' guests · ' + money(b.total) + '</small></span>' + pill(stateOf(b)) + '</button>'; }).join('') + '</div>' : '<p class="muted small">No bookings yet.</p>') +
       '<h5>Emails</h5>' + (ts.length ? '<div class="list">' + ts.map(function (t) { return '<button type="button" class="brow" data-thread-go="' + t.id + '"><span class="brow-g"><b>' + esc(t.subject) + '</b><small>' + t.msgs.length + ' email' + (t.msgs.length > 1 ? 's' : '') + ' · last ' + when(lastMsg(t).at) + '</small></span>' + ic('chev-r') + '</button>'; }).join('') + '</div>' : '<p class="muted small">No emails yet.</p>') +
@@ -2686,7 +2897,7 @@
   function receivables() {
     return DB.bookings.filter(function (b) { return live(b) && b.status !== 'out' && balance(b) > 0; }).map(function (b) {
       var pend = b.status === 'pending', due = pend ? depositDue(b) : balanceDue(b);
-      return { b: b, what: pend ? 'Deposit' : 'Balance', due: due, amt: pend ? deposit(b) : balance(b), late: due < TODAY };
+      return { b: b, what: pend ? 'Deposit' : 'Balance', due: due, amt: pend ? Math.max(0, deposit(b) - paid(b)) || balance(b) : balance(b), late: due < TODAY };
     }).sort(function (a, b) { return a.due < b.due ? -1 : 1; });
   }
 
@@ -3126,7 +3337,7 @@
   /* =========================================================
      Payments: a ledger of every transaction, plus money still owed
      ========================================================= */
-  var PAYF = { tab: 'tx', range: 'this_month', type: '', m: '', q: '', lim: 1e9 };
+  var PAYF = { tab: 'tx', range: 'this_month', type: '', m: '', q: '', lim: 1e9, cst: '' };
   function vPayments() {
     var rg = simpleRange(PAYF.range), q = PAYF.q.toLowerCase(), owed = receivables();
     var inRange = allTx().filter(function (x) { return x.d >= rg[0] && x.d <= rg[1]; });
@@ -3135,9 +3346,11 @@
     var byM = { card: sum(function (x) { return x.m === 'card' && x.amt > 0; }), eft: sum(function (x) { return x.m === 'eft' && x.amt > 0; }), cash: sum(function (x) { return x.m === 'cash' && x.amt > 0; }) };
     var feeIn = inRange.reduce(function (a, x) { return a + x.fee; }, 0), prov = Math.round(byM.card * (DB.settings.providerFee || 2.95) / 100);
     var owedTot = owed.reduce(function (a, o) { return a + o.amt; }, 0);
-    var head = '<div class="page-h"><div><h1>Payments</h1><p class="muted">Every rand that came in or went out. Click a line to open the booking or the shop receipt.</p></div><div class="ph-act">' + (PAYF.tab === 'tx' ? rangeSelect('data-payr', PAYF.range) + '<button class="btn ghost" data-act="csv-pay">' + ic('download') + 'Export</button>' : '') + '</div></div>' +
-      '<div class="rp-tabs page-tabs"><button class="' + (PAYF.tab === 'tx' ? 'on' : '') + '" data-paytab="tx">Transactions</button><button class="' + (PAYF.tab === 'owed' ? 'on' : '') + '" data-paytab="owed">Still to come in <span class="tab-n">' + money(owedTot) + '</span></button></div>';
+    var head = '<div class="page-h"><div><h1>Payments</h1><p class="muted">Every rand that came in or went out. Click a line to open the booking or the shop receipt.</p></div><div class="ph-act">' + (PAYF.tab === 'tx' ? rangeSelect('data-payr', PAYF.range) + '<button class="btn ghost" data-act="csv-pay">' + ic('download') + 'Export</button>' : PAYF.tab === 'credits' ? '<button class="btn" data-act="credit-new">' + ic('plus') + 'Give a credit</button>' : '') + '</div></div>' +
+      '<div class="rp-tabs page-tabs"><button class="' + (PAYF.tab === 'tx' ? 'on' : '') + '" data-paytab="tx">Transactions</button><button class="' + (PAYF.tab === 'owed' ? 'on' : '') + '" data-paytab="owed">Still to come in <span class="tab-n">' + money(owedTot) + '</span></button>' +
+      '<button class="' + (PAYF.tab === 'credits' ? 'on' : '') + '" data-paytab="credits">Credits <span class="tab-n">' + money(DB.credits.filter(creditOk).reduce(function (a, c) { return a + creditRest(c); }, 0)) + '</span></button></div>';
     if (PAYF.tab === 'owed') return head + owedHTML(owed);
+    if (PAYF.tab === 'credits') return head + creditsHTML();
     var list = inRange.filter(function (x) { return (!PAYF.type || x.kind === PAYF.type) && (!PAYF.m || x.m === PAYF.m) && (!q || (x.who + ' ' + x.what + ' ' + (x.ref || '') + ' ' + x.amt).toLowerCase().indexOf(q) >= 0); });
     var pct = function (v) { return gross ? Math.max(0, v / gross * 100) : 0; };
     var days = [], byDay = {};
@@ -4193,7 +4406,7 @@
     var cr = t.closest('[data-client]'); if (cr && !t.closest('[data-clfind],[data-clform]')) { e.preventDefault(); openClient(cr.dataset.client); return; }
     var ne = t.closest('[data-note-edit]'); if (ne) { var np = ne.dataset.noteEdit.split('|'); actNote(np[0], +np[1]); return; }
     var nd = t.closest('[data-note-del]'); if (nd) { var nq = nd.dataset.noteDel.split('|'), nb = byRef(nq[0]), ni = +nq[1], nn = nb.notes[ni]; if (!nn) return; modal('Delete this note?', '<p class="callout">' + esc(nn.text) + '</p><p class="muted small">Written by ' + esc(nn.by) + ' · ' + esc(nn.at) + '</p>', 'Delete note', function () { nb.notes.splice(ni, 1); log('Note deleted on ' + nb.ref, nb.ref); save(); refresh(); toast('Note deleted'); }, { danger: true, noFocus: true }); return; }
-    if (t.closest('[data-fst],[data-payt],[data-prodcat],[data-gtag],[data-box],[data-paytab],[data-shoptab],[data-pcat]')) resetPages();
+    if (t.closest('[data-fst],[data-payt],[data-crst],[data-prodcat],[data-gtag],[data-box],[data-paytab],[data-shoptab],[data-pcat]')) resetPages();
     var sth = t.closest('th.sortable'); if (sth) { var stb = sth.closest('table'), sk = stb.dataset.sortKey, sci = +sth.dataset.sortCol, cur = SORT[sk]; SORT[sk] = !cur || cur.col !== sci ? { col: sci, dir: 1 } : cur.dir === 1 ? { col: sci, dir: -1 } : null; delete TPG[sk]; render(); var nth = $('table[data-sort-key="' + sk + '"] th[data-sort-col="' + sci + '"]'); if (nth) nth.focus({ preventScroll: true }); return; }
     var tpg = t.closest('[data-tpg]'); if (tpg) { var tp = tpg.dataset.tpg.split('|'), tk = tp[0] + '|' + tp[1]; TPG[tk] = (TPG[tk] || 0) + (+tp[2]); render(); var ttb = $('table[data-sort-key="' + tk + '"]'); if (ttb) { var top = (ttb.closest('.card') || ttb).getBoundingClientRect().top + window.scrollY - 80; if (top < window.scrollY) window.scrollTo({ top: top }); } return; }
     var dpg = t.closest('[data-pg]'); if (dpg) { var dp = dpg.dataset.pg.split('|'); DP[dp[0]] = Math.max(0, (DP[dp[0]] || 0) + (+dp[1])); render(); return; }
@@ -4209,7 +4422,8 @@
     var cd = t.closest('[data-cmp-del]'); if (cd) { CMP_ATT.splice(+cd.dataset.cmpDel, 1); cmpRefresh(); return; }
     var sa = t.closest('[data-sale]'); if (sa) { openSale(sa.dataset.sale); return; }
     var pr = t.closest('[data-prod]'); if (pr) { actProduct(pr.dataset.prod); return; }
-    var pt = t.closest('[data-paytab]'); if (pt) { PAYF.tab = pt.dataset.paytab; render(); return; }
+    var pt = t.closest('[data-paytab]'); if (pt) { if (PAYF.tab !== pt.dataset.paytab) PAYF.q = ''; PAYF.tab = pt.dataset.paytab; render(); return; }
+    var crs = t.closest('[data-crst]'); if (crs) { PAYF.cst = crs.dataset.crst; render(); return; }
     var py = t.closest('[data-payt]'); if (py) { PAYF.type = py.dataset.payt; PAYF.lim = 1e9; render(); return; }
     var stb = t.closest('[data-shoptab]'); if (stb) { SHOP.tab = stb.dataset.shoptab; render(); window.scrollTo(0, 0); return; }
     var pcat = t.closest('[data-pcat]'); if (pcat) { SHOP.cat = pcat.dataset.pcat; render(); return; }
@@ -4365,7 +4579,8 @@
     if (act === 'pay-del') { var pdp = ref.split('|'), pb = byRef(pdp[0]), pi = +pdp[1], pp0 = pb && pb.payments[pi]; if (!pp0) return;
       return modal('Remove this payment?', '<p><b>' + money(pp0.amt) + ' ' + esc(pp0.type) + '</b> (' + methodLabel(pp0.m) + ', ' + fd(pp0.d) + ') comes off ' + esc(guestName(pb)) + '\'s booking. Only do this for a payment entered by mistake. It is noted on the booking.</p><label class="fld"><span>Why (optional)</span><input name="why" placeholder="e.g. Typed R5 000 instead of R500"></label>', 'Remove payment', function (f) {
         pb.payments.splice(pi, 1); var why = fval(f, 'why');
-        pb.notes.push({ at: nowStamp(), by: ME.name, text: 'Removed a payment of ' + money(pp0.amt) + ' (' + pp0.type + ', ' + fd(pp0.d) + ')' + (why ? ': ' + why : '') + '.' });
+        var pcr = pp0.m === 'credit' ? creditById(pp0.credit) : null; if (pcr) pcr.used = Math.max(0, pcr.used - pp0.amt);   // paid with a credit: the credit gets it back
+        pb.notes.push({ at: nowStamp(), by: ME.name, text: 'Removed a payment of ' + money(pp0.amt) + ' (' + pp0.type + ', ' + fd(pp0.d) + ')' + (why ? ': ' + why : '') + '.' + (pcr ? ' Credit ' + pcr.code + ' has the ' + money(pp0.amt) + ' back.' : '') });
         if (pb.status === 'confirmed' && paid(pb) === 0) pb.status = 'pending';
         log('Payment of ' + money(pp0.amt) + ' removed from ' + pb.ref, pb.ref); save(); refresh(); toast('Payment removed');
       }, { danger: true });
@@ -4373,6 +4588,10 @@
     if (act === 'remind') return actRemind(ref);
     if (act === 'cancel') return actCancel(ref);
     if (act === 'release') return actCancel(ref);
+    if (act === 'credit-new') return actCreditNew();
+    if (act === 'credit-edit') return actCreditEdit(ref);
+    if (act === 'credit-void') return actCreditVoid(ref);
+    if (act === 'credit-mail') return actCreditMail(ref);
     if (act === 'move' || act === 'edit') return actEdit(ref);
     if (act === 'block') return actBlock();
     if (act === 'stand-add') return actStand(null, null);

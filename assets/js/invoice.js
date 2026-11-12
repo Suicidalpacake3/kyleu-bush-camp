@@ -114,6 +114,9 @@
     if (inv.onArrival) return { k: 'due', t: money(bal) + ' to pay on arrival (' + String(inv.onArrival).toLowerCase() + ')', bal: bal, now: bal, arr: true };
     if (!inv.paid && !inv.payFull) return { k: 'due', t: 'Deposit of ' + money(inv.deposit) + ' due by ' + nice(inv.depositDue), bal: bal, now: inv.deposit };
     if (!inv.paid) return { k: 'due', t: 'Full amount of ' + money(bal) + ' due by ' + nice(inv.depositDue), bal: bal, now: bal };
+    // something is paid, but not yet the first payment that secures the stand
+    if (inv.payFull) return { k: 'due', t: 'The remaining ' + money(bal) + ' is due by ' + nice(inv.depositDue), bal: bal, now: bal, first: true };
+    if (inv.deposit && inv.paid < inv.deposit) return { k: 'due', t: 'Rest of the deposit, ' + money(inv.deposit - inv.paid) + ', due by ' + nice(inv.depositDue), bal: bal, now: Math.round(inv.deposit - inv.paid), dep: true };
     return { k: 'due', t: 'Balance of ' + money(bal) + ' due by ' + nice(inv.balanceDue), bal: bal, now: bal };
   }
   function schedule(inv) {
@@ -121,7 +124,8 @@
     if (st.k === 'paid' || st.k === 'cancel') return rows;
     if (st.arr) return [['Pay on arrival', money(st.bal), 'by arrangement, ' + (/card/i.test(inv.onArrival) ? 'by card' : 'in cash')]];
     if (!inv.paid && !inv.payFull) { rows.push(['Deposit (' + (inv.depPct || 50) + '%)', money(inv.deposit), 'by ' + nice(inv.depositDue)]); rows.push(['Balance', money(inv.total - inv.deposit), 'by ' + nice(inv.balanceDue)]); }
-    else rows.push([inv.paid ? 'Balance' : 'Full amount', money(st.bal), 'by ' + nice(inv.paid ? inv.balanceDue : inv.depositDue)]);
+    else if (st.dep) { rows.push(['Rest of the deposit', money(st.now), 'by ' + nice(inv.depositDue)]); rows.push(['Balance', money(inv.total - inv.deposit), 'by ' + nice(inv.balanceDue)]); }
+    else rows.push([inv.paid ? (st.first ? 'Still to pay' : 'Balance') : 'Full amount', money(st.bal), 'by ' + nice(inv.paid && !st.first ? inv.balanceDue : inv.depositDue)]);
     return rows;
   }
   function stayRows(inv) {
@@ -318,6 +322,7 @@
   K.paidForm = function (box, inv, done) {
     var st = state(inv), opts = [];
     if (!inv.paid && !inv.payFull && inv.deposit < st.bal) opts.push(['dep', 'The deposit', inv.deposit]);
+    else if (st.dep && st.now < st.bal) opts.push(['dep', 'The rest of the deposit', st.now]);
     opts.push(['all', inv.paid ? 'The balance' : 'The full amount', st.bal]);
     opts.push(['other', 'A different amount', null]);
     var today = new Date(), iso = new Date(today.getTime() - today.getTimezoneOffset() * 6e4).toISOString().slice(0, 10);

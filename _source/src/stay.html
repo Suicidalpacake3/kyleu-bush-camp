@@ -149,6 +149,12 @@
           <div data-shop></div>
         </div>
         <div class="field bk-notes"><label for="f-notes">Anything we should know? <span class="opt">(optional)</span></label><textarea id="f-notes" name="notes" placeholder="For example: one bag of ice per day, please. Celebrating something? Travelling with a big group?"></textarea></div>
+        <div class="bk-credit">
+          <h3>Have a credit from a cancelled booking? <span class="opt">(optional)</span></h3>
+          <p class="muted small-note">Type the credit code from your cancellation email and it comes off this booking. It works with the email address of the booking that was cancelled.</p>
+          <div class="bk-credit-row"><input id="f-credit" name="credit" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="e.g. KC-7H4QXM" aria-label="Credit code"><button class="btn btn-sm" type="button" data-credit-apply>Use this credit</button></div>
+          <div class="bk-credit-msg" data-credit-msg role="status"></div>
+        </div>
         <p class="muted small-note">Once your booking is paid in full, we email you a link to <b>finalise</b> it: your vehicles and who is in each one, and roughly when you arrive.</p>
         <div class="form-grid" style="margin-top:12px">
           <label class="check"><input type="checkbox" name="tc" required><span>I've read and accept the <a href="policies.html" target="_blank">terms, payment &amp; cancellation policy</a> (cancellations are not refunded but kept as a credit for another stay), and understand that <b>camping at Kyleu is entirely at my own risk</b>, because wild animals roam freely.</span></label>

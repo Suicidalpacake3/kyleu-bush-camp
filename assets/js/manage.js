@@ -99,7 +99,12 @@
     read(WEB, []).forEach(function (w) { if (w && w.ref) map[key(w.ref)] = fromWeb(w); });
     if (db && db.bookings) db.bookings.forEach(function (b) { map[key(b.ref)] = fromAdmin(b); });
     // credit kept from a cancelled booking (the admin keeps it against the booking it came from)
-    ((db && db.credits) || []).forEach(function (c) { var v = map[key(c.from)]; if (v) { v.credit = (v.credit || 0) + Math.max(0, (c.amt || 0) - (c.used || 0)); v.creditGiven = (v.creditGiven || 0) + (c.amt || 0); } });
+    ((db && db.credits) || []).forEach(function (c) {
+      var v = c.from && map[key(c.from)]; if (!v) return;
+      var f = c.code && K.creditFind ? K.creditFind(c.code) : null, left = f ? (f.state === 'open' ? f.left : 0) : Math.max(0, (c.amt || 0) - (c.used || 0));
+      v.credit = (v.credit || 0) + left; v.creditGiven = (v.creditGiven || 0) + (c.amt || 0);
+      v.credits = (v.credits || []).concat([{ code: c.code || '', left: left, amt: c.amt || 0, until: c.until || '', state: f ? f.state : (left ? 'open' : 'used') }]);
+    });
     read(AMEND, []).forEach(function (a) { var v = map[key(a.ref)]; if (v && !seen[a.id]) applyAmend(v, a); });
     var pseen = (db && db.paidSeen) || {};
     K.paidClaims().forEach(function (c) { var v = map[key(c.ref)]; if (v && !pseen[c.id]) v.claim = Object.assign({}, c, { amt: c.amt + (v.claim ? v.claim.amt || 0 : 0) }); });   // two payments reported: both count
@@ -270,6 +275,7 @@
     // once something is paid: what is still owing, and by when
     var owing = !v.paid || !bal || v.onArrival || v.status === 'cancelled' ? '' : '<p class="mg-claim">' + svg(stayPaid(v) || v.paid >= dep ? 'i-check' : 'i-clock') + '<span>' +
       (stayPaid(v) ? 'Your stay is paid, thank you. The <b>' + K.money(bal) + '</b> for your camp shop order can be paid by EFT with reference <b>' + esc(v.ref) + '</b> before you arrive.'
+        : v.paid < dep && !inFull ? 'We have your payment of <b>' + K.money(v.paid) + '</b>. To secure your stand, please pay the rest of the deposit, <b>' + K.money(dep - v.paid) + '</b>, by <b>' + esc(nice((v.invoice && v.invoice.depositDue) || depDueOf(v), true)) + '</b>. The balance of <b>' + K.money(v.total - dep) + '</b> is due by <b>' + esc(nice(balDue, true)) + '</b>.'
         : (v.paid >= dep ? 'Thank you, we have your payment of <b>' + K.money(v.paid) + '</b> and <b>your stand is secured</b>. ' : 'We have your payment of <b>' + K.money(v.paid) + '</b>. ') +
           (balDue < today() ? 'The balance of <b>' + K.money(bal) + '</b> was due on ' + esc(nice(balDue, true)) + '. Please pay it as soon as you can.' : 'The balance of <b>' + K.money(bal) + '</b> is due by <b>' + esc(nice(balDue, true)) + '</b>.')) + '</span></p>';
     var toSecure = inFull ? ' Pay the full <b>' + K.money(bal) + '</b> by then to secure it.' : ' Pay the ' + pct + '% deposit of <b>' + K.money(dep) + '</b> by then to secure it.';
@@ -322,7 +328,7 @@
     if (id === 'indemnity') return indPanel();
     if (id === 'cancel') {
       var wa = 'https://wa.me/27604584478?text=' + encodeURIComponent('Hi Kyleu, my booking reference is ' + base.ref + '. I can no longer come on these dates. Can we move my stay?');
-      return '<div class="mg-callout">' + svg('i-info') + '<p><b>How cancelling works:</b> we do not give refunds. ' + (base.paid ? 'The <b>' + K.money(base.paid) + '</b> you have paid is kept as a <b>credit for another stay</b>, at a time that suits you and Kyleu.' : 'You have not paid anything yet, so you owe nothing.') + ' Would you rather move your stay to other dates? <a href="' + wa + '" target="_blank" rel="noopener">WhatsApp us</a> and we will look for dates first. <a href="policies.html" target="_blank">Read the full policy</a>.</p></div>' +
+      return '<div class="mg-callout">' + svg('i-info') + '<p><b>How cancelling works:</b> we do not give refunds. ' + (base.paid ? 'When Kyleu approves your cancellation, the <b>' + K.money(base.paid) + '</b> you have paid is usually kept as a <b>credit for your next stay</b>: you get a credit code by email and use it when you book again.' : 'You have not paid anything yet, so you owe nothing.') + ' Would you rather move your stay to other dates? <a href="' + wa + '" target="_blank" rel="noopener">WhatsApp us</a> and we will look for dates first. <a href="policies.html" target="_blank">Read the full policy</a>.</p></div>' +
         (base.cancelReq ? '<p class="mg-help-t">' + svg('i-clock') + ' You already asked us to cancel' + (base.cancelReq.at ? ' on ' + esc(nice(String(base.cancelReq.at).slice(0, 10))) : '') + '. We will confirm by email or WhatsApp.</p>' : '') +
         '<label class="check mg-cx"><input type="checkbox" name="cx"' + (d.cancel ? ' checked' : '') + '><span>Yes, please cancel booking <b>' + esc(base.ref) + '</b> (' + esc(stand(base.stand).name) + ', ' + esc(nice(base.ci)) + ' to ' + esc(nice(base.co)) + ').</span></label>' +
         '<div class="field"><label for="e-why">Why are you cancelling? <span class="opt">(optional)</span></label><textarea id="e-why" name="why" rows="2">' + esc((d.cancel && d.cancel.reason) || '') + '</textarea></div>' +
@@ -338,10 +344,16 @@
     if (gone || expired) {
       var waNew = 'https://wa.me/27604584478?text=' + encodeURIComponent('Hi Kyleu, my booking reference is ' + base.ref + (gone ? '. It was cancelled and I would like to book new dates.' : '. My quotation expired and I would like to book again.'));
       pane.innerHTML = '<p class="bw-of">Your booking</p><h2>' + (gone ? 'This booking was cancelled' : 'This quotation has expired') + '</h2>' + bookingCard(base) +
-        (gone ? '<div class="mg-callout">' + svg('i-info') + '<p>' + (base.credit ? '<b>' + K.money(base.credit) + ' is kept as a credit for another stay.</b> WhatsApp us when you want to book new dates, and we take it off the price.'
-          : base.creditGiven ? 'The credit from this booking has been used on another stay.'
-          : base.paid > 0 ? '<b>You paid ' + K.money(base.paid) + ' on this booking.</b> We do not give refunds: it is kept as a credit for another stay. WhatsApp us when you want to book new dates.'
-          : '<b>Nothing was paid on this booking</b>, so there is nothing more for you to do. You are welcome to book again any time.') + '</p></div>' : '') +
+        (gone ? (function () {
+          var open = (base.credits || []).filter(function (c) { return c.state === 'open' && c.left > 0; }), c0 = open[0], last = (base.credits || [])[0];
+          if (c0) return '<div class="mg-credit">' + svg('i-gift') + '<div><h3>You have a credit of ' + K.money(base.credit) + '</h3><p>Kyleu kept what you paid as a credit for your next stay. Your credit code is <b class="mg-code">' + esc(c0.code) + '</b>' + (c0.until ? ', to use by <b>' + esc(nice(c0.until, true)) + '</b>' : '') + '. Use it when you book again, with the same email address, and it comes off the price.</p>' +
+            (c0.code ? '<a class="btn btn-sm" href="stay.html?credit=' + encodeURIComponent(c0.code) + '">' + svg('i-cal') + 'Book a new stay with my credit</a>' : '') + '</div></div>';
+          return '<div class="mg-callout">' + svg('i-info') + '<p>' + (last && last.state === 'expired' ? 'The credit from this booking could be used until ' + esc(nice(last.until, true)) + '. WhatsApp us if you have a question about it.'
+            : last && last.state === 'void' ? 'The credit from this booking is no longer valid. WhatsApp us if you have a question about it.'
+            : base.creditGiven ? 'The credit from this booking has been used on another stay.'
+            : base.paid > 0 ? '<b>You paid ' + K.money(base.paid) + ' on this booking.</b> We do not give refunds, but what you paid can be kept as a credit for another stay. WhatsApp us and we will sort it out with you.'
+            : '<b>Nothing was paid on this booking</b>, so there is nothing more for you to do. You are welcome to book again any time.') + '</p></div>';
+        })() : '') +
         '<div class="row-btns mg-callus"><a class="btn btn-green btn-sm" href="' + waNew + '" target="_blank" rel="noopener">' + svg('i-wa') + 'WhatsApp us</a><a class="btn btn-ghost btn-sm" href="stay.html">' + svg('i-cal') + 'Book a new stay</a></div>' +
         (fromLink ? '' : '<div class="bw-nav"><button class="btn btn-ghost" type="button" data-back1>' + svg('i-arrow-l') + 'Find another booking</button><span></span></div>');
       return;
@@ -525,7 +537,7 @@
       (gp.mode === 'direct' && gp.extra ? '<p class="mg-warn bad">' + svg('i-info') + '<span><b>Your booking goes back to "waiting for payment".</b> Adding people means ' + K.money(gp.diff) + ' is owing again. We email you a new invoice for just that amount.</span></p>' : '<p class="mg-small">' + svg('i-info') + (gp.mode === 'direct' ? 'Your booking and ' + docWord(b) + ' are updated as soon as you save.' + (gp.over ? ' That is more than the stand usually takes (' + gp.over.usual + '), so we check that everyone fits and confirm with you.' : '') : gp.fewer ? 'You have already paid ' + K.money(b.paid) + '. Under our booking terms the price does not go down when fewer people come, so we contact you first. Your booking stays as it is until we confirm.' : 'You have already paid ' + K.money(b.paid) + ', so we contact you about the difference first. Your booking stays as it is until we confirm.') + '</p>')]);
     if (changed('dates')) { var r = d.request; blocks.push(['i-cal', 'You are asking us to change your dates', (r.ci !== b.ci || r.co !== b.co ? row('Dates', esc(nice(b.ci) + ' to ' + nice(b.co)), esc(nice(r.ci) + ' to ' + nice(r.co))) : '') + (r.msg ? '<p class="mg-quote">"' + esc(r.msg) + '"</p>' : '') + '<p class="mg-small">' + svg('i-info') + 'We check this and confirm with you. Your booking stays as it is until then.</p>']); }
     if (changed('note')) blocks.push(['i-mail', 'Your message for the team', '<p class="mg-quote">"' + esc(d.note) + '"</p>']);
-    if (changed('cancel')) blocks.push(['i-x', 'You are asking us to cancel your booking', (d.cancel.reason ? '<p class="mg-quote">"' + esc(d.cancel.reason) + '"</p>' : '') + '<p class="mg-warn bad">' + svg('i-info') + '<span><b>We do not give refunds.</b> ' + (b.paid ? 'The ' + K.money(b.paid) + ' you have paid is kept as a credit for another stay.' : 'You have not paid anything yet, so you owe nothing.') + ' Your booking stays as it is until Kyleu confirms the cancellation with you.</span></p>']);
+    if (changed('cancel')) blocks.push(['i-x', 'You are asking us to cancel your booking', (d.cancel.reason ? '<p class="mg-quote">"' + esc(d.cancel.reason) + '"</p>' : '') + '<p class="mg-warn bad">' + svg('i-info') + '<span><b>We do not give refunds.</b> ' + (b.paid ? 'The ' + K.money(b.paid) + ' you have paid is usually kept as a credit for your next stay. Kyleu confirms your credit when the cancellation is approved.' : 'You have not paid anything yet, so you owe nothing.') + ' Your booking stays as it is until Kyleu confirms the cancellation with you.</span></p>']);
     // the people named in the vehicles must not be more than the guests on the booking
     var tot = people(gp && gp.mode === 'direct' ? d.guests : b), named = d.vehicles ? d.cars.slice(0, d.vehicles).reduce(function (a, c) { return a + (c.driver ? 1 : 0) + c.guests.length; }, 0) : 0;
     var nameWarn = named > tot ? '<p class="mg-warn bad">' + svg('i-info') + '<span><b>The numbers do not match.</b> You named ' + named + ' people in your vehicles, but the booking is for ' + tot + '. Go back and remove ' + (named - tot) + (named - tot === 1 ? ' name' : ' names') + ', or change the number of guests.</span></p>'
@@ -564,7 +576,7 @@
     var bal = Math.max(0, base.total - base.paid), steps = [];
     // one line about the email, one about the money: nothing is said twice
     steps.push('We have let the Kyleu team know' + (base.email ? (a.invoice ? ' and emailed your <b>updated reservation</b> to <b>' + esc(base.email) + '</b>. <button type="button" class="link-btn" data-inv-open>View it here</button>' : ' and will email a copy to <b>' + esc(base.email) + '</b>') : '') + '.');
-    if (a.cancel) steps.push('We have your request to <b>cancel</b>. Kyleu confirms it by email or WhatsApp, usually within one working day. <b>Your booking stays as it is until then.</b>');
+    if (a.cancel) steps.push('We have your request to <b>cancel</b>. Kyleu confirms it by email or WhatsApp, usually within one working day' + (a.cancel.paid ? ', and emails you a credit code for what you have paid' : '') + '. <b>Your booking stays as it is until then.</b>');
     if (a.shop) steps.push('Your camp shop order is on your ' + docWord(base) + '.');
     if (a.guests && a.guests.mode === 'direct' && !a.guests.extra) steps.push('Your booking is now for <b>' + esc(peopleText(base)) + '</b>.');
     if (a.guests && a.guests.over) steps.push('That is more than ' + esc(stand(base.stand).name) + ' usually takes (' + a.guests.over.usual + '). We check that everyone will fit and confirm with you.');

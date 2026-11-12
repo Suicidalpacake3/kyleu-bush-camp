@@ -1677,3 +1677,37 @@ button.site-tick:focus-visible { outline: 3px solid #f4b740; outline-offset: 2px
 
 .site-line.done small { display: inline-block; width: 100%; text-decoration: none; }
 @media (max-width: 760px) { .site-card > header .muted { order: 2; } }
+
+/* ---------- credits: money kept from a cancelled booking (Payments > Credits, the cancel pop-up, the booking) ---------- */
+.callout.ok { background: var(--ok-bg); }
+.note.cr { background: var(--ok-bg); color: var(--ink); }
+.cr-box .code, .note.cr .code, .callout .code { user-select: all; }
+.cr-box .link-btn { vertical-align: baseline; }
+.cr-msg { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 46vh; overflow-y: auto; }
+.cr-opts { display: grid; gap: 8px; margin-bottom: 14px; }
+.cr-opt { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; cursor: pointer; font-size: .9rem; }
+.cr-opt input { margin-top: 3px; accent-color: var(--sun); width: 17px; height: 17px; flex: none; }
+.cr-opt small { display: block; color: var(--muted); font-size: .82rem; margin-top: 2px; }
+.cr-opt:has(input:checked) { border-color: var(--sun); background: #fff8ef; }
+.cr-sub { padding: 2px 2px 0 12px; border-left: 3px solid var(--line); margin-left: 8px; }
+.cr-sub .hint { margin: 0 0 6px; }
+.credit-use small { display: block; margin-top: 2px; font-size: .8rem; }
+.tbl.credits td { vertical-align: middle; }
+.tbl.credits td[data-l="Code"] { white-space: nowrap; }
+.tbl.credits td[data-l="Code"] .icon-btn { margin-left: 4px; vertical-align: middle; }
+.tbl.credits td small { margin-top: 2px; }
+.tbl.credits td small .link-btn { font-size: inherit; }
+.tbl.credits .cr-note { font-style: italic; }
+.tbl.credits tr.off td:not(.row-btn) { opacity: .6; }
+.tbl.credits td.row-btn .btn { margin: 2px 0 2px 6px; }
+@media (min-width: 701px) { .card.flush > .tbl.credits { min-width: 1080px; } }
+@media (max-width: 700px) {
+  .tbl.credits td[data-l="Amount"] { grid-column: 2; grid-row: 1; text-align: right; }
+  .tbl.credits td[data-l="Code"], .tbl.credits td[data-l="Given"], .tbl.credits td[data-l="Used"], .tbl.credits td[data-l="Left"], .tbl.credits td[data-l="Use by"], .tbl.credits td[data-l="State"] { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: .84rem; text-align: left; }
+  .tbl.credits td[data-l="Given"]::before { content: 'Given'; color: var(--muted); }
+  .tbl.credits td[data-l="Used"]::before { content: 'Used'; color: var(--muted); }
+  .tbl.credits td[data-l="Left"]::before { content: 'Left'; color: var(--muted); }
+  .tbl.credits td[data-l="Use by"]::before { content: 'Use by'; color: var(--muted); }
+  .tbl.credits td.row-btn .btn { margin: 0 6px 6px 0; }
+}
+.timeline .dot.pm-credit { background: #8a5cb8; }

@@ -139,6 +139,25 @@
     return out;
   };
 
+  /* ---------- credit from a cancelled booking ----------
+     Kyleu gives no refunds. When a cancellation is approved in the admin, what the guest paid can be kept as a credit
+     with a code (KC-XXXXXX). The guest types the code when booking again, with the same email address, and it comes off the price.
+     Demo: credits are read from the admin demo in this browser. Live: the booking system checks the code. */
+  K.creditKey = function (s) { return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); };
+  K.creditFind = function (code) {
+    var k = K.creditKey(code); if (k.length < 6) return null;
+    var db = null, web = []; try { db = JSON.parse(localStorage.getItem('kyleu-admin-demo-v1') || 'null'); } catch (e) {}
+    try { web = JSON.parse(localStorage.getItem('kyleu-web-bookings') || '[]') || []; } catch (e) {}
+    var c = ((db && db.credits) || []).filter(function (x) { return x && x.code && K.creditKey(x.code) === k; })[0]; if (!c) return null;
+    var t = new Date(), today = new Date(t.getTime() - t.getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+    // credit already used on website bookings that the admin has not taken in yet
+    var have = {}; ((db && db.bookings) || []).forEach(function (b) { have[K.creditKey(b.ref)] = 1; });
+    var pending = web.reduce(function (a, w) { return a + (w && w.credit && w.credit.id === c.id && !have[K.creditKey(w.ref)] ? (+w.credit.amt || 0) : 0); }, 0);
+    var left = Math.max(0, (+c.amt || 0) - (+c.used || 0) - pending);
+    return { id: c.id, code: c.code, email: String(c.email || '').toLowerCase(), name: c.name || '', from: c.from || '', until: c.until || '', amt: +c.amt || 0, left: left,
+      state: c.void ? 'void' : c.until && c.until < today ? 'expired' : left <= 0 ? 'used' : 'open' };
+  };
+
   /* ---------- camp shop ---------- */
   // K.shopImg (content.js): the photo chosen in the admin, else Kyleu's own photo for that kind of product
   K.shopItems = function (P) {

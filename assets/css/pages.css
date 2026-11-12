@@ -1468,3 +1468,24 @@ a.yt-lite { text-decoration: none; }
 .mg-cx { margin: 14px 0 12px; }
 /* map pins: the same look, a bigger place to tap */
 @media (max-width: 760px) { .campmap .pin::before { content: ""; position: absolute; inset: -9px; border-radius: 50%; } }
+
+/* ---------- credit from a cancelled booking ---------- */
+.bk-credit { margin: 18px 0 6px; padding: 16px 18px; border: 1.5px dashed var(--line); border-radius: 16px; background: var(--paper); }
+.bk-credit h3 { margin: 0 0 4px; font-size: 1.05rem; }
+.bk-credit-row { display: flex; gap: 8px; margin-top: 10px; }
+.bk-credit-row input { flex: 1 1 auto; min-width: 0; font: inherit; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: 11px 12px; border: 1.5px solid var(--line); border-radius: 10px; background: #fff; min-height: 46px; }
+.bk-credit-row input::placeholder { font-weight: 500; letter-spacing: 0; text-transform: none; }
+.bk-credit-row input:focus { outline: none; border-color: var(--sun); box-shadow: 0 0 0 3px rgba(232,115,28,.15); }
+.bk-credit-row .btn { flex: none; }
+.bk-credit-msg:empty { display: none; }
+.bk-credit-msg { display: flex; gap: 8px; align-items: flex-start; margin-top: 10px; padding: 10px 12px; border-radius: 12px; font-size: .9rem; font-weight: 600; }
+.bk-credit-msg svg { width: 18px; height: 18px; flex: none; margin-top: 2px; }
+.bk-credit-msg.ok { background: rgba(120,190,110,.2); color: #24521f; }
+.bk-credit-msg.bad { background: #fdecea; color: #7a251b; }
+.bw-credit { margin-bottom: 16px; }
+.mg-credit { display: flex; gap: 14px; align-items: flex-start; margin: 16px 0; padding: 18px 20px; border-radius: 16px; background: rgba(120,190,110,.18); border: 1.5px solid rgba(63,125,58,.35); }
+.mg-credit > svg { width: 28px; height: 28px; flex: none; color: var(--ok); margin-top: 2px; }
+.mg-credit h3 { margin: 0 0 4px; font-size: 1.2rem; }
+.mg-credit p { margin: 0 0 12px; }
+.mg-code { font-family: ui-monospace, Consolas, monospace; letter-spacing: .06em; background: #fff; border-radius: 6px; padding: 1px 7px; white-space: nowrap; user-select: all; }
+@media (max-width: 480px) { .bk-credit-row { flex-wrap: wrap; } .bk-credit-row .btn { width: 100%; } }
