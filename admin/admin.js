@@ -326,8 +326,8 @@
       then: function (b) { b.released = { at: d(-6) + ' 00:05', due: d(-7) }; b.notes.push({ at: d(-6) + ' 00:05', by: 'System', text: 'Stand released automatically: the quotation was valid until ' + fd(d(-7)) + ' and no payment came in.' }); } });
     // 20. cancelled late: the deposit kept as credit for another stay
     bk({ first: 'Megan', last: 'Smit', ci: d(7), co: d(9), method: 'eft', pay: 'deposit', area: 'fenced', status: 'cancelled', created: d(-35),
-      notes: [[d(-10), 'Sherri', 'Cancelled 17 days before arrival because of a family emergency. Kept the deposit as credit for a stay in the next 12 months.']],
-      then: function (b) { db.credits.push(creditFix({ id: 'c-smit', email: b.guest.email, name: guestName(b), amt: paid(b), used: 0, from: b.ref, d: d(-10), until: d(355) }, db.credits)); } });
+      notes: [[d(-10), 'Sherri', 'Cancelled 17 days before arrival because of a family emergency. Kept the deposit as credit for another stay.']],
+      then: function (b) { db.credits.push(creditFix({ id: 'c-smit', email: b.guest.email, name: guestName(b), amt: paid(b), used: 0, from: b.ref, d: d(-10) }, db.credits)); } });
     // 21. two more adults added after paying in full: money outstanding again
     bk({ first: 'Pieter', last: 'Swart', ci: d(9), co: d(11), adults: 4, priced: { adults: 2, pens: 0, kids: 0 }, method: 'eft', pay: 'full', area: 'unfenced',
       then: function (b) { var q = quote(b.stand, b.ci, b.co, b, b.extras), add2 = q.eft - b.eft; b.eft = q.eft; b.card = q.card; b.total = b.eft;
