@@ -703,6 +703,7 @@ button.rp-now-item:hover { background: rgba(232, 115, 28, .06); }
 
 /* attachments */
 .att-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.att-row .pop-other { flex: 1 1 100%; overflow-wrap: anywhere; }   /* proof of payment sent from another email address */
 .att { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 7px 11px; text-align: left; color: var(--ink); max-width: 100%; }
 .att:hover { border-color: var(--sun); }
 .att .ic { color: var(--sun-d); }

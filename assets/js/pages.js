@@ -236,7 +236,7 @@
           return '<article class="rate-card ' + (dk ? 'dark' : (/self/i.test(s.title) ? 'green' : '')) + (wide ? ' rates-full' : '') + '" data-reveal>' +
             '<header><h3>' + K.esc(s.title) + '</h3>' + (dk ? '<p>Paid to Dinokeng Game Reserve at the gate or online, not part of your Kyleu booking.</p>' : '') + '</header>' +
             '<ul class="rate-list"' + (wide && mode !== 'dinokeng' ? ' style="columns:2;column-gap:40px"' : '') + '>' + s.items.map(function (it) {
-              return '<li style="break-inside:avoid"><span class="lbl"><b>' + K.esc(it.name || it.label) + '</b>' + (it.note ? '<small>' + K.esc(it.note) + '</small>' : '') + '</span><span class="amt">' + (isNaN(it.amount) ? '' : (it.amount === 0 ? 'Free' : dk ? K.money(it.amount) : K.dual(it.amount, P))) + '</span></li>';
+              return '<li style="break-inside:avoid"><span class="lbl"><b>' + K.esc(it.name || it.label) + '</b>' + (it.note && !(it.amount === 0 && /^free$/i.test(String(it.note).trim())) ? '<small>' + K.esc(it.note) + '</small>' : '') + '</span><span class="amt">' + (isNaN(it.amount) ? '' : (it.amount === 0 ? 'Free' : dk ? K.money(it.amount) : K.dual(it.amount, P))) + '</span></li>';
             }).join('') + '</ul></article>';
         }).join('');
         box.innerHTML = html; K.reveal(box);
@@ -270,6 +270,7 @@
         // a story from the reserve, written in the admin: the same article page as camp news
         var dit = dq && rr[1].filter(function (it) { return (it.slug || it.id) === dq && it.article && !it.hidden; })[0];
         if (dit) { post = { title: dit.title, slug: dq, date: dit.date, image: dit.image, summary: (dit.text || '').split(/\n\s*\n/)[0], tags: [dit.type || 'Dinokeng news'], body: dit.article, html: true, dgr: dit }; }
+        if (!post && (q || dq) && listWrap) { var nf = document.createElement('p'); nf.className = 'rule-note'; nf.setAttribute('role', 'status'); nf.innerHTML = '<svg><use href="#i-info"/></svg><span>That story is no longer on the website. Here is the latest news.</span>'; listWrap.insertBefore(nf, listWrap.firstChild); }
         if (post) {
           listWrap.hidden = true; art.hidden = false;
           document.title = post.title + ' | Kyleu Bush Camp';
@@ -344,6 +345,8 @@
         e.preventDefault();
         var ok = true;
         $$('[required]', f).forEach(function (inp) { var bad = !inp.value.trim() || (inp.type === 'email' && !/^\S+@\S+\.\S+$/.test(inp.value)); inp.closest('.field').classList.toggle('err', bad); if (bad) ok = false; });
+        var ph = f.elements.phone;   // optional, but if it is filled in it must be a real number
+        if (ph) { var pbad = !!ph.value.trim() && !K.phoneOk(ph.value); ph.closest('.field').classList.toggle('err', pbad); if (pbad) { ok = false; K.toast(K.PHONE_BAD); ph.focus(); return; } }
         if (!ok) { K.toast('Please fill in the highlighted fields'); return; }
         f.innerHTML = '<div class="success"><div class="success-badge"><svg class="ring" viewBox="0 0 110 110" fill="none" stroke="#3f7d3a" stroke-width="6" stroke-linecap="round"><circle cx="55" cy="55" r="50"/><path d="M34 57l14 14 28-30"/></svg></div><h3>Message sent. Thank you!</h3><p class="muted">We\'ll get back to you within a day. For anything urgent, WhatsApp us on 060 458 4478.</p><p class="muted" style="font-size:.8rem">(Demo: nothing was actually sent.)</p></div>';
       });

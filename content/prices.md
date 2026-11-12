@@ -13,13 +13,13 @@
 Rates year: 2026
 
 ## Ablution stands (Fenced & Unfenced)
-- Weekend per person per night: R245 · Fri, Sat & Sun nights and long weekends (minimum 2 nights)
+- Weekend per person per night: R245 · Fri, Sat & Sun nights and the night before a public holiday (minimum 2 nights)
 - Weekday per person per night: R160 · Mon to Thu nights
 - Pensioner weekday per person per night: R115 · Mon to Thu nights
 - Children under 12: R0 · Free
 
 ## Self-sufficient stands (Unfenced, on the spruit)
-- Weekend per person per night: R180 · Fri, Sat & Sun nights and long weekends (minimum 2 nights)
+- Weekend per person per night: R180 · Fri, Sat & Sun nights and the night before a public holiday (minimum 2 nights)
 - Weekday per person per night: R100 · Mon to Thu nights
 - Pensioner weekday per person per night: R100 · Mon to Thu nights
 - Children under 12: R0 · Free

@@ -25,17 +25,24 @@
   document.addEventListener('DOMContentLoaded', function () {
     var f = $('form[data-pop]'); if (!f) return;
     var ref = f.elements.ref, email = f.elements.email, found = $('[data-found]', f), fileIn = $('[data-file]', f), drop = $('[data-drop]', f), out = $('[data-picked]', f);
-    try { var q = new URLSearchParams(location.search); if (q.get('ref')) ref.value = q.get('ref').toUpperCase(); if (q.get('email')) email.value = q.get('email'); } catch (e) {}
+    try {
+      var q = new URLSearchParams(location.search); if (q.get('ref')) ref.value = q.get('ref').toUpperCase();
+      // the email comes from this browser's own memory; an old link that still has it in the address works too, and is then tidied away
+      var em = q.get('email') || sessionStorage.getItem('kyleu-pop-email') || ''; if (em) email.value = em;
+      if (q.get('email')) { q.delete('email'); history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q.toString() : '')); }
+    } catch (e) {}
+    function sameEmail(b) { return !!b && !!b.email && email.value.trim().toLowerCase() === String(b.email).toLowerCase(); }
 
     function check() {
       var b = findBooking(ref.value);
       if (!ref.value.trim() || key(ref.value).length < 6) { found.hidden = true; return; }
       found.hidden = false;
       found.className = 'pop-found ' + (b ? 'ok' : 'warn');
-      found.innerHTML = b ? '<svg><use href="#i-check"/></svg><span>Booking <b>' + esc(b.ref) + '</b> found: ' + esc(standName(b.stand)) + ', ' + nice(b.ci) + ' to ' + nice(b.co) + '.</span>'
-        : '<svg><use href="#i-info"/></svg><span>We can\'t find that reference yet. Check it on your invoice, or send it anyway and we\'ll match it by hand.</span>';
+      // the stand and dates are only shown to the person whose email is on the booking
+      found.innerHTML = b ? '<svg><use href="#i-check"/></svg><span>Booking <b>' + esc(b.ref) + '</b> found' + (sameEmail(b) ? ': ' + esc(standName(b.stand)) + ', ' + nice(b.ci) + ' to ' + nice(b.co) + '.' : '.' + (/^\S+@\S+\.\S+$/.test(email.value.trim()) ? ' That is not the email address on the booking. You can still send your proof of payment: we confirm with the person who booked.' : '')) + '</span>'
+        : '<svg><use href="#i-info"/></svg><span>We can\'t find that reference yet. Check it on your booking email, or send it anyway and we\'ll match it by hand.</span>';
     }
-    ref.addEventListener('input', check); check();
+    ref.addEventListener('input', check); email.addEventListener('input', check); check();
 
     function pick(file) {
       if (!file) return;
@@ -72,13 +79,15 @@
       demoCopy(picked, function (data, type) {
         var now = new Date(), pad = function (n) { return String(n).padStart(2, '0'); };
         var at = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes());
-        var item = { id: 'p' + now.getTime().toString(36), ref: ref.value.trim().toUpperCase(), email: email.value.trim(), note: f.elements.note.value.trim(), at: at, file: { name: picked.name, size: picked.size, type: type, data: data } };
+        var bk = findBooking(ref.value), match = sameEmail(bk);
+        // the reference is saved the way the booking has it (KY265901 becomes KY26 5901), so it lands on the right booking
+        var item = { id: 'p' + now.getTime().toString(36), ref: bk ? bk.ref : ref.value.trim().toUpperCase(), email: email.value.trim(), emailMatch: bk ? match : undefined, note: f.elements.note.value.trim(), at: at, file: { name: picked.name, size: picked.size, type: type, data: data } };
         var list = []; try { list = JSON.parse(localStorage.getItem('kyleu-web-pop') || '[]'); } catch (x) {}
         list.push(item);
         try { localStorage.setItem('kyleu-web-pop', JSON.stringify(list.slice(-10))); }
         catch (x) { item.file.data = ''; list[list.length - 1] = item; try { localStorage.setItem('kyleu-web-pop', JSON.stringify(list.slice(-10))); } catch (y) {} }
         f.innerHTML = '<div class="success"><div class="success-badge"><svg class="ring" viewBox="0 0 110 110" fill="none" stroke="#3f7d3a" stroke-width="6" stroke-linecap="round"><circle cx="55" cy="55" r="50"/><path d="M34 57l14 14 28-30"/></svg></div>' +
-          '<h2>Thank you, we\'ve got it</h2><p class="muted">Your proof of payment is on booking <b>' + esc(item.ref) + '</b>. We\'ll check the bank and email <b>' + esc(item.email) + '</b> as soon as your booking is confirmed, usually within one working day. Your stand is kept for you while we check.</p>' +
+          '<h2>Thank you, we\'ve got it</h2><p class="muted">Your proof of payment is on booking <b>' + esc(item.ref) + '</b>. We\'ll check the bank and email ' + (bk && !match ? 'the person who made the booking' : '<b>' + esc(item.email) + '</b>') + ' as soon as your booking is confirmed, usually within one working day. Your stand is kept for you while we check.</p>' +
           '<div class="cta-actions" style="justify-content:center"><a class="btn" href="index.html">Back to the website</a><a class="btn btn-ghost" href="contact.html">Directions to camp</a></div>' +
           '<div class="demo-flag" style="margin:22px 0 0;text-align:left"><svg><use href="#i-info"/></svg><span>Demo mode: nothing was sent. Open the admin demo (Staff link in the footer) in this browser to see it on the booking.</span></div></div>';
         window.scrollTo({ top: f.getBoundingClientRect().top + scrollY - 120, behavior: 'smooth' });

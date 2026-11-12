@@ -232,7 +232,29 @@
   // ---------- public API ----------
   var K = window.Kyleu = window.Kyleu || {};
   K.social = socialLocal;
-  K.money = money; K.markdown = markdown; K.norm = norm; K.AREA = AREA; K.esc = esc;
+  K.money = money; K.markdown = markdown; K.norm = norm; K.AREA = AREA;
+  // safe inside text and inside value="..." (quotes too, so a name like Jan "Boet" is not cut off in a form box)
+  K.esc = function (s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
+  // one phone check everywhere: a South African number has 10 digits and starts with 0 (082 123 4567),
+  // a number from another country starts with + or 00 and has 9 to 15 digits. No letters.
+  K.phoneOk = function (v) {
+    v = String(v || '').trim(); if (!v || /[^\d\s()+.\-]/.test(v)) return false;
+    var intl = /^\s*(\+|00)/.test(v), d = v.replace(/\D/g, ''); if (/^00/.test(d)) d = d.slice(2);
+    if (intl) return d.length >= 9 && d.length <= 15;
+    return (d.length === 10 && d.charAt(0) === '0') || (d.length === 11 && d.slice(0, 2) === '27');
+  };
+  K.PHONE_BAD = 'Please check the number: a South African number has 10 digits, like 082 123 4567. From another country, start with + and your country code.';
+  // a real name: at least two letters, no digits
+  K.nameOk = function (v) { v = String(v || '').trim(); return v.replace(/[^A-Za-zÀ-ÿ]/g, '').length >= 2 && !/\d/.test(v); };
+  // who is coming, in words: "14 adults, 2 pensioners and 1 child"
+  K.peopleText = function (g) {
+    var p = [], n = function (k, one, many) { var x = +g[k] || 0; if (x) p.push(x + ' ' + (x === 1 ? one : many)); };
+    n('adults', 'adult', 'adults'); n('pens', 'pensioner', 'pensioners'); n('kids', 'child', 'children');
+    return p.length > 1 ? p.slice(0, -1).join(', ') + ' and ' + p[p.length - 1] : (p[0] || 'nobody yet');
+  };
+  // stand sizes: "guests" is the usual number, "max" the most it can ever take (both set per stand in the admin).
+  // Between the two the guest may book and Kyleu checks; above max the website stops them.
+  K.standMax = function (st) { var g = (st && st.guests) || 8; return Math.max(g, (st && st.max) || Math.ceil(g * 1.25)); };
   // Card vs EFT: prices.md holds the normal (EFT) price; card payments add the card fee.
   K.cardFee = function (P) { return P ? P.num('Booking rules', 'Card payment fee percentage', 3) : 3; };
   K.toCard = function (n, P) { return Math.round(n * (1 + K.cardFee(P) / 100)); };
@@ -334,7 +356,13 @@
     });
     return list;
   }
-  K.stands = function () { return load('stands').then(parseStands).then(withMap); };
+  // stand sizes set in the admin (Stands): { standId: { guests, max } }
+  function withSizes(list) {
+    var o = webContent().stands || {};
+    list.forEach(function (s) { var x = o[s.id]; if (x) { if (+x.guests > 0) s.guests = +x.guests; if (+x.max > 0) s.max = +x.max; } s.max = K.standMax(s); });
+    return list;
+  }
+  K.stands = function () { return load('stands').then(parseStands).then(withMap).then(withSizes); };
   K.standsFile = function () { return load('stands').then(parseStands); };   // stands.md only (the map editor uses this)
   // Blog: reads content/blog.md by default. Once the site lives on WordPress,
   // set "Blog source: wordpress" in content/settings.md and posts written in

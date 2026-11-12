@@ -41,6 +41,7 @@
 
     function tell() { if (opts.onChange) opts.onChange(ci, co); }
     function setHint() {
+      hint.classList.remove('bad');
       if (!ci) hint.textContent = 'Tap the day you arrive.';
       else if (!co) hint.textContent = 'Now tap the day you go home. Tap ' + fmt(ci, { day: 'numeric', month: 'short' }) + ' again to start over.';
       else { var n = nightsBetween(ci, co); hint.textContent = n + ' night' + (n > 1 ? 's' : '') + ': ' + fmt(ci, SHORT) + ' to ' + fmt(co, SHORT) + '.'; }
@@ -68,7 +69,7 @@
         if (isEnd) cls.push(preview ? 'hend' : 'end');
         if (isStart && end) cls.push('has-band');
         if (inRange) { cls.push(preview ? 'hin' : 'in'); idx++; }
-        if (d.getDay() === 5 || d.getDay() === 6 || d.getDay() === 0) cls.push('wknd');   // weekend-rate nights: Friday, Saturday and Sunday
+        if (opts.isWeekend ? opts.isWeekend(d) : (d.getDay() === 5 || d.getDay() === 6 || d.getDay() === 0)) cls.push('wknd');   // weekend-rate nights: Friday, Saturday, Sunday and the night before a public holiday
         var n = isEnd && ci ? nightsBetween(ci, end) : 0;
         html += '<span class="' + cls.join(' ') + '"' + (inRange ? ' style="--i:' + idx + '"' : '') + '><button type="button" class="dp-d" data-d="' + iso(d) + '"' + (past ? ' disabled' : '') +
           ' aria-label="' + fmt(d, LONG) + (isStart ? ', arrival' : '') + (isEnd && !preview ? ', departure' : '') + '"' + (isStart || (isEnd && !preview) ? ' aria-pressed="true"' : '') + '>' + dd + '</button>' +
@@ -76,6 +77,19 @@
       }
       grid.innerHTML = html; grid.classList.toggle('previewing', preview);
       setHint();
+    }
+    // while the pointer moves, only the classes change: the day buttons stay where they are,
+    // so a tap or a quick click always lands on the day that was pressed (a redraw here lost taps on phones)
+    function paintHover() {
+      var end = !co && ci && hover && hover > ci ? hover : null, idx = 0;
+      Array.prototype.forEach.call(grid.querySelectorAll('.dp-c:not(.dp-blank)'), function (c) {
+        var b = c.querySelector('.dp-d'), d = parseIso(b.dataset.d), inR = !!end && d > ci && d < end, isEnd = same(d, end), nn = c.querySelector('.dp-nn');
+        c.classList.toggle('hin', inR); c.classList.toggle('hend', isEnd); if (same(d, ci)) c.classList.toggle('has-band', !!end);
+        if (inR) c.style.setProperty('--i', ++idx); else c.style.removeProperty('--i');
+        if (nn) nn.remove();
+        if (isEnd) { var n = nightsBetween(ci, end), sm = document.createElement('small'); sm.className = 'dp-nn'; sm.textContent = n + ' night' + (n > 1 ? 's' : ''); c.appendChild(sm); }
+      });
+      grid.classList.toggle('previewing', !!end);
     }
     function parseIso(s) { var p = s.split('-'); return new Date(+p[0], p[1] - 1, +p[2]); }
     function focusDay(d) { var b = grid.querySelector('[data-d="' + iso(d) + '"]'); if (b && !b.disabled) b.focus(); }
@@ -85,7 +99,12 @@
       if (!ci) { ci = d; co = null; }
       else if (same(d, ci)) { ci = null; co = null; }          // tap the arrival again: start over
       else if (d < ci) { ci = d; }                              // an earlier day moves the arrival
-      else { co = d; tell(); hover = null; draw(); lockIn(); return; }
+      else {
+        // a stay that is not allowed (one weekend night on its own) is never locked in: say why and wait for another day
+        var why = opts.check ? opts.check(ci, d) : '';
+        if (why) { hover = null; draw(); hint.textContent = why; hint.classList.add('bad'); focusDay(d); return; }
+        co = d; tell(); hover = null; draw(); lockIn(); return;
+      }
       hover = null; tell(); draw(); focusDay(d);
     }
     // both dates are in: the band sweeps across, the circles pop, then the calendar closes
@@ -120,13 +139,15 @@
     }
 
     grid.addEventListener('click', function (e) { var b = e.target.closest('.dp-d'); if (b && !b.disabled) pick(parseIso(b.dataset.d)); });
+    var touchAt = 0;   // a finger tap also sends a pretend mouse move: ignore those
+    grid.addEventListener('touchstart', function () { touchAt = Date.now(); }, { passive: true });
     grid.addEventListener('mouseover', function (e) {
-      if (!ci || co || busy) return;
+      if (!ci || co || busy || Date.now() - touchAt < 1200) return;
       var c = e.target.closest('.dp-c'); if (!c || c.classList.contains('dp-blank')) return;
       var b = c.querySelector('.dp-d'), d = b && !b.disabled ? parseIso(b.dataset.d) : null;
-      if (!same(d, hover)) { hover = d; draw(); }
+      if (!same(d, hover)) { hover = d; paintHover(); }
     });
-    grid.addEventListener('mouseleave', function () { if (hover) { hover = null; draw(); } });
+    grid.addEventListener('mouseleave', function () { if (hover) { hover = null; paintHover(); } });
     grid.addEventListener('keydown', function (e) {
       var b = e.target.closest('.dp-d'); if (!b) return;
       var step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key]; if (!step) return;

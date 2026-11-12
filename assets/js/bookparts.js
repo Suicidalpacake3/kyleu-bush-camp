@@ -18,14 +18,16 @@
   K.carsEditor = function (box, o) {
     o = o || {};
     var n = o.count == null ? 1 : o.count, total = o.total || 0, auto = '';
-    var cars = (o.cars || []).map(function (c) { return { reg: c.reg || '', driver: c.driver || '', guests: (c.guests || []).slice() }; });
-    function blank() { return { reg: '', driver: '', guests: [] }; }
+    var cars = (o.cars || []).map(function (c) { return { reg: c.reg || '', driver: c.driver || '', guests: (c.guests || []).slice(), minors: (c.minors || []).slice() }; });
+    var isMinor = function (c, name) { var k = String(name || '').trim().toLowerCase(); return !!k && (c.minors || []).some(function (m) { return String(m).trim().toLowerCase() === k; }); };
+    function blank() { return { reg: '', driver: '', guests: [], minors: [] }; }
     function read() {
       $$('.car-card', box).forEach(function (el, i) {
         var c = cars[i]; if (!c) return;
         c.reg = el.querySelector('[name=car-reg]').value.toUpperCase();
         c.driver = el.querySelector('[name=car-driver]').value;
         c.guests = $$('[name=car-guest]', el).map(function (x) { return x.value; });
+        c.minors = $$('.cc-p', el).filter(function (r) { var t = r.querySelector('[name=car-minor]'); return t && t.checked && r.querySelector('[name=car-guest]').value.trim(); }).map(function (r) { return r.querySelector('[name=car-guest]').value.trim(); });
       });
     }
     function named() { var k = 0; cars.slice(0, n).forEach(function (c) { if (c.driver.trim()) k++; c.guests.forEach(function (g) { if (g.trim()) k++; }); }); return k; }
@@ -51,7 +53,7 @@
           '<div class="cc-grid"><label class="cc-f"><span>Registration</span><input name="car-reg" value="' + esc(c.reg) + '" placeholder="e.g. CA 123-456" autocomplete="off" aria-label="' + lab + ' registration"></label>' +
           '<label class="cc-f"><span>Driver\'s full name</span><input name="car-driver" value="' + esc(c.driver) + '" placeholder="Who is driving?" aria-label="' + lab + ' driver"></label></div>' +
           '<div class="cc-pass"><span class="cc-pl">Passengers in this vehicle <small>(everyone else in it, children too)</small></span>' +
-          c.guests.map(function (g, j) { return '<div class="cc-p"><span class="cc-pn">' + (j + 1) + '</span><input name="car-guest" value="' + esc(g) + '" placeholder="Passenger\'s full name" aria-label="' + lab + ' passenger ' + (j + 1) + '"><button type="button" class="cc-x" data-rm="' + j + '" aria-label="Remove passenger ' + (j + 1) + '">' + svg('i-x') + '</button></div>'; }).join('') +
+          c.guests.map(function (g, j) { return '<div class="cc-p"><span class="cc-pn">' + (j + 1) + '</span><input name="car-guest" value="' + esc(g) + '" placeholder="Passenger\'s full name" aria-label="' + lab + ' passenger ' + (j + 1) + '"><label class="cc-u18" title="Tick this for anyone under 18"><input type="checkbox" name="car-minor"' + (isMinor(c, g) ? ' checked' : '') + '> Under 18</label><button type="button" class="cc-x" data-rm="' + j + '" aria-label="Remove passenger ' + (j + 1) + '">' + svg('i-x') + '</button></div>'; }).join('') +
           '<button type="button" class="cc-add" data-add>' + svg('i-plus') + (c.guests.length ? 'Add another passenger' : 'Add a passenger') + '</button></div></div>';
       }).join('') + '<p class="cars-count" data-cars-count role="status"></p>';
       count();
@@ -66,6 +68,7 @@
       });
       box.addEventListener('input', function (e) {
         if (e.target.name === 'car-driver' && e.target.closest('.car-card[data-i="0"]')) auto = '';
+        if (e.target.name === 'car-minor') { read(); if (o.onChange) o.onChange(); return; }
         read(); count(); if (o.onChange) o.onChange();
       });
       box.addEventListener('keydown', function (e) {   // Enter in a passenger box adds the next passenger instead of sending the form
@@ -84,7 +87,7 @@
       suggestDriver: function (name) { read(); if (!n || !cars[0]) return; if (!cars[0].driver.trim() || cars[0].driver === auto) { cars[0].driver = auto = name; var el = box.querySelector('.car-card[data-i="0"] [name=car-driver]'); if (el) el.value = name; count(); } },
       get: function () {
         read();
-        return { count: n, cars: cars.slice(0, n).map(function (c) { return { reg: c.reg.trim(), driver: c.driver.trim(), guests: c.guests.map(function (g) { return g.trim(); }).filter(Boolean) }; }) };
+        return { count: n, cars: cars.slice(0, n).map(function (c) { var gs = c.guests.map(function (g) { return g.trim(); }).filter(Boolean); return { reg: c.reg.trim(), driver: c.driver.trim(), guests: gs, minors: gs.filter(function (g) { return isMinor(c, g); }) }; }) };
       },
       named: function () { read(); return named(); }
     };
@@ -107,23 +110,32 @@
   // the same invoice lines as a new booking: weekend nights and weekday nights with their dates and rate, children free
   K.stayLines = function (P, area, name, ci, co, g) {
     var ss = area === 'self-sufficient', sec = ss ? 'Self-sufficient' : 'Ablution stands';
-    var R = { wk: P.num(sec, 'Weekend per person per night', ss ? 180 : 245), wd: P.num(sec, 'Weekday per person per night', ss ? 100 : 160), pe: P.num(sec, 'Pensioner weekday per person per night', ss ? 100 : 115) };
+    var R = { wk: P.num(sec, 'Weekend per person per night', ss ? 180 : 245), wd: P.num(sec, 'Weekday per person per night', ss ? 100 : 160), pe: P.num(sec, 'Pensioner weekday per person per night', ss ? 100 : 115), kid: P.num(sec, 'Children under 12', 0) };
     var p = function (s) { var a = s.split('-'); return new Date(+a[0], a[1] - 1, +a[2]); }, iso = function (d) { return new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10); };
-    var grp = { wk: [], wd: [] }, amt = { wk: 0, wd: 0 }, pensUsed = false, paying = g.adults + g.pens;
+    var grp = { wk: [], wd: [], pe: [], rest: [] }, all = 0;
     for (var d = p(ci), end = p(co); d < end; d.setDate(d.getDate() + 1)) {
       var dow = d.getDay(), nx = new Date(d); nx.setDate(nx.getDate() + 1);
-      var wk = (P.wkDays ? P.wkDays.indexOf(dow) >= 0 : dow === 5 || dow === 6 || dow === 0) || !!P.holidays[iso(nx)], k = wk ? 'wk' : 'wd';
-      var pr = (!wk && dow >= 1 && dow <= 4) ? R.pe : (wk ? R.wk : R.wd); if (g.pens && pr !== (wk ? R.wk : R.wd)) pensUsed = true;
-      grp[k].push(new Date(d)); amt[k] += g.adults * (wk ? R.wk : R.wd) + g.pens * pr;
+      var wkDay = P.wkDays ? P.wkDays.indexOf(dow) >= 0 : dow === 5 || dow === 6 || dow === 0, wk = wkDay || !!P.holidays[iso(nx)];
+      var x = { d: new Date(d), eve: wk && !wkDay };   // eve: a weekday night charged at the weekend rate because the next day is a public holiday
+      all++; grp[wk ? 'wk' : 'wd'].push(x);
+      if (!wk) grp[dow >= 1 && dow <= 4 ? 'pe' : 'rest'].push(x);
     }
-    var out = [];
-    ['wk', 'wd'].forEach(function (k) {
-      var ds = grp[k]; if (!ds.length || !paying) return;
-      var dl = ds.map(function (d, i) { return d.toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric' }) + (i === ds.length - 1 || d.getMonth() !== ds[i + 1].getMonth() ? ' ' + d.toLocaleDateString('en-ZA', { month: 'short' }) : ''); });
-      var dtxt = dl.length > 1 ? dl.slice(0, -1).join(', ') + ' & ' + dl[dl.length - 1] : dl[0], word = k === 'wk' ? 'weekend' : 'weekday';
-      out.push({ t: name + ' · ' + word + ' night' + (ds.length > 1 ? 's' : '') + ': ' + dtxt + ' · ' + paying + ' adult' + (paying === 1 ? '' : 's') + (k === 'wd' && pensUsed ? ' (pensioner rate Mon-Thu)' : ' at ' + K.money(k === 'wk' ? R.wk : R.wd) + ' per person'), q: ds.length, u: Math.round(amt[k] / ds.length), amt: amt[k], tag: 'stay' });
-    });
-    if (g.kids) out.push({ t: 'Child' + (g.kids === 1 ? '' : 'ren') + ' under 12 (free)', q: g.kids, amt: 0, free: true, tag: 'stay' });
+    var dates = function (ds) {
+      var dl = ds.map(function (x, i) { return x.d.toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric' }) + (i === ds.length - 1 || x.d.getMonth() !== ds[i + 1].d.getMonth() ? ' ' + x.d.toLocaleDateString('en-ZA', { month: 'short' }) : '') + (x.eve ? ' (night before a public holiday)' : ''); });
+      return dl.length > 1 ? dl.slice(0, -1).join(', ') + ' & ' + dl[dl.length - 1] : dl[0];
+    };
+    var out = [], add = function (word, ds, a, pn, rate, note) {
+      var n = a + pn; if (!ds.length || !n) return;
+      out.push({ t: name + ' · ' + word + ' night' + (ds.length > 1 ? 's' : '') + ': ' + dates(ds) + ' · ' + K.peopleText({ adults: a, pens: pn }) + ' at ' + K.money(rate) + ' per person' + (note || ''), q: ds.length, u: n * rate, amt: ds.length * n * rate, tag: 'stay' });
+    };
+    add('weekend', grp.wk, g.adults, g.pens, R.wk);
+    if (g.pens && grp.pe.length && R.pe !== R.wd) {   // pensioners pay less on Monday to Thursday nights: a line of their own
+      add('weekday', grp.wd, g.adults, 0, R.wd);
+      add('weekday', grp.pe, 0, g.pens, R.pe, ' (pensioner rate, Mon to Thu)');
+      add('weekday', grp.rest, 0, g.pens, R.wd);
+    } else add('weekday', grp.wd, g.adults, g.pens, R.wd);
+    if (g.kids && R.kid) out.push({ t: 'Child' + (g.kids === 1 ? '' : 'ren') + ' under 12 at ' + K.money(R.kid) + ' per night', q: all, u: g.kids * R.kid, amt: all * g.kids * R.kid, tag: 'stay' });
+    else if (g.kids) out.push({ t: 'Child' + (g.kids === 1 ? '' : 'ren') + ' under 12 (free)', q: g.kids, amt: 0, free: true, tag: 'stay' });
     return out;
   };
 

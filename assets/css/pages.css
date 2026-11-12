@@ -1436,3 +1436,35 @@ a.yt-lite { text-decoration: none; }
 .follow-in { display: flex; align-items: center; justify-content: space-between; gap: 18px 30px; flex-wrap: wrap; padding: 22px clamp(18px, 3vw, 34px); background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); }
 .follow-in .eyebrow { margin-bottom: 4px; }
 .follow-in p { margin: 0; font-family: var(--font-display); font-size: 1.25rem; color: var(--bark); }
+
+/* ---------- booking fixes: stand size notes, people on the stand sheet, clearer checkout ---------- */
+.size-note.bad { background: #fdecea; border-color: #f3c1ba; color: #7a251b; }
+.size-note.bad > svg { color: var(--bad); }
+.rule-note .size-acts .btn svg { color: inherit; margin-top: 0; width: 18px; height: 18px; }
+.size-note > span { display: block; }
+.size-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.rule-note .size-acts .btn { margin-left: 0; }
+.sheet-people .bw-person { padding: 12px 14px; }
+.sheet-people .bw-person b { font-size: 1.02rem; }
+.sheet-people .bw-stepper button { width: 42px; height: 42px; }
+.sheet-section [data-size-note]:not(:empty) { margin-top: 12px; }
+.sheet-section.attn { animation: bw-attn 1.4s ease 2; border-radius: 16px; }
+.dp-hint.bad, .dp-inline .dp-hint.bad { color: var(--bad); font-weight: 800; }
+.check-sum .size-warn { background: #fff4e3; border: 1px solid #f2d2a4; color: #6b4314; border-radius: 12px; padding: 10px 14px; font-size: .9rem; }
+.mini-bd { flex: 1 1 100%; margin-top: 4px; }
+.mini-bd summary { cursor: pointer; font-weight: 800; color: var(--ember); font-size: .88rem; }
+.mini-bd .breakdown { margin-top: 8px; }
+/* the confirmation uses the full width of the box (the summary column is hidden then) */
+.modal-card.done { grid-template-columns: minmax(0, 1fr); }
+/* three cards in a row fill the row */
+@media (min-width: 1081px) { .features:has(> .feature:nth-child(3):last-child) { grid-template-columns: repeat(3, 1fr); } }
+/* passengers under 18 */
+.cc-p .cc-u18 { display: inline-flex; align-items: center; gap: 6px; flex: none; font-size: .85rem; font-weight: 700; color: var(--ink-soft); white-space: nowrap; cursor: pointer; }
+.cc-p .cc-u18 input { width: 18px; height: 18px; min-height: 0; padding: 0; flex: none; accent-color: var(--sun); }
+@media (max-width: 520px) { .cc-p { flex-wrap: wrap; } .cc-p > input[name=car-guest] { flex: 1 1 60%; width: auto; } .cc-p .cc-u18 { order: 3; margin-left: 34px; } }
+.ind-minors .ind-hint { margin: 0 0 8px; }
+/* booking page */
+.mg-st.bad { background: rgba(178,58,42,.16); color: #7a251b; }
+.mg-cx { margin: 14px 0 12px; }
+/* map pins: the same look, a bigger place to tap */
+@media (max-width: 760px) { .campmap .pin::before { content: ""; position: absolute; inset: -9px; border-radius: 50%; } }

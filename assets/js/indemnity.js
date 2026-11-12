@@ -7,7 +7,8 @@
    - K.ind.pdf(recs, o): one signed form per person, or many with a register page (for the insurer)
    Every signed form keeps its own copy of the exact wording that was signed.
    Who signs: every adult signs for themselves. A parent or guardian signs for anyone under 18
-   by ticking them under "Under 18s in my care".
+   by ticking them under "Under 18s in my care". Only people marked as under 18 on the booking can be ticked,
+   never an adult, and each under 18 is signed for once, by one parent or guardian.
    Demo: signed forms are kept in this browser ("kyleu-indemnities"), where the admin demo reads them.
    Live version: they are saved on the server with the time and IP address.
    ========================================================= */
@@ -32,11 +33,11 @@
   var DEFAULT = [
     'KYLEU Bush Camp is situated in the Dinokeng Big 5 Game Reserve. Dangerous animals walk around freely. Please take the time to read through the terms and conditions of KYLEU Bush Camp. It is your responsibility to familiarise yourself with the rules and regulations of the camp in order to ensure a pleasant stay.',
     '## Visitor\'s responsibility\n- Insurance of personal items\n- Supervise children and minors staying with you\n- Respect the privacy of other guests\n- Report any irregular deeds by fellow guests to KYLEU management\n- Use the available facilities with responsibility and accountability',
-    '## Check-in times\n- Arrival 13:00, departure 11:00',
+    '## Check-in times\n- Arrival from 13:00 (flexible: most guests arrive between 13:00 and 15:00), departure by 11:00',
     '## Open (unfenced) bush camp\nEach stand is spacious and surrounded by bushveld where the Big 5 and other animals are free to roam. This area of KYLEU Bush Camp is **not fenced**. Each stand has a private ablution, but no electricity.\n**Camping at the KYLEU open bush camp is ENTIRELY AT YOUR OWN RISK.**',
     '## Fenced bush camp\nEach stand is spacious, positioned near the fence for animal viewing, and surrounded by bushveld. You are welcome to stroll through the camp at your leisure. Each stand has a private ablution, but no electricity.',
     '## Self-sufficient sites on the spruit\nThese campsites are **UNFENCED** and have **NO FACILITIES**: no ablution, which means no water and no electricity, and no braai stand (only a small fire boma with a grill). You need to be completely self-sufficient.',
-    '## Please note\n- Each stand allows for 4 to 8 guests per night.\n- Stands are 40 to 80 m from each other.\n- Each ablution has a shower, toilet, hand basin, a wash-up for dishes and hot water.\n- The ablutions have solar-powered LED lights. We cannot ensure that there is sunshine every day, so please bring additional lighting.\n- There is **NO ELECTRICITY** at the campsites.\n- Each stand has braai facilities, and 1 complimentary bag of wood is provided for each day of your stay. Extra wood is available for purchase at KYLEU.\n- Only make a fire in the designated area. **NO OPEN FIRES ALLOWED.** Make sure fires are completely put out before you leave the area or go to bed.\n- No firewood or kindling may be collected from the surrounding bushveld.\n- Do not attempt to touch or play with any snakes. Stay calm and stay still until the snake moves away. In most cases, snakes do not attack people. Please report any sightings to management.\n- All animals are wild and must be treated with respect.',
+    '## Please note\n- Each stand takes a set number of guests, shown with the stand: usually up to 8, and up to 12 on the biggest stands.\n- Stands are 40 to 80 m from each other.\n- Each ablution has a shower, toilet, hand basin, a wash-up for dishes and hot water.\n- The ablutions have solar-powered LED lights. We cannot ensure that there is sunshine every day, so please bring additional lighting.\n- There is **NO ELECTRICITY** at the campsites.\n- Each stand has braai facilities, and 1 complimentary bag of wood is provided for each day of your stay. Extra wood is available for purchase at KYLEU.\n- Only make a fire in the designated area. **NO OPEN FIRES ALLOWED.** Make sure fires are completely put out before you leave the area or go to bed.\n- No firewood or kindling may be collected from the surrounding bushveld.\n- Do not attempt to touch or play with any snakes. Stay calm and stay still until the snake moves away. In most cases, snakes do not attack people. Please report any sightings to management.\n- All animals are wild and must be treated with respect.',
     '## General rules\n- No pets are allowed on the property.\n- Smokers must always take care when putting out a cigarette.\n- Day visitors (as your guests) are allowed only by prior arrangement with management, at an additional charge, and must leave the camp by 18:00.\n- **NO MUSIC** allowed. Zero noise after 22:00.\n- Lock your tents, caravans and trailers when you leave the camp.\n- Please use water sparingly.\n- Unless otherwise indicated, the speed limit in the camp and the reserve is 30 km/h.\n- Only drive on the main thoroughfare or servitude roads in the reserve, unless you have an **OFFICIAL SELF-DRIVE ROUTE PERMIT** (online, at the reserve gates or at the start of the Wilderness Way route).\n- KYLEU has a no-littering policy. Please use the rubbish bins provided.',
     '## Indemnity\n**Camping is ENTIRELY AT YOUR OWN RISK.** KYLEU Bush Camp and its owners will not be responsible for any injury, loss or damage to persons or personal property while on the premises or on excursions in the greater Dinokeng.',
     'Should any of the rules not be adhered to, we reserve the right of admission. Misbehaviour will not be tolerated, and guests who do not follow the rules will be asked to leave the premises immediately, with no refund.',
@@ -206,18 +207,19 @@
   function form(box, ctx, done) {
     ensureSprite();
     var st = status(ctx.ref, ctx.total), people = (ctx.people || []).filter(function (p) { return p.name && !st.cov[nkey(p.name)]; });
+    var signers = people.filter(function (p) { return !p.minor; }), kidsLeft = people.filter(function (p) { return p.minor; });   // under 18s do not sign: a parent or guardian signs for them
     var hand = getComputedStyle(document.documentElement).getPropertyValue('--font-hand').trim() || "'Caveat', 'Segoe Print', 'Bradley Hand', cursive";
-    var opts = people.map(function (p) { return '<option value="' + esc(p.name) + '">' + esc(p.name) + (p.role === 'Driver' ? ' (driver)' : '') + '</option>'; }).join('');
+    var opts = signers.map(function (p) { return '<option value="' + esc(p.name) + '">' + esc(p.name) + (p.role === 'Driver' ? ' (driver)' : '') + '</option>'; }).join('');
     box.innerHTML = '<div class="ind-form" role="form" aria-label="Sign the indemnity">' +
       '<div class="ind-f"><label for="ind-who">' + (ctx.staff ? 'Who is signing?' : 'Who is signing now?') + '</label>' +
-      (people.length ? '<select id="ind-who" name="who">' + opts + '<option value="__other">Someone else (type the name)</option></select>' : '') +
-      '<input id="ind-name" name="name" autocomplete="name" placeholder="Full name, as on their ID or passport"' + (people.length ? ' hidden' : '') + '></div>' +
+      (signers.length ? '<select id="ind-who" name="who">' + opts + '<option value="__other">Someone else (type the name)</option></select>' : '') +
+      '<input id="ind-name" name="name" autocomplete="name" placeholder="Full name, as on their ID or passport"' + (signers.length ? ' hidden' : '') + '></div>' +
       '<div class="ind-grid"><div class="ind-f"><label for="ind-id">SA ID or passport number</label><input id="ind-id" name="idno" autocomplete="off" inputmode="text" spellcheck="false"><small class="ind-hint" data-idhint>We use it to show who signed. It stays private.</small></div>' +
       '<div class="ind-f" data-dobf hidden><label for="ind-dob">Date of birth</label><input id="ind-dob" name="dob" type="date" max="' + stamp().slice(0, 10) + '"></div></div>' +
       '<div class="ind-f"><label for="ind-phone">Mobile number <span class="ind-opt">(optional)</span></label><input id="ind-phone" name="phone" type="tel" autocomplete="tel"></div>' +
       '<div class="ind-f" data-carf></div>' +
-      '<fieldset class="ind-f ind-minors"><legend>Under 18s in my care <span class="ind-opt">(a parent or guardian signs for them)</span></legend><div class="ind-chips" data-minors></div>' +
-      '<input name="more" placeholder="Other under 18s with you: names, separated by commas" aria-label="Other under 18s in your care"></fieldset>' +
+      '<fieldset class="ind-f ind-minors"><legend>Under 18s in my care <span class="ind-opt">(one parent or guardian signs for them)</span></legend><p class="ind-hint" data-minors-hint></p><div class="ind-chips" data-minors></div>' +
+      '<input name="more" placeholder="Another under 18 in your care who is not listed: full names, separated by commas" aria-label="Other under 18s in your care"></fieldset>' +
       '<div class="ind-f"><span class="ind-lab">Signature</span><div class="ind-sig"><canvas data-sig aria-label="Sign here with your finger or mouse" role="img"></canvas><span class="ind-sig-ph">' + ic('pen') + 'Sign here</span><span class="ind-sig-line"></span></div>' +
       '<div class="ind-sig-acts"><button type="button" class="ind-link" data-sig-clear>' + ic('undo') + 'Clear</button><button type="button" class="ind-link" data-sig-type>' + ic('type') + 'Type my name instead</button></div></div>' +
       '<label class="ind-agree"><input type="checkbox" name="agree"><span data-agree></span></label>' +
@@ -230,8 +232,13 @@
     var person = function () { var n = nkey(who()); return (ctx.people || []).filter(function (p) { return nkey(p.name) === n; })[0] || null; };
     var isBooker = function () { return ctx.booker && nkey(who()) === nkey(ctx.booker.name); };
     function minorsHTML() {
-      var me = nkey(who()), list = people.filter(function (p) { return nkey(p.name) !== me; });
-      f.querySelector('[data-minors]').innerHTML = list.length ? list.map(function (p) { return '<label class="ind-chip"><input type="checkbox" name="minor" value="' + esc(p.name) + '"><span>' + esc(p.name) + '</span></label>'; }).join('') : '';
+      // only people marked "Under 18" on the booking can be ticked, never another adult
+      var list = kidsLeft, hint = f.querySelector('[data-minors-hint]');
+      hint.textContent = list.length ? 'Tick the under 18s you are the parent or guardian of. One adult signs for each of them, so only one of you needs to tick them.'
+        : ctx.staff ? 'Nobody on this booking is marked as under 18. Type the names below if the person signing has under 18s in their care.'
+        : 'Nobody is marked as under 18 on this booking yet. Tick "Under 18" next to those passengers under your vehicles, or type their names below. Adults sign for themselves.';
+      f.querySelector('[data-minors]').innerHTML = (list.length > 1 ? '<button type="button" class="ind-link" data-minors-all>Tick all ' + list.length + '</button>' : '') + list.map(function (p) { return '<label class="ind-chip"><input type="checkbox" name="minor" value="' + esc(p.name) + '"><span>' + esc(p.name) + '</span></label>'; }).join('');
+      var all = f.querySelector('[data-minors-all]'); if (all) all.onclick = function () { [].forEach.call(f.querySelectorAll('[name=minor]'), function (x) { x.checked = true; }); agreeText(); };
     }
     function agreeText() {
       var ms = minors();
@@ -285,6 +292,12 @@
       if (sa && sa.bad) return err('That SA ID number does not look right. Please check it.', el('idno'));
       if (!dob) return err('Please add the date of birth.', el('dob'));
       if (ageOn(dob, ctx.ci) < 18) return err('People under 18 cannot sign for themselves. A parent or guardian signs and ticks them under "Under 18s in my care".', el('idno'));
+      // an adult on the booking is never signed for by someone else
+      var typedMore = String(el('more').value || '').split(',').map(function (n) { return n.trim(); }).filter(Boolean);
+      var grown = typedMore.filter(function (n) { return (ctx.people || []).some(function (p) { return !p.minor && nkey(p.name) === nkey(n); }) || (ctx.booker && nkey(ctx.booker.name) === nkey(n)); })[0];
+      if (grown) return err(grown + ' is on the booking as an adult. Adults sign for themselves: only under 18s can be signed for.', el('more'));
+      if (typedMore.some(function (n) { return nkey(n) === nkey(name); })) return err('You cannot sign for yourself as an under 18. Remove your own name from the under 18s.', el('more'));
+      if (ctx.total && minors().length > Math.max(0, ctx.total - 1)) return err('That is more under 18s than there are people on the booking (' + ctx.total + '). Please check the names.', el('more'));
       if (pad.empty()) return err(typing ? 'Please type your full name above to sign.' : 'Please sign in the box with your finger or mouse.', f.querySelector('[data-sig]'));
       if (!el('agree').checked) return err('Please tick the box to say you have read and accept the indemnity.', el('agree'));
       var p = person(), sig = pad.data(), t = text(), n = forRef(ctx.ref).length + all().filter(function (r) { return key(r.ref) === key(ctx.ref) && r.voided; }).length + 1;

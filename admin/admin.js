@@ -13,6 +13,7 @@
   var esc = function (s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
   var money = function (n) { return (n < 0 ? '-' : '') + K.money(Math.abs(n || 0)); };
   var KEY = 'kyleu-admin-demo-v1', WEB = 'kyleu-web-bookings', SESS = 'kyleu-admin-user';
+  var DB_V = 8;   // version of the demo data: change it when the seed changes, and every browser starts again with new demo data
   var P, STANDS = [], CONTENT_STANDS = [], ORIG_HOL = '{}', DB, ME, app;
 
   /* ---------- dates (all as YYYY-MM-DD strings) ---------- */
@@ -103,6 +104,13 @@
     return h.replace(/[\s\-()]/g, '').indexOf(qs) >= 0;
   }
   function people(b) { return b.adults + b.pens + b.kids; }
+  // stand sizes: "guests" is the usual number, "max" the most it can ever take. Between the two is Kyleu's call;
+  // above the most, the website stops the guest (staff are never blocked here, only warned).
+  function standMax(s) { var g = s.guests || 8; return Math.max(g, s.max || Math.ceil(g * 1.25)); }
+  function sizeTxt(s) { return 'usually ' + (s.guests || 8) + ', at most ' + standMax(s); }
+  function sizePill(s, n) { var g = s.guests || 8, m = standMax(s); return n > m ? ' <span class="pill bad"><i></i>Over the most this stand can take (' + m + ')</span>' : n > g ? ' <span class="pill warn"><i></i>Over the usual ' + g + ' guests</span>' : ''; }
+  function openSize(b) { return !!(b.sizeCheck && !b.sizeCheck.done && live(b)); }
+  function openCancelReq(b) { return !!(b.cancelReq && !b.cancelReq.done && live(b)); }
   function methodLabel(m) { return m === 'card' ? 'Card' : m === 'cash' ? 'Cash' : m === 'credit' ? 'Credit' : 'EFT'; }
   function stateOf(b) {
     if (b.status === 'cancelled') return { k: 'cancelled', t: 'Cancelled', tone: 'muted' };
@@ -181,13 +189,18 @@
   var LAST = ['Nkosi', 'van der Merwe', 'Mokoena', 'Botha', 'Patel', 'Dlamini', 'Smith', 'Pretorius', 'Khumalo', 'du Plessis', 'Mahlangu', 'Jacobs', 'Venter', 'Ndlovu', 'Steyn', 'Coetzee', 'Molefe', 'Nel', 'Naidoo', 'Kruger', 'Sithole', 'Fourie', 'Mthembu', 'Swanepoel'];
   var SETUPS = ['Rooftop tent', 'Off-road trailer', 'Caravan', 'Ground tent', 'Rooftop tent', 'Off-road trailer'];
   var SOURCES = ['Website', 'Website', 'Website', 'Website', 'WhatsApp', 'WhatsApp', 'Phone', 'Q2B', 'Website', 'Phone'];
+  // demo references look like real ones ("KY26 5903": prefix, space, running number, see K.takeNo in invoice.js),
+  // but count up from 4101 so they stay well below the real counter (5901 and up) and never meet it.
+  // r() is still called once, so the rest of the demo data comes out the same as before.
+  var SEED_REF0 = 4101, SEED_REF = SEED_REF0;
+  function seedRef(r) { if (r) r(); return 'KY26 ' + (SEED_REF++); }
   /* ---------- hand-made demo bookings: every stage of a booking, and the odd ones staff will meet ----------
      Added on top of the random ones, so each screen has something to show (dates move with today). */
   function seedStories(db, r) {
     var d = function (n) { return add(TODAY, n); }, at = function (day, t) { return day + ' ' + (t || '09:00'); };
     var nextDow = function (w, from) { return add(from, (w - D(from).getDay() + 7) % 7); };   // that weekday, on or after "from"
     var sat = nextDow(6, d(1));
-    var refOf = function (ci) { return 'KY' + ci.slice(2, 4) + '-' + Math.floor(r() * 1679616).toString(36).toUpperCase().padStart(4, '0'); };
+    var refOf = function () { return seedRef(r); };
     var prod = function (re) { return db.products.filter(function (p) { return re.test(p.label); })[0]; };
     var free = function (ci, co, area, ppl) { var c = STANDS.filter(function (s) { return (!area || s.area === area) && (s.guests || 8) >= ppl && !overlaps(s.id, ci, co); }); return c[0] || (area ? free(ci, co, null, ppl) : null); };
     var code = function () { return 'DGR' + Math.floor(r() * 2176782336).toString(36).toUpperCase().padStart(6, '0').slice(0, 6); };
@@ -214,7 +227,7 @@
       // vehicles: who is in which car, Dinokeng codes sent, checked in or out
       if (o.cars) b.cars = o.cars.map(function (c, i) {
         var cst = c.st || (b.status === 'in' ? 'in' : b.status === 'out' ? 'out' : 'due'), inAt = cst === 'due' ? '' : c.inAt || o.ci + ' 13:' + (20 + i * 7);
-        var x = newCar({ reg: c.reg || '', driver: c.driver || '', phone: i ? '' : b.guest.phone, guests: (c.guests || []).slice(), st: cst, inAt: inAt, outAt: cst === 'out' ? o.co + ' 10:' + (15 + i * 9) : '', ind: cst === 'due' ? null : { at: inAt, by: c.paper ? 'Leuan' : 'Online' } });
+        var x = newCar({ reg: c.reg || '', driver: c.driver || '', phone: i ? '' : b.guest.phone, guests: (c.guests || []).slice(), minors: minorsOf(o.kidNames, c.guests), st: cst, inAt: inAt, outAt: cst === 'out' ? o.co + ' 10:' + (15 + i * 9) : '', ind: cst === 'due' ? null : { at: inAt, by: c.paper ? 'Leuan' : 'Online' } });
         x.people = c.people || (x.driver ? 1 : 0) + x.guests.length;
         if (c.code) { x.dgr = code(); var sent = add(o.ci, -5); if (sent > TODAY) sent = TODAY; if (sent < cday) sent = cday; x.dgrSent = { at: sent + ' 09:10', by: 'Sherri', code: x.dgr }; }
         return x;
@@ -304,7 +317,7 @@
     // 17. proof of payment uploaded after the quotation ran out: kept while Kyleu checks
     bk({ first: 'Bongani', last: 'Dlamini', ci: d(18), co: d(20), method: 'eft', status: 'pending', area: 'fenced', created: d(-7),
       notes: [[d(-3) + ' 20:44', 'Guest', 'Paid from my wife\'s account, the reference might say N Dlamini.']],
-      then: function (b) { b.pop = true; b.pops = [{ name: 'FNB-payment-' + b.ref + '.jpg', size: 184220, type: 'image/jpeg', data: '', at: d(-3) + ' 20:41', via: 'Website upload' }]; } });
+      then: function (b) { b.pop = true; b.pops = [{ name: 'FNB-payment-' + b.ref.replace(/\s/g, '') + '.jpg', size: 184220, type: 'image/jpeg', data: '', at: d(-3) + ' 20:41', via: 'Website upload' }]; } });
     // 18. "I have paid" this morning, the quotation runs out today
     bk({ first: 'Chantel', last: 'Jacobs', ci: d(25), co: d(27), method: 'eft', status: 'pending', area: 'unfenced', created: d(-5),
       then: function (b) { b.pop = true; b.paidClaim = { id: 'pdemo1', ref: b.ref, at: TODAY + ' 07:30', date: d(-1), amt: deposit(b), what: 'Deposit', note: '' }; b.notes.push({ at: TODAY + ' 07:30', by: 'Guest', text: 'Says they paid ' + money(deposit(b)) + ' (deposit) on ' + fd(d(-1)) + '.' }); } });
@@ -351,7 +364,8 @@
   }
   function seed() {
     var r = rng(2611), pick = function (a) { return a[Math.floor(r() * a.length)]; };
-    var db = { v: 7, seeded: TODAY, vouchers: [], credits: [], gone: {}, threads: [], hol: { add: {}, del: {} }, popSeen: {}, bookings: [], blocks: [], sales: [], log: [], rates: {}, closed: {}, settings: { providerFee: 2.95 }, readEnq: {} };
+    SEED_REF = SEED_REF0;
+    var db = { v: DB_V, seeded: TODAY, vouchers: [], credits: [], gone: {}, threads: [], hol: { add: {}, del: {} }, popSeen: {}, bookings: [], blocks: [], sales: [], log: [], rates: {}, closed: {}, settings: { providerFee: 2.95 }, readEnq: {} };
     var guests = [];
     for (var i = 0; i < 420; i++) {
       var f = pick(FIRST), l = pick(LAST);
@@ -373,7 +387,7 @@
       var lead = 2 + Math.floor(r() * r() * 110), created = add(ci, -lead); if (created > TODAY) created = add(TODAY, -Math.floor(r() * Math.min(60, 4 + diff(TODAY, ci))));
       if (opts.created) created = opts.created;
       var method = r() < .55 ? 'card' : 'eft';
-      var b = { ref: 'KY' + ci.slice(2, 4) + '-' + Math.floor(r() * 1679616).toString(36).toUpperCase().padStart(4, '0'), created: created + ' ' + String(7 + Math.floor(r() * 13)).padStart(2, '0') + ':' + String(Math.floor(r() * 60)).padStart(2, '0'),
+      var b = { ref: seedRef(r), created: created + ' ' + String(7 + Math.floor(r() * 13)).padStart(2, '0') + ':' + String(Math.floor(r() * 60)).padStart(2, '0'),
         source: pick(SOURCES), guest: { first: g.first, last: g.last, email: g.email, phone: g.phone, consent: g.consent }, stand: st.id, ci: ci, co: co, adults: adults, pens: pens, kids: kids, vehicles: r() < .8 ? 1 : 2, setup: pick(SETUPS), extras: ex,
         method: method, eft: q.eft, card: q.card, total: method === 'card' ? q.card : q.eft, payments: [], status: 'confirmed', notes: [], pop: false };
       var dep = Math.round(b.total * depPct() / 100), payRef = b.ref;
@@ -448,7 +462,7 @@
     // one guest uploaded proof of payment on the website, another emailed it
     db.bookings.filter(function (b) { return b.status === 'pending' && b.pop; }).forEach(function (b, i) {
       var bank = ['Capitec', 'FNB', 'Standard-Bank', 'Absa', 'Nedbank'][i % 5];
-      b.pops = [{ name: bank + '-payment-' + b.ref + (i % 2 ? '.pdf' : '.jpg'), size: 90000 + Math.floor(r() * 180000), type: i % 2 ? 'application/pdf' : 'image/jpeg', data: '', at: add(TODAY, -1 - (i % 2)) + ' ' + (17 + i % 5) + ':' + String(10 + i * 7 % 50), via: 'Website upload' }];
+      b.pops = [{ name: bank + '-payment-' + b.ref.replace(/\s/g, '') + (i % 2 ? '.pdf' : '.jpg'), size: 90000 + Math.floor(r() * 180000), type: i % 2 ? 'application/pdf' : 'image/jpeg', data: '', at: add(TODAY, -1 - (i % 2)) + ' ' + (17 + i % 5) + ':' + String(10 + i * 7 % 50), via: 'Website upload' }];
     });
     var mailB = db.bookings.filter(function (b) { return b.status === 'pending' && !b.pop; })[0];
     // email conversations: guest messages and staff replies kept together
@@ -463,7 +477,7 @@
       T('t6', 'Company year-end', 'Craig Jacobs', 'craig@jacobsbuild.co.za', '061 220 4433', 'closed', false, [G(y4 + ' 15:22', 'Hi there,\n\nWe would like to host a small year-end for 20 staff: a day visit with a braai. Is that something you do?\n\nCraig'), St('Devon', y4 + ' 17:05', 'Hi Craig,\n\nYes, we can host a day visit with braai facilities for 20 people on a weekday. Which date did you have in mind?'), G(y3 + ' 08:40', 'Thanks Devon. Thursday 10 December would be ideal, from about 10:00.'), St('Devon', y3 + ' 09:15', 'Lovely, 10 December from 10:00 is booked for you. The quote is attached. See you then!', [{ name: 'Quote-Jacobs-Build-day-visit.pdf', size: 54012, type: 'application/pdf' }])]),
       T('t7', 'Lost item', 'Anika Botha', 'anika.botha@icloud.com', '079 880 6612', 'closed', false, [G(y6 + ' 07:51', 'Hi,\n\nWe left a blue camping chair at Stand 3 last weekend. Did anyone find it?\n\nAnika'), St('Leuan', y6 + ' 09:02', 'Hi Anika,\n\nYes! Our team found a blue chair at Stand 3. It is safe at reception, so you can collect it any day between 08:00 and 17:00.'), G(y6 + ' 10:15', 'Thank you so much! We will fetch it on Saturday.')])
     ];
-    if (mailB) db.threads.push(T('t3', 'Proof of payment ' + mailB.ref, guestName(mailB), mailB.guest.email, mailB.guest.phone, 'open', true, [G(TODAY + ' 06:58', 'Good morning,\n\nPlease find attached proof of payment for booking ' + mailB.ref + '.\n\nRegards,\n' + mailB.guest.first, [{ name: 'FNB-proof-of-payment-' + mailB.ref + '.pdf', size: 86214, type: 'application/pdf' }])], mailB.ref));
+    if (mailB) db.threads.push(T('t3', 'Proof of payment ' + mailB.ref, guestName(mailB), mailB.guest.email, mailB.guest.phone, 'open', true, [G(TODAY + ' 06:58', 'Good morning,\n\nPlease find attached proof of payment for booking ' + mailB.ref + '.\n\nRegards,\n' + mailB.guest.first, [{ name: 'FNB-proof-of-payment-' + mailB.ref.replace(/\s/g, '') + '.pdf', size: 86214, type: 'application/pdf' }])], mailB.ref));
     var cx = db.bookings.filter(function (b) { return b.status === 'cancelled'; })[0];
     if (cx) db.credits.push({ id: 'c1', email: (cx.guest.email || '').toLowerCase(), name: guestName(cx), amt: 650, used: 0, from: cx.ref, d: add(TODAY, -12) });
     // most guests who paid in full finalised online: number plates, who is in which car, arrival time.
@@ -493,8 +507,11 @@
   function save() { try { localStorage.setItem(KEY, JSON.stringify(DB)); publishWeb(); return true; } catch (e) { return false; } }
   function loadDB() {
     try { DB = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { DB = null; }
-    if (!DB || DB.v !== 7) {   // new demo data: start again, with the website's demo records and the signed forms
-      try { ['kyleu-web-bookings', 'kyleu-web-pop', 'kyleu-indemnities', 'kyleu-ind-demo'].forEach(function (k) { localStorage.removeItem(k); }); } catch (e) {}
+    if (!DB || DB.v !== DB_V) {
+      // An older version of the demo data: start again, with the website's demo records and the signed forms.
+      // No admin data at all (the admin is opened for the first time in this browser): keep what guests already did on
+      // the website, so their bookings, proof of payment and signed forms are imported below instead of lost.
+      try { (DB ? ['kyleu-web-bookings', 'kyleu-web-pop', 'kyleu-indemnities', 'kyleu-ind-demo'] : ['kyleu-ind-demo']).forEach(function (k) { localStorage.removeItem(k); }); } catch (e) {}
       DB = seed(); save();
     }
     DB.vouchers = DB.vouchers || []; DB.credits = DB.credits || [];
@@ -529,10 +546,13 @@
     var n = 0;
     list.forEach(function (p) {
       if (!p || !p.id || DB.popSeen[p.id]) return; DB.popSeen[p.id] = 1; n++;
+      // byRefLoose: "KY265901" or "ky26-5901" still finds booking "KY26 5901"
       var f = p.file || {}, b = byRefLoose(p.ref), att = { name: f.name || 'proof-of-payment', size: f.size || 0, type: f.type || '', data: f.data || '', at: p.at, via: 'Website upload' };
       if (b) {
+        // another email address than the one on the booking (someone else paid, or a work address): keep it, and say so
+        if (p.emailMatch === false || (p.email && b.guest.email && normEmail(p.email) !== normEmail(b.guest.email))) { att.emailMatch = false; att.email = String(p.email || '').trim(); }
         b.pops = b.pops || []; b.pops.push(att); if (b.status === 'pending') b.pop = true;
-        b.notes.push({ at: p.at, by: 'Guest', text: 'Uploaded proof of payment on the website' + (p.note ? ': ' + p.note : '.') });
+        b.notes.push({ at: p.at, by: 'Guest', text: 'Uploaded proof of payment on the website' + (popOther(att) ? ' (' + popOther(att) + ')' : '') + (p.note ? ': ' + p.note : '.') });
         DB.log.unshift({ at: p.at, by: 'Website', text: 'Proof of payment uploaded for ' + b.ref, ref: b.ref });
       } else {
         DB.threads.push({ id: uid('t'), subject: 'Proof of payment: ' + (p.ref || 'no reference'), name: p.email, email: p.email, phone: '', status: 'open', unread: true, ref: '', msgs: [{ from: 'guest', at: p.at, body: 'Uploaded on the website with booking reference "' + (p.ref || '') + '", which does not match a booking. Please match it by hand.' + (p.note ? '\n\n' + p.note : ''), att: [att] }] });
@@ -570,7 +590,7 @@
     var cs = ensureCars(b);
     if (!n) { b.vehTbc = true; return; }
     b.vehTbc = false;
-    cars.forEach(function (c, i) { var x = cs[i] || (cs[i] = newCar()); x.reg = String(c.reg || '').toUpperCase(); x.driver = c.driver || ''; x.guests = (c.guests || []).slice(); x.people = (x.driver ? 1 : 0) + x.guests.length; });
+    cars.forEach(function (c, i) { var x = cs[i] || (cs[i] = newCar()); x.reg = String(c.reg || '').toUpperCase(); x.driver = c.driver || ''; x.guests = (c.guests || []).slice(); x.minors = minorsOf(c.minors, x.guests); x.people = (x.driver ? 1 : 0) + x.guests.length; });
     for (var i = cs.length - 1; i >= n; i--) if (cs[i].st === 'due' && !carTab(b, cs[i]).items.length) cs.splice(i, 1);
     b.vehicles = cs.length;
   }
@@ -582,7 +602,14 @@
     return '';
   }
   function extraDue(b) { return b.extraDue && !b.extraDue.done && b.status !== 'cancelled' && balance(b) > 0; }
-  function peopleTxt(x) { return (x.adults + x.pens) + ' adult' + (x.adults + x.pens === 1 ? '' : 's') + (x.pens ? ' (' + x.pens + ' pensioner' + (x.pens === 1 ? '' : 's') + ')' : '') + (x.kids ? ' + ' + x.kids + ' kid' + (x.kids > 1 ? 's' : '') : ''); }
+  // "14 adults, 2 pensioners and 1 child": each group on its own, none left out, nothing counted twice
+  function peopleTxt(x) {
+    var p = [[x.adults, 'adult', 'adults'], [x.pens, 'pensioner', 'pensioners'], [x.kids, 'child', 'children']].filter(function (g) { return g[0] > 0; }).map(function (g) { return g[0] + ' ' + (+g[0] === 1 ? g[1] : g[2]); });
+    return p.length > 1 ? p.slice(0, -1).join(', ') + ' and ' + p[p.length - 1] : p[0] || '0 adults';
+  }
+  // one line for the size check: "12 people on Inside 2, which usually takes 8."
+  function sizeLine(b) { var z = b.sizeCheck; return z.people + ' people on ' + standById(b.stand).name + ', which usually takes ' + z.usual + '.'; }
+  function setSizeCheck(b, over, at) { if (over && over.people) b.sizeCheck = { at: at, people: over.people, usual: over.usual || standById(b.stand).guests || 8 }; else delete b.sizeCheck; }
   function importAmend() {
     var list = []; try { list = JSON.parse(localStorage.getItem(AMK) || '[]'); } catch (e) {}
     DB.amendSeen = DB.amendSeen || {}; var n = 0;
@@ -596,6 +623,8 @@
         b.adults = g.adults; b.pens = g.pens; b.kids = g.kids; b.eft += q1.eft - q0.eft; b.card += q1.card - q0.card; b.total = b.method === 'card' ? b.card : b.eft;
         done.push('guests ' + ppl0 + ' to ' + peopleTxt(b) + (b.total !== before ? ' (total ' + money(before) + ' to ' + money(b.total) + ')' : ''));
         if (wasFull && balance(b) > 0) { b.extraDue = { at: a.at, amt: balance(b), why: 'Guests added after paying in full' }; done.push(money(balance(b)) + ' now outstanding'); }
+        // more people than the stand usually takes: the website let it through and told the guest Kyleu will check
+        setSizeCheck(b, g.over, a.at); if (b.sizeCheck) done.push(b.sizeCheck.people + ' people on a stand that usually takes ' + b.sizeCheck.usual + ', for you to check');
       }
       if (a.cars) { applyCars(b, a.vehicles, a.cars); done.push(a.vehicles ? a.vehicles + ' vehicle' + (a.vehicles === 1 ? '' : 's') + ' with drivers and passengers' : 'not sure yet how many vehicles'); }
       if (a.eta != null) { b.eta = a.eta; done.push('arrival time ' + (a.eta || 'cleared')); }
@@ -605,6 +634,12 @@
         var body = 'Please change my booking ' + b.ref + ' (' + standById(b.stand).name + '):\n\nDates: ' + fd(b.ci) + ' to ' + fd(b.co) + (r.ci !== b.ci || r.co !== b.co ? ', please change to ' + fd(r.ci) + ' to ' + fd(r.co) : ' (no change)') + '\nGuests: ' + peopleTxt(b) + (r.adults !== b.adults || r.pens !== b.pens || r.kids !== b.kids ? ', please change to ' + peopleTxt(r) : ' (no change)') + (r.msg ? '\n\n' + r.msg : '') + '\n\n' + b.guest.first;
         DB.threads.push({ id: uid('t'), subject: 'Change request: ' + b.ref, name: guestName(b), email: b.guest.email, phone: b.guest.phone, status: 'open', unread: true, ref: b.ref, msgs: [{ from: 'guest', at: a.at, body: body }] });
         done.push(r.ci !== b.ci || r.co !== b.co ? (r.adults !== b.adults || r.pens !== b.pens || r.kids !== b.kids ? 'asked to change the dates and the number of guests' : 'asked to change the dates') : 'asked to change the number of guests');
+      }
+      if (a.cancel) {   // the guest asked to cancel: nothing is cancelled until staff decide
+        var why = String(a.cancel.reason || '').trim(), cpd = +a.cancel.paid || 0;
+        b.cancelReq = { at: a.at, reason: why };
+        DB.threads.push({ id: uid('t'), subject: 'Cancellation request: ' + b.ref, name: guestName(b), email: b.guest.email, phone: b.guest.phone, status: 'open', unread: true, ref: b.ref, msgs: [{ from: 'guest', at: a.at, body: 'Please cancel my booking ' + b.ref + ' (' + standById(b.stand).name + ', ' + fd(b.ci) + ' to ' + fd(b.co) + ').' + (why ? '\n\nReason: ' + why : '') + (cpd > 0 ? '\n\nI have paid ' + money(cpd) + ' so far.' : '') + '\n\n' + b.guest.first }] });
+        done.push('asked to cancel the booking');
       }
       if (a.note) { b.notes.push({ at: a.at, by: 'Guest', text: a.note }); done.push('left a message'); }
       if (a.finalise) { b.finalised = { at: a.at, by: 'Guest' }; done.push('finalised the booking'); }
@@ -625,7 +660,10 @@
     list.forEach(function (c) {
       if (!c || !c.id || DB.paidSeen[c.id]) return; DB.paidSeen[c.id] = 1; n++;
       var b = byRefLoose(c.ref); if (!b) return;
-      b.paidClaim = JSON.parse(JSON.stringify(c)); b.pop = true;
+      // a second "I have paid" before the first one is confirmed: both count, so the amounts are added together
+      var nc = JSON.parse(JSON.stringify(c)), oc = b.paidClaim && !b.paidClaim.done ? b.paidClaim : null;
+      if (oc) { nc.parts = (oc.parts || [JSON.parse(JSON.stringify(oc))]).concat([JSON.parse(JSON.stringify(c))]); nc.amt = nc.parts.reduce(function (t, x) { return t + (+x.amt || 0); }, 0); }
+      b.paidClaim = nc; b.pop = true;
       b.notes.push({ at: c.at, by: 'Guest', text: 'Says they paid ' + money(c.amt) + ' (' + String(c.what || 'payment').toLowerCase() + ') on ' + fd(c.date) + (c.note ? ': ' + c.note : '.') });
       DB.log.unshift({ at: c.at, by: 'Website', text: guestName(b) + ' says they paid ' + money(c.amt) + ' on ' + b.ref, ref: b.ref });
     });
@@ -637,13 +675,17 @@
     var list = []; try { list = JSON.parse(localStorage.getItem(WEB) || '[]'); } catch (e) {}
     var added = 0;
     list.forEach(function (w) {
-      if (byRef(w.ref)) return;
+      if (!w || !w.ref || !w.stand || !w.ci || !w.co || byRef(w.ref)) return;
+      if (!w.created) w.created = nowStamp();
       var card = w.pay === 'deposit' || w.pay === 'full', nowPaid = w.paid || 0;
       var b = { ref: w.ref, created: w.created, source: 'Website', guest: { first: w.first, last: w.last, email: w.email, phone: w.phone, consent: !!w.consent }, stand: w.stand, ci: w.ci, co: w.co, adults: w.adults, pens: w.pens, kids: w.kids, vehicles: Math.max(1, +w.vehicles || 1), vehTbc: !!w.vehTbc, eta: w.eta || '', key: w.key || newKey(), setup: w.setup || '', extras: w.extras || {},
         method: card ? 'card' : 'eft', eft: w.eft, card: w.card, total: card ? w.card : w.eft, payments: [], status: nowPaid ? 'confirmed' : 'pending', notes: w.notes ? [{ at: w.created, by: 'Guest', text: w.notes }] : [], pop: false, isNew: true };
       if (nowPaid) b.payments.push({ d: w.created.slice(0, 10), amt: nowPaid, m: card ? 'card' : 'eft', type: w.pay === 'full' ? 'Full payment' : 'Deposit', ref: card ? 'Card (website)' : 'Instant EFT' });
       linkBooking(b);
-      if (w.cars && w.cars.length) b.cars = w.cars.map(function (c, i) { var dr = c.driver || (i ? '' : w.first + ' ' + w.last), gs = (c.guests || []).slice(); return newCar({ reg: String(c.reg || '').toUpperCase(), driver: dr, phone: i ? '' : w.phone, guests: gs, people: (dr ? 1 : 0) + gs.length }); });
+      if (w.cars && w.cars.length) b.cars = w.cars.map(function (c, i) { var dr = c.driver || (i ? '' : w.first + ' ' + w.last), gs = (c.guests || []).slice(); return newCar({ reg: String(c.reg || '').toUpperCase(), driver: dr, phone: i ? '' : w.phone, guests: gs, minors: minorsOf(c.minors, gs), people: (dr ? 1 : 0) + gs.length }); });
+      if (w.overCap) setSizeCheck(b, w.overCap, w.created);   // more people than the stand usually takes: Kyleu's call
+      // made on the website before this admin had its demo data, on nights a demo booking also has: keep it, and say so
+      if (overlaps(b.stand, b.ci, b.co)) b.notes.push({ at: w.created, by: 'System', text: 'Another booking or a block is on ' + standById(b.stand).name + ' for some of these nights. Check the calendar and move one of them.' });
       if (w.shop && w.shop.length) { b.charges = []; setPreShop(b, w.shop, w.created, true); }
       ensureCars(b); DB.bookings.push(b); added++;
       if (w.invoice) { b.invoices = [Object.assign(JSON.parse(JSON.stringify(w.invoice)), { by: 'Website', sent: { at: w.created, via: 'Email (automatic)', to: w.email } })]; autoMail(b, w.invoice, w.created, 'Your Kyleu reservation ' + b.ref + ' (' + docTag(w.invoice, b.ref) + ')', invMailBody(b, w.invoice)); }
@@ -774,7 +816,7 @@
     if (!cancelled) more.push('<button type="button" data-act="edit" data-ref="' + b.ref + '">' + ic('edit') + 'Edit booking</button>');
     more.push('<button type="button" data-act="link-copy" data-ref="' + b.ref + '">' + ic('note') + 'Copy the guest\'s booking link</button>');
     if (!cancelled && b.status !== 'out') more.push('<button type="button" class="danger-t" data-act="cancel" data-ref="' + b.ref + '">' + ic('x') + 'Cancel booking</button>');
-    var people = [b.adults ? b.adults + ' adult' + (b.adults > 1 ? 's' : '') : '', b.pens ? b.pens + ' pensioner' + (b.pens > 1 ? 's' : '') : '', b.kids ? b.kids + ' child' + (b.kids > 1 ? 'ren' : '') : ''].filter(Boolean).join(', ');
+    var people = peopleTxt(b);
     var pct = b.total > 0 ? Math.min(100, Math.round(pd / b.total * 100)) : 0, sb = staysBefore(b);
     // what is holding the stand (unpaid quotations)
     var balLate = b.status === 'confirmed' && bal > 0 && !b.onArrival && balanceDue(b) < TODAY;
@@ -799,7 +841,14 @@
         (r.adults !== b.adults || r.pens !== b.pens || r.kids !== b.kids ? '<br>Guests: ' + peopleTxt(b) + ' <b>→ ' + peopleTxt(r) + '</b>' : '') + (r.msg ? '<br>"' + esc(r.msg) + '"' : '') +
         (pd > 0 ? '<br><b>' + esc(b.guest.first) + ' has already paid ' + money(pd) + '.</b> Talk to them about the difference, then make the change with Edit booking.' : '') +
         '<div class="row-btns"><button type="button" class="btn sm" data-act="edit" data-ref="' + b.ref + '">' + ic('edit') + 'Edit booking</button><button type="button" class="btn ghost sm" data-act="req-done" data-ref="' + b.ref + '">' + ic('check') + 'Dealt with</button></div></div></div>'; })(b.changeReq) : '') +
-      (b.paidClaim ? '<div class="callout info cflex claim">' + ic('bank') + '<div><b>' + esc(b.guest.first) + ' says they paid ' + money(b.paidClaim.amt) + '</b> (' + esc(String(b.paidClaim.what || 'payment').toLowerCase()) + ') on ' + fd(b.paidClaim.date) + (b.paidClaim.note ? ': "' + esc(b.paidClaim.note) + '"' : '') + '. Check the bank, then confirm it.<div class="row-btns"><button type="button" class="btn sm" data-act="pay" data-ref="' + b.ref + '">' + ic('check') + 'Confirm payment</button><button type="button" class="btn ghost sm" data-act="claim-no" data-ref="' + b.ref + '">Not in the bank yet</button></div></div></div>' : '') +
+      // the guest asked on the website to cancel: staff decide (no refunds, what was paid becomes a credit)
+      (b.cancelReq && !b.cancelReq.done && !cancelled ? '<div class="callout warn cflex req">' + ic('alert') + '<div><b>' + esc(b.guest.first) + ' asked to cancel this booking</b> on the website (' + esc(atNice(b.cancelReq.at)) + ').' +
+        (b.cancelReq.reason ? '<br>"' + esc(b.cancelReq.reason) + '"' : '') + '<br>No refunds: what was paid is kept as a credit. Offer to move the booking first.' +
+        '<div class="row-btns">' + (b.status !== 'out' ? '<button type="button" class="btn sm danger" data-act="cancel" data-ref="' + b.ref + '">' + ic('x') + 'Cancel the booking</button>' : '') + '<button type="button" class="btn ghost sm" data-act="cancel-keep" data-ref="' + b.ref + '">' + ic('check') + 'Keep the booking</button></div></div></div>' : '') +
+      // more people than the stand usually takes (booked or changed on the website): Kyleu's call
+      (b.sizeCheck && !b.sizeCheck.done && !cancelled ? '<div class="callout warn cflex req">' + ic('users') + '<div><b>' + esc(sizeLine(b)) + '</b> The guest was told you will check this. Agree to it, or contact them to move to a bigger stand or bring fewer people.' +
+        '<div class="row-btns"><button type="button" class="btn sm" data-act="size-ok" data-ref="' + b.ref + '">' + ic('check') + 'It is fine</button></div></div></div>' : '') +
+      (b.paidClaim ? '<div class="callout info cflex claim">' + ic('bank') + '<div><b>' + esc(b.guest.first) + ' says they paid ' + money(b.paidClaim.amt) + '</b> (' + esc(String(b.paidClaim.what || 'payment').toLowerCase()) + ') on ' + fd(b.paidClaim.date) + (b.paidClaim.note ? ': "' + esc(b.paidClaim.note) + '"' : '') + '.' + ((b.paidClaim.parts || []).length > 1 ? ' That is ' + b.paidClaim.parts.length + ' payments added together: ' + b.paidClaim.parts.map(function (x) { return money(x.amt) + ' on ' + fd(x.date); }).join(', ') + '.' : '') + ' Check the bank, then confirm it.<div class="row-btns"><button type="button" class="btn sm" data-act="pay" data-ref="' + b.ref + '">' + ic('check') + 'Confirm payment</button><button type="button" class="btn ghost sm" data-act="claim-no" data-ref="' + b.ref + '">Not in the bank yet</button></div></div></div>' : '') +
       (extraDue(b) ? '<div class="callout bad cflex">' + ic('alert') + '<div><b>' + money(bal) + ' outstanding.</b> ' + esc(b.extraDue.why || 'The total went up after paying in full') + ' (' + esc(atNice(b.extraDue.at)) + '). Send ' + esc(b.guest.first) + ' the new invoice for just this amount.<div class="row-btns"><button type="button" class="btn sm" data-act="send-doc" data-ref="' + b.ref + '|extra">' + ic('send') + 'Send new invoice</button></div></div></div>' : '') +
       (b.guestEdit && b.guestEdit.at >= add(TODAY, -14) ? '<p class="callout info cflex">' + ic('edit') + '<span><b>Changed by ' + esc(b.guest.first) + ' on the website</b> ' + esc(atNice(b.guestEdit.at)) + ': ' + esc(b.guestEdit.what.join('; ')) + '.</span></p>' : '') +
       (b.released ? '<p class="callout cflex">' + ic('info') + '<span><b>Released automatically</b> on ' + esc(atNice(b.released.at)) + ': the quotation (valid until ' + fd(b.released.due) + ') was not paid.</span></p>' : '');
@@ -942,6 +991,7 @@
       'Cancel booking', function (f) {
         var refund = pd > 0 && fval(f, 'refund');
         b.status = 'cancelled'; b.pop = false;
+        if (b.cancelReq && !b.cancelReq.done) b.cancelReq.done = { at: nowStamp(), by: ME.name };   // the guest's cancellation request is dealt with
         if (pd > 0 && refund) b.payments.push({ d: TODAY, amt: -pd, m: b.payments.length ? b.payments[0].m : 'eft', type: 'Refund', ref: 'Refund ' + b.ref });
         else if (pd > 0) DB.credits.push({ id: uid('c'), email: (b.guest.email || '').toLowerCase(), name: guestName(b), amt: pd, used: 0, from: b.ref, d: TODAY });
         b.notes.push({ at: nowStamp(), by: ME.name, text: 'Cancelled. ' + (fval(f, 'why') || '') + (pd > 0 ? (refund ? ' Refunded ' + money(pd) + '.' : ' ' + money(pd) + ' kept as credit for another stay.') : '') });
@@ -966,7 +1016,7 @@
       '<h5 class="m-h">Stay</h5>' + (closed ? '<p class="hint">' + (b.status === 'out' ? 'This stay is over' : 'This booking is cancelled') + ', so the dates, stand and guests are locked.</p>' : inCamp ? '<p class="hint">' + esc(b.guest.first) + ' is in camp, so the arrival date and stand stay as they are. You can still extend or shorten the stay.</p>' : '') +
       '<div class="grid2"><label class="fld"><span>Arrive</span><input type="date" name="ci" value="' + b.ci + '"' + lockCi + '></label><label class="fld"><span>Depart</span><input type="date" name="co" value="' + b.co + '"' + lockAll + '></label></div>' +
       '<label class="fld"><span>Stand</span><select name="stand"' + lockCi + '>' + standOptions(b.stand) + '</select></label>' +
-      '<div class="grid3"><label class="fld"><span>Adults</span><input type="number" min="0" max="12" name="adults" value="' + b.adults + '"' + lockAll + '></label><label class="fld"><span>Pensioners</span><input type="number" min="0" max="12" name="pens" value="' + b.pens + '"' + lockAll + '></label><label class="fld"><span>Kids under 12</span><input type="number" min="0" max="12" name="kids" value="' + b.kids + '"' + lockAll + '></label></div>' +
+      '<div class="grid3"><label class="fld"><span>Adults</span><input type="number" min="0" max="40" name="adults" value="' + b.adults + '"' + lockAll + '></label><label class="fld"><span>Pensioners</span><input type="number" min="0" max="40" name="pens" value="' + b.pens + '"' + lockAll + '></label><label class="fld"><span>Kids under 12</span><input type="number" min="0" max="40" name="kids" value="' + b.kids + '"' + lockAll + '></label></div>' +
       '<div class="grid3"><label class="fld"><span>Vehicles</span><input type="number" min="1" max="6" name="veh" value="' + (b.vehicles || 1) + '"' + lockAll + '></label><label class="fld"><span>Arrival time</span><select name="eta"' + lockAll + '>' + [''].concat(['Before 13:00', '13:00-15:00', '15:00-18:00', 'After 18:00', 'Not sure yet']).map(function (t) { return '<option value="' + t + '"' + ((b.eta || '') === t ? ' selected' : '') + '>' + (t || 'Not given') + '</option>'; }).join('') + '</select></label><label class="fld"><span>Game drive (people)</span><input type="number" min="0" max="10" name="gd" value="' + (ex.gd || 0) + '"' + lockAll + '></label></div>' +
       '<label class="fld"><span>Booked via</span><select name="source">' + srcs.map(function (x) { return '<option' + (x === b.source ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select></label>' +
       '<div class="quote-box" data-q></div>' +
@@ -990,7 +1040,7 @@
           if (lone && !clientBookings(lone).length) DB.clients.splice(DB.clients.indexOf(lone), 1);
         } else if (cl) { var cc = clientChanges(cl, g); if (cc.length) { applyClient(cl, g); changes = changes.concat(cc); } }
         if (!closed) {
-          var p = priceOf(s), st0 = standById(b.stand), ppl = function (x) { return (x.adults + x.pens) + ' adult' + (x.adults + x.pens === 1 ? '' : 's') + (x.kids ? ' + ' + x.kids + ' kid' + (x.kids > 1 ? 's' : '') : ''); };
+          var p = priceOf(s), st0 = standById(b.stand), ppl = peopleTxt;
           if (s.ci !== b.ci) changes.push('arrive ' + fd(b.ci) + ' to ' + fd(s.ci));
           if (s.co !== b.co) changes.push('depart ' + fd(b.co) + ' to ' + fd(s.co));
           if (s.stand !== b.stand) changes.push('stand ' + st0.name + ' to ' + standById(s.stand).name);
@@ -1000,6 +1050,8 @@
           if (s.gd !== (ex.gd || 0)) changes.push('game drive ' + (ex.gd || 0) + ' to ' + s.gd + ' people');
           var oldTotal = b.total, wasFull = paid(b) > 0 && paid(b) >= b.total;
           b.ci = s.ci; b.co = s.co; b.stand = s.stand; b.adults = s.adults; b.pens = s.pens; b.kids = s.kids; if (s.vehicles !== (b.vehicles || 1)) b.vehTbc = false; b.vehicles = s.vehicles; b.eta = s.eta; b.extras = Object.assign({}, ex, { gd: s.gd }); fitCars(b);
+          // an open size check follows the edit: gone when the group now fits the usual size, otherwise it shows the new numbers
+          if (b.sizeCheck && !b.sizeCheck.done) { var ug = standById(b.stand).guests || 8; if (people(b) <= ug) delete b.sizeCheck; else { b.sizeCheck.people = people(b); b.sizeCheck.usual = ug; } }
           // shift the price by the difference, so discounts and shop charges already on the booking stay
           b.eft += p.de; b.card += p.dc; b.total += b.method === 'card' ? p.dc : p.de;
           if (b.total !== oldTotal) changes.push('total ' + money(oldTotal) + ' to ' + money(b.total));
@@ -1021,7 +1073,7 @@
           var s = read(f);
           if (s.co <= s.ci) { box.innerHTML = '<span class="bad-t">Departure must be after arrival.</span>'; return; }
           var p = priceOf(s), nt = b.total + (b.method === 'card' ? p.dc : p.de), pd = paid(b), moved = s.ci !== b.ci || s.co !== b.co || s.stand !== b.stand, st = standById(s.stand);
-          box.innerHTML = (moved ? (overlaps(s.stand, s.ci, s.co, b.ref) ? '<span class="pill bad"><i></i>Stand not free for those nights</span>' : '<span class="pill ok"><i></i>Stand free</span>') : '') + (s.adults + s.pens + s.kids > st.guests ? ' <span class="pill warn"><i></i>Over ' + st.guests + ' guests</span>' : '') + (!b.vehTbc && namedIn(b) > s.adults + s.pens + s.kids ? ' <span class="pill bad"><i></i>' + namedIn(b) + ' people named in the vehicles</span>' : '') +
+          box.innerHTML = (moved ? (overlaps(s.stand, s.ci, s.co, b.ref) ? '<span class="pill bad"><i></i>Stand not free for those nights</span>' : '<span class="pill ok"><i></i>Stand free</span>') : '') + sizePill(st, s.adults + s.pens + s.kids) + (!b.vehTbc && namedIn(b) > s.adults + s.pens + s.kids ? ' <span class="pill bad"><i></i>' + namedIn(b) + ' people named in the vehicles</span>' : '') +
             '<div class="qb-row"><span>' + p.nights + ' night' + (p.nights > 1 ? 's' : '') + ' · ' + methodLabel(b.method) + '</span><span class="price-pair">' + (nt !== b.total ? '<s>' + money(b.total) + '</s> ' : '') + '<b>' + money(nt) + '</b></span></div>' +
             '<div class="muted small">Paid ' + money(pd) + ' · ' + (nt >= pd ? 'balance ' + money(nt - pd) : '<span class="warn-t">' + money(pd - nt) + ' more than the new total. Keep it as credit or refund it.</span>') + '</div>';
           if (!tellTouched) tell.checked = moved || nt !== b.total;
@@ -1038,7 +1090,7 @@
   }
   function standOptions(sel, onlyFree) {
     return ['fenced', 'unfenced', 'self-sufficient'].map(function (a) {
-      return '<optgroup label="' + AREA_SHORT[a] + '">' + STANDS.filter(function (s) { return s.area === a; }).map(function (s) { return '<option value="' + s.id + '"' + (s.id === sel ? ' selected' : '') + '>' + esc(s.name) + ' (' + s.guests + ' guests)</option>'; }).join('') + '</optgroup>';
+      return '<optgroup label="' + AREA_SHORT[a] + '">' + STANDS.filter(function (s) { return s.area === a; }).map(function (s) { return '<option value="' + s.id + '"' + (s.id === sel ? ' selected' : '') + '>' + esc(s.name) + ' (' + sizeTxt(s) + ')</option>'; }).join('') + '</optgroup>';
     }).join('');
   }
   function actNew(pre) {
@@ -1054,7 +1106,7 @@
       '<div class="grid2"><label class="fld"><span>Mobile</span><input name="phone" inputmode="tel" value="' + esc(pre.phone || '') + '"></label><label class="fld"><span>Email</span><input name="email" type="email" value="' + esc(pre.email || '') + '"></label></div><div data-clmatch></div></div></div>' +
       '<div class="grid2"><label class="fld"><span>Arrive</span><input type="date" name="ci" value="' + ci + '"></label><label class="fld"><span>Depart</span><input type="date" name="co" value="' + co + '"></label></div>' +
       '<label class="fld"><span>Stand</span><select name="stand">' + standOptions(pre.stand || '') + '</select></label>' +
-      '<div class="grid3"><label class="fld"><span>Adults</span><input type="number" min="0" max="12" name="adults" value="2"></label><label class="fld"><span>Pensioners</span><input type="number" min="0" max="12" name="pens" value="0"></label><label class="fld"><span>Kids under 12</span><input type="number" min="0" max="12" name="kids" value="0"></label></div>' +
+      '<div class="grid3"><label class="fld"><span>Adults</span><input type="number" min="0" max="40" name="adults" value="2"></label><label class="fld"><span>Pensioners</span><input type="number" min="0" max="40" name="pens" value="0"></label><label class="fld"><span>Kids under 12</span><input type="number" min="0" max="40" name="kids" value="0"></label></div>' +
       '<div class="grid2"><label class="fld"><span>Booked via</span><select name="source"><option>Phone</option><option>WhatsApp</option><option>Email</option><option>Walk-in</option></select></label><label class="fld"><span>Game drive (people)</span><input type="number" min="0" max="10" name="gd" value="0"></label></div>' +
       '<label class="fld"><span>Vehicles coming (one booking can cover the whole group)</span><input type="number" min="1" max="20" name="veh" value="1"></label>' +
       '<label class="fld"><span>Note for the team (optional)</span><input name="note" placeholder="e.g. Celebrating a birthday, arriving late on Friday"></label>' +
@@ -1069,13 +1121,15 @@
         if (z <= a) { toast('Departure must be after arrival'); return false; }
         if (overlaps(sid, a, z)) { toast('That stand is not free for those nights'); return false; }
         if (!g.adults && !g.pens) { toast('Add at least one adult'); return false; }
-        if (g.adults + g.pens + g.kids > standById(sid).guests) { toast(standById(sid).name + ' takes up to ' + standById(sid).guests + ' guests. Choose a bigger stand or a second stand.'); return false; }
+        // more people than the stand usually takes (or even than the most it can take) is staff's call: warned in the quote box, never blocked
+        var nPpl = g.adults + g.pens + g.kids, st1 = standById(sid), overUsual = nPpl > (st1.guests || 8);
         var ex = { gd: +fval(f, 'gd') || 0 }, q = quote(sid, a, z, g, ex), linked = false;
         if (!cl) { cl = findClient(ng.email, ng.phone); linked = !!cl; if (!cl) cl = newClient(ng); }
         var b = { ref: K.takeNo('Ref'), created: nowStamp(), source: fval(f, 'source'), cid: cl.id, guest: { first: cl.first, last: cl.last, email: cl.email, phone: cl.phone, consent: cl.consent }, stand: sid, ci: a, co: z, adults: g.adults, pens: g.pens, kids: g.kids, vehicles: Math.max(1, Math.min(20, +fval(f, 'veh') || 1)), setup: '', extras: ex, method: m, eft: q.eft, card: q.card, total: m === 'card' ? q.card : q.eft, payments: [], status: 'pending', notes: [], pop: false };
         if (m !== 'eft') b.status = 'confirmed';
         if (fval(f, 'usecredit')) { var need = b.total; creditsFor(b.guest.email).forEach(function (c) { var take = Math.min(need, c.amt - c.used); if (take <= 0) return; c.used += take; need -= take; b.payments.push({ d: TODAY, amt: take, m: 'credit', type: 'Credit', ref: 'Credit from ' + c.from }); }); if (paid(b) >= deposit(b)) b.status = 'confirmed'; }
         if (fval(f, 'note')) b.notes.push({ at: nowStamp(), by: ME.name, text: fval(f, 'note') });
+        if (overUsual) b.notes.push({ at: nowStamp(), by: ME.name, text: 'Booked for ' + nPpl + ' people on a stand that usually takes ' + (st1.guests || 8) + (nPpl > standMax(st1) ? ' (the most it can take is ' + standMax(st1) + ')' : '') + '.' });
         // cash on arrival (arranged with a regular): confirmed without a deposit, an invoice that says so, never released
         if (m === 'cash' && paid(b) < b.total) {
           b.onArrival = { how: 'Cash', at: nowStamp(), by: ME.name }; b.status = 'confirmed';
@@ -1092,12 +1146,12 @@
           if (z <= a) { box.innerHTML = '<span class="bad-t">Departure must be after arrival.</span>'; return; }
           // mark every stand free or booked for these dates; start on a free one
           var sel = f.elements.stand, nFree = 0;
-          $$('option', sel).forEach(function (o) { var s0 = standById(o.value), fr = !overlaps(o.value, a, z); if (fr) nFree++; o.textContent = s0.name + ' (' + s0.guests + ' guests) · ' + (fr ? 'free' : 'booked'); });
+          $$('option', sel).forEach(function (o) { var s0 = standById(o.value), fr = !overlaps(o.value, a, z); if (fr) nFree++; o.textContent = s0.name + ' (' + sizeTxt(s0) + ') · ' + (fr ? 'free' : 'booked'); });
           if (!f._picked && overlaps(sel.value, a, z)) { var fo = $$('option', sel).filter(function (o) { return !overlaps(o.value, a, z); })[0]; if (fo) { sel.value = fo.value; sid = fo.value; } }
           var q = quote(sid, a, z, g, { gd: +fval(f, 'gd') || 0 }), free = !overlaps(sid, a, z), st = standById(sid);
           var nts = []; for (var dd = a; dd < z; dd = add(dd, 1)) nts.push(D(dd).getDay());
           var halfWeekend = (nts.indexOf(5) >= 0 || nts.indexOf(6) >= 0) && nts.length < num('Booking rules', 'Minimum nights over a weekend', 2), full = diff(TODAY, a) <= num('Booking rules', 'Balance due days before arrival', 7) + num('Booking rules', 'Deposit due within days of invoice', 5);
-          box.innerHTML = (free ? '<span class="pill ok"><i></i>Stand free</span>' : '<span class="pill bad"><i></i>Stand not free</span>') + (g.adults + g.pens + g.kids > st.guests ? ' <span class="pill warn"><i></i>Over ' + st.guests + ' guests</span>' : '') +
+          box.innerHTML = (free ? '<span class="pill ok"><i></i>Stand free</span>' : '<span class="pill bad"><i></i>Stand not free</span>') + sizePill(st, g.adults + g.pens + g.kids) +
             '<div class="qb-row"><span>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + '</span><span class="price-pair">' + (!hasFee() ? '<b>' + money(q.eft) + '</b>' : m === 'card' ? '<b>' + money(q.card) + '</b> <small>card price</small>' : '<s>' + money(q.card) + '</s> <b>' + money(q.eft) + '</b> <small>' + methodLabel(m) + '</small>') + '</span></div>' +
             '<div class="muted small">' + (full ? 'Arrives within 12 days, so the full amount secures the stand' : 'Deposit ' + depPct() + '%: ' + money(Math.round((m === 'card' ? q.card : q.eft) * depPct() / 100))) + ' · ' + nFree + ' of ' + STANDS.length + ' stands free for these dates</div>' +
             (halfWeekend ? '<div class="small warn-t">' + ic('info') + ' Only one weekend night: weekend stays are normally at least 2 nights (Friday and Saturday, or Saturday and Sunday). Fine if you agreed it with the guest.</div>' : '');
@@ -1155,7 +1209,11 @@
   }
 
   /* ---------- vehicles: each car checks in and out on its own, signs the indemnity and runs a tab ---------- */
-  function newCar(o) { return Object.assign({ id: uid('v'), reg: '', driver: '', phone: '', guests: [], people: 0, ind: null, st: 'due', inAt: '', outAt: '' }, o || {}); }
+  // "minors": the passengers in this vehicle who are under 18 (names that are also in "guests"); a parent or guardian signs for them
+  function newCar(o) { return Object.assign({ id: uid('v'), reg: '', driver: '', phone: '', guests: [], minors: [], people: 0, ind: null, st: 'due', inAt: '', outAt: '' }, o || {}); }
+  function minorsOf(m, guests) { return (m || []).filter(function (n, i, a) { return (guests || []).indexOf(n) >= 0 && a.indexOf(n) === i; }); }
+  function isMinor(c, n) { return (c.minors || []).indexOf(n) >= 0; }
+  function passTxt(c) { return (c.guests || []).map(function (n) { return n + (isMinor(c, n) ? ' (under 18)' : ''); }).join(', '); }
   function ensureCars(b) {
     if (b.cars && b.cars.length) return b.cars;
     var n = Math.max(1, b.vehicles || 1), st = b.status === 'in' ? 'in' : b.status === 'out' ? 'out' : 'due', ppl = people(b), per = Math.floor(ppl / n);
@@ -1186,7 +1244,7 @@
         acts.push('<button type="button" class="icon-btn sm" data-act="car-edit" data-ref="' + k + '" aria-label="Edit vehicle" title="Edit vehicle">' + ic('edit') + '</button>');
         if (c.st === 'due' && cs.length > 1 && !t.items.length) acts.push('<button type="button" class="icon-btn sm danger-t" data-act="car-del" data-ref="' + k + '" aria-label="Remove vehicle" title="Remove vehicle">' + ic('x') + '</button>');
         var sub = [c.driver ? 'Driver ' + c.driver : '', c.people ? c.people + (c.people === 1 ? ' person' : ' people') : ''].filter(Boolean).join(' · ');
-        return '<div class="car"><span class="car-i">' + ic('car') + '</span><div class="car-b"><b>' + esc(carLabel(c, i)) + '</b><small>' + esc(sub || 'Details are added at check-in') + '</small>' + ((c.guests || []).length ? '<small class="car-pass">Passengers: ' + esc(c.guests.join(', ')) + '</small>' : '') + '<div class="car-p">' +
+        return '<div class="car"><span class="car-i">' + ic('car') + '</span><div class="car-b"><b>' + esc(carLabel(c, i)) + '</b><small>' + esc(sub || 'Details are added at check-in') + '</small>' + ((c.guests || []).length ? '<small class="car-pass">Passengers: ' + esc(passTxt(c)) + '</small>' : '') + '<div class="car-p">' +
           (c.st === 'in' ? '<span class="pill ok"><i></i>In since ' + whenShort(c.inAt) + '</span>' : c.st === 'out' ? '<span class="pill muted"><i></i>Left ' + whenShort(c.outAt) + '</span>' : '<span class="pill muted"><i></i>Expected</span>') +
           (c.ind ? '<span class="pill ok">' + ic('check') + 'Indemnity signed</span>' : carSigned(b, c) ? '<span class="pill ok">' + ic('check') + 'Signed online</span>' : c.st === 'due' ? '<span class="pill muted">Indemnity not signed yet</span>' : '<span class="pill bad">' + ic('alert') + 'Indemnity not signed</span>') +
           (c.dgrSent ? '<span class="pill ok">' + ic('gift') + 'Dinokeng code sent</span>' : '') +
@@ -1201,7 +1259,7 @@
       '<div class="grid2"><label class="fld"><span>Driver</span><input name="driver" value="' + esc(c.driver) + '"></label><label class="fld"><span>Driver\'s mobile</span><input name="phone" inputmode="tel" value="' + esc(c.phone) + '"></label></div>' +
       '<label class="fld"><span>Passengers, one name per line (everyone else in the vehicle)</span><textarea name="guests" rows="3">' + esc((c.guests || []).join('\n')) + '</textarea></label>';
   }
-  function readCar(f, c) { if (f.elements.make) c.make = fval(f, 'make'); c.reg = fval(f, 'reg').toUpperCase(); c.driver = fval(f, 'driver'); c.phone = fval(f, 'phone'); c.guests = fval(f, 'guests').split(/\n/).map(function (x) { return x.trim(); }).filter(Boolean); c.people = Math.max(1, +fval(f, 'people') || 1, (c.driver ? 1 : 0) + c.guests.length); }
+  function readCar(f, c) { if (f.elements.make) c.make = fval(f, 'make'); c.reg = fval(f, 'reg').toUpperCase(); c.driver = fval(f, 'driver'); c.phone = fval(f, 'phone'); c.guests = fval(f, 'guests').split(/\n/).map(function (x) { return x.trim(); }).filter(Boolean); c.minors = minorsOf(c.minors, c.guests); c.people =Math.max(1, +fval(f, 'people') || 1, (c.driver ? 1 : 0) + c.guests.length); }
   // the indemnity at check-in: who in this vehicle has signed, who has not, and a way to sign now
   function carInd(b, c) {
     var names = [c.driver].concat(c.guests || []).filter(Boolean), s = K.ind.status(b.ref, people(b));
@@ -1284,7 +1342,7 @@
       '<h1>Kyleu Bush Camp: indemnity</h1><p class="sub">Dinokeng Big 5 Game Reserve · every adult signs before entering the camp</p>' +
       '<div class="grid">' + line('Booking', b ? b.ref : '') + line('Stand', b ? standById(b.stand).name : '') + line('Arrive', b ? fd(b.ci, dt) : '') + line('Depart', b ? fd(b.co, dt) : '') + line('Vehicle registration', c ? c.reg : '') + line('Driver', c ? c.driver : '') + '</div>' +
       '<div class="txt">' + K.ind.html(indText()) + '</div>' +
-      '<table><thead><tr><th style="width:30%">Full name</th><th style="width:22%">ID or passport number</th><th>Signature</th><th style="width:14%">Date</th></tr></thead><tbody>' + (c ? [c.driver].concat(c.guests || []).filter(Boolean) : []).map(function (nm) { return '<tr><td>' + esc(nm) + '</td><td></td><td></td><td></td></tr>'; }).join('') + new Array(Math.max(1, rows - (c ? [c.driver].concat(c.guests || []).filter(Boolean).length : 0)) + 1).join('<tr><td></td><td></td><td></td><td></td></tr>') + '</tbody></table>' +
+      '<table><thead><tr><th style="width:30%">Full name</th><th style="width:22%">ID or passport number</th><th>Signature</th><th style="width:14%">Date</th></tr></thead><tbody>' + (c ? [c.driver].concat(c.guests || []).filter(Boolean) : []).map(function (nm) { return '<tr><td>' + esc(nm) + (nm !== c.driver && isMinor(c, nm) ? ' (under 18)' : '') + '</td><td></td><td></td><td></td></tr>'; }).join('') + new Array(Math.max(1, rows - (c ? [c.driver].concat(c.guests || []).filter(Boolean).length : 0)) + 1).join('<tr><td></td><td></td><td></td><td></td></tr>') + '</tbody></table>' +
       '<p class="note">A parent or guardian signs for children under 18.</p><script>window.onload=function(){window.print()}<\/script></body></html>');
     w.document.close();
   }
@@ -1355,6 +1413,8 @@
     Object.keys(DB.rates || {}).forEach(function (k) { prices[k] = { amount: DB.rates[k] }; });
     Object.keys(w.rateText).forEach(function (k) { prices[k] = Object.assign(prices[k] || {}, w.rateText[k]); });
     var out = { prices: prices, text: w.text, settings: w.settings, hol: DB.hol || null, home: w.home, rules: { wkDays: w.wkDays && w.wkDays.length ? w.wkDays : null, hold: w.hold || null }, indemnity: indText() };
+    // stand sizes: the usual number of guests and the most each stand can ever take (the website asks Kyleu in between, and stops above the most)
+    out.stands = {}; STANDS.forEach(function (s) { out.stands[s.id] = { guests: s.guests || 8, max: standMax(s) }; });
     if (DB.products) out.shop = DB.products.filter(function (p) { return p.active !== false; }).map(function (p) { return { label: p.label, amount: p.amount, note: p.note || '', img: p.img || '', cat: p.cat || '' }; });
     try { localStorage.setItem(WEBK, JSON.stringify(out)); } catch (e) {}
   }
@@ -1540,9 +1600,10 @@
     DB.siteLog = DB.siteLog.slice(0, 3000);
     log((standId === 'camp' ? 'Camp' : standById(standId).name) + ': ' + text);
   }
-  function standOptions(cur) { return '<option value="">Choose the stand</option>' + STANDS.slice().sort(function (a, b) { return standSort(a.id, b.id); }).map(function (s) { return '<option value="' + s.id + '"' + (s.id === cur ? ' selected' : '') + '>' + esc(s.name) + ' (' + AREA_SHORT[s.area] + ')</option>'; }).join('') + '<option value="camp"' + (cur === 'camp' ? ' selected' : '') + '>Somewhere else in camp (pool, lapa, road)</option>'; }
+  // (not standOptions: that name is the stand list on the booking forms, with sizes and no "somewhere else in camp")
+  function siteStandOptions(cur) { return '<option value="">Choose the stand</option>' + STANDS.slice().sort(function (a, b) { return standSort(a.id, b.id); }).map(function (s) { return '<option value="' + s.id + '"' + (s.id === cur ? ' selected' : '') + '>' + esc(s.name) + ' (' + AREA_SHORT[s.area] + ')</option>'; }).join('') + '<option value="camp"' + (cur === 'camp' ? ' selected' : '') + '>Somewhere else in camp (pool, lapa, road)</option>'; }
   function actStandNote(standId) {
-    modal('Add a note to a stand', '<label class="fld"><span>Stand</span><select name="stand">' + standOptions(standId) + '</select></label>' +
+    modal('Add a note to a stand', '<label class="fld"><span>Stand</span><select name="stand">' + siteStandOptions(standId) + '</select></label>' +
       '<label class="fld"><span>Note for whoever works at this stand next</span><textarea name="text" rows="3" placeholder="e.g. Replaced the tap washer. The gate latch is stiff, it needs oil."></textarea></label>' +
       '<p class="hint">' + ic('info') + ' Everyone on the team can read stand notes. Your name and the time are saved with it. For something that must be fixed, use Report a problem instead, so it goes on the job list.</p>',
       'Save the note', function (f) {
@@ -2247,6 +2308,8 @@
       if (extraDue(b)) attention.push({ i: 'alert', tone: 'bad', t: '<b>' + esc(guestName(b)) + '</b> owes ' + money(balance(b)) + ' more: ' + esc(b.extraDue.why || 'the total went up after paying in full').toLowerCase() + '. Send the new invoice.', ref: b.ref, o: 1 });
       if (live(b) && !b.vehTbc && b.status !== 'out' && b.co >= TODAY && namedIn(b) > people(b)) attention.push({ i: 'users', tone: 'warn', t: 'Vehicles list more people than the booking for <b>' + esc(guestName(b)) + '</b> (' + namedIn(b) + ' named, ' + people(b) + ' booked)', ref: b.ref, o: 5 });
       if (b.changeReq && !b.changeReq.done && live(b)) attention.push({ i: 'cal', tone: 'warn', t: '<b>' + esc(guestName(b)) + '</b> asked to change the dates or guests (' + fd(b.ci) + ')', ref: b.ref, o: 1 });
+      if (openCancelReq(b)) attention.push({ i: 'alert', tone: 'warn', t: '<b>' + esc(guestName(b)) + '</b> asked to cancel the booking (' + fd(b.ci) + '): cancel it, or keep it and let them know', ref: b.ref, o: 1 });
+      if (openSize(b)) attention.push({ i: 'users', tone: 'warn', t: '<b>' + esc(guestName(b)) + '</b>: ' + esc(sizeLine(b)) + ' Agree to it or contact them.', ref: b.ref, o: 1 });
       if (live(b) && b.status !== 'in' && b.status !== 'out' && b.ci >= TODAY && diff(TODAY, b.ci) <= 10 && paidUp(b) && !b.finalised) attention.push({ i: 'car', tone: 'warn', t: '<b>' + esc(guestName(b)) + '</b> has paid but not finalised the booking (' + fdw(b.ci) + '): ' + (diff(TODAY, b.ci) <= 7 ? 'their link is locked now, so add the vehicles and arrival time yourself (WhatsApp them) or at check-in' : 'send the finalise link or fill it in'), ref: b.ref, o: 5 });
       var ps = preShop(b); if (ps && live(b) && b.status !== 'out' && (b.ci === TODAY || b.ci === add(TODAY, 1))) attention.push({ i: 'cart', tone: 'info', t: 'Have ready for <b>' + esc(guestName(b)) + '</b> (' + (b.ci === TODAY ? 'today' : 'tomorrow') + '): ' + esc(ps.desc.replace(/^Shop order for arrival: /, '')), ref: b.ref, o: 3 });
       if (s.k === 'pop' || (s.k === 'soft' && b.holdWhy === 'pop' && diff(TODAY, b.softHold) > 2)) attention.push({ i: 'note', tone: 'info', t: 'Proof of payment from <b>' + esc(guestName(b)) + '</b>: check the bank for ' + money(deposit(b)), ref: b.ref, o: 1 });
@@ -2350,7 +2413,7 @@
     }
     var sec = function (title, sub, list, kind) { return '<section class="eft-sec"><h3>' + title + ' <span class="count">' + list.length + '</span></h3><p class="muted small">' + sub + '</p>' + (list.length ? '<div class="eft-grid">' + list.map(function (b) { return card(b, kind); }).join('') + '</div>' : '<p class="empty">Nothing here.</p>') + '</section>'; };
     return '<div class="page-h"><div><h1>EFT payments</h1><p class="muted">' + (hasFee() ? 'Guests who chose EFT pay the normal price (no ' + cardFee() + '% card fee). ' : 'Guests pay by EFT. Proof of payment from the website lands here. ') + 'Match their payments here.</p></div></div>' +
-      '<div class="card match"><label class="search big">' + ic('search') + '<input data-match placeholder="Paste the reference from the bank statement, e.g. KY26-4F2K" aria-label="Bank reference"></label><div data-match-out class="muted small">Tip: guests use their booking reference when they pay, so you can paste it straight from the bank app.</div></div>' +
+      '<div class="card match"><label class="search big">' + ic('search') + '<input data-match placeholder="Paste the reference from the bank statement, e.g. KY26 5903" aria-label="Bank reference"></label><div data-match-out class="muted small">Tip: guests use their booking reference when they pay, so you can paste it straight from the bank app.</div></div>' +
       sec('Proof of payment received', 'The guest says they paid. Check the bank, then confirm.', pop, 'pop') +
       sec('Waiting for payment', 'Quotation sent. It holds the stand for ' + num('Booking rules', 'Deposit due within days of invoice', 5) + ' days; after that the stand is released automatically' + (holdRules().skip !== 'off' ? ', never over a weekend.' : '.'), wait, 'wait') +
       sec('Overdue', 'Past the deadline. Send a last reminder or release the stand for other guests.', over, 'over') +
@@ -2374,7 +2437,7 @@
           var a0 = k.from < s ? s : k.from, z = k.to > e ? e : k.to, c0 = diff(s, a0) + 2, span = diff(a0, z) + (k.to >= e ? 0 : 1);
           return '<div class="cal-bar block' + (k.from < s ? ' cut-l' : '') + (k.to >= e ? ' cut-r' : '') + '" style="grid-column:' + c0 + ' / span ' + span + '" title="' + esc(k.reason) + '"><span>' + esc(k.reason) + '</span></div>';
         }).join('');
-        return '<div class="cal-row"><div class="cal-name"><b>' + esc(st.name) + '</b><small>' + st.guests + ' guests</small></div>' + cells + bars + blocks + '</div>';
+        return '<div class="cal-row"><div class="cal-name"><b>' + esc(st.name) + '</b><small title="' + sizeTxt(st) + '">' + st.guests + ' guests</small></div>' + cells + bars + blocks + '</div>';
       }).join('');
     }).join('');
     return '<div class="page-h"><div><h1>Calendar</h1><p class="muted">' + fd(s, { day: 'numeric', month: 'long' }) + ' to ' + fd(add(e, -1), { day: 'numeric', month: 'long', year: 'numeric' }) + ' · tap an empty night to book it</p></div><div class="ph-act">' + fsel('CAL:area', CAL.area, [['', 'All areas']].concat(Object.keys(AREA_SHORT).map(function (a) { return [a, AREA_SHORT[a]]; }))) + '<button class="icon-btn" data-cal="-7" aria-label="Previous week">' + ic('chev-l') + '</button><button class="btn ghost sm" data-cal="0">Today</button><button class="icon-btn" data-cal="7" aria-label="Next week">' + ic('chev-r') + '</button></div></div>' +
@@ -2461,7 +2524,7 @@
         return '<h3 class="grp">' + AREA_SHORT[a] + ' <small>' + list.length + '</small></h3><div class="stand-grid">' + list.map(function (s) {
           var b = tonight[s.id], nxt = DB.bookings.filter(function (x) { return live(x) && x.stand === s.id && x.ci > TODAY; })[0], closed = DB.closed[s.id], n = (s.photos || []).length;
           return '<article class="stand' + (closed ? ' closed' : '') + '"><button type="button" class="stand-ph" data-act="stand-edit" data-ref="' + esc(s.id) + '" aria-label="Edit ' + esc(s.name) + '">' + (n ? '<img src="' + esc(imgSrc(s.photos[0])) + '" alt="" loading="lazy">' : '<span class="ph">No photo yet</span>') + '<span class="ph-n">' + n + ' photo' + (n === 1 ? '' : 's') + '</span>' + (s.status === 'new' ? '<span class="ph-new">New</span>' : '') + '</button>' +
-            '<div class="stand-b"><b>' + esc(s.name) + '</b><small>' + s.guests + ' guests' + (s.setups ? ' · ' + esc(s.setups) : '') + '</small>' +
+            '<div class="stand-b"><b>' + esc(s.name) + '</b><small>' + sizeTxt(s) + ' guests' + (s.setups ? ' · ' + esc(s.setups) : '') + '</small>' +
             '<p class="small">' + (closed ? '<span class="pill muted"><i></i>Closed to bookings</span>' : b ? 'Tonight: <a href="#" data-open="' + b.ref + '">' + esc(guestName(b)) + '</a>' : '<span class="ok-t">Free tonight</span>') + (nxt ? '<br><span class="muted">Next: ' + fd(nxt.ci) + ', ' + esc(nxt.guest.last) + '</span>' : '') + '</p>' +
             '<label class="switch"><input type="checkbox" data-close-stand="' + s.id + '"' + (closed ? '' : ' checked') + '><span></span>Open for bookings</label>' +
             '<div class="stand-act"><button class="btn sm ghost" data-act="stand-edit" data-ref="' + esc(s.id) + '">Edit</button><button class="btn sm ghost" data-act="stand-copy" data-ref="' + esc(s.id) + '">Copy</button><button class="icon-btn sm" data-act="stand-del" data-ref="' + esc(s.id) + '" aria-label="Remove ' + esc(s.name) + '" title="Remove stand">' + ic('x') + '</button></div></div></article>';
@@ -2493,7 +2556,9 @@
     var area = src ? src.area : 'fenced';
     var body = (isNew ? '<label class="fld"><span>Copy details from</span><select data-copy-from><option value="">Nothing, start blank</option>' + STANDS.map(function (s) { return '<option value="' + esc(s.id) + '"' + (s.id === copyFrom ? ' selected' : '') + '>' + esc(s.name) + ' (' + AREA_SHORT[s.area] + ')</option>'; }).join('') + '</select></label>' : '') +
       '<div class="grid2"><label class="fld"><span>Name</span><input name="name" value="' + (isNew ? (src ? esc(nextName(src.name)) : '') : val('name')) + '" placeholder="e.g. Inside 5" autocomplete="off"></label><label class="fld"><span>Area (sets the price)</span><select name="area">' + Object.keys(AREA_SHORT).map(function (a) { return '<option value="' + a + '"' + (a === area ? ' selected' : '') + '>' + AREA_SHORT[a] + '</option>'; }).join('') + '</select></label></div>' +
-      '<div class="grid2"><label class="fld"><span>Most guests</span><input name="guests" inputmode="numeric" data-stp min="1" max="99" value="' + (src ? src.guests : 8) + '"></label><label class="fld"><span>Setups</span><input name="setups" value="' + val('setups') + '" placeholder="1-2 trailers or tents"></label></div>' +
+      '<div class="grid2"><label class="fld"><span>Usual number of guests</span><input name="guests" inputmode="numeric" data-stp min="1" max="99" value="' + (src ? src.guests || 8 : 8) + '"></label><label class="fld"><span>The most people it can ever take</span><input name="max" inputmode="numeric" data-stp min="1" max="99" value="' + (src ? standMax(src) : 10) + '"></label></div>' +
+      '<p class="hint">' + ic('info') + ' Guests can ask for a few more than the usual number and you decide. Above the most, the website stops them.</p>' +
+      '<label class="fld"><span>Setups</span><input name="setups" value="' + val('setups') + '" placeholder="1-2 trailers or tents"></label>' +
       '<label class="fld"><span>Short line</span><input name="feel" value="' + val('feel') + '" placeholder="e.g. Intimate yet spacious"></label>' +
       '<label class="fld"><span>Highlights, separated by commas</span><input name="hl" value="' + (src ? esc((src.highlights || []).join(', ')) : '') + '" placeholder="Braai area, Near the fence"></label>' +
       '<label class="fld"><span>Description</span><textarea name="desc" rows="4">' + val('description') + '</textarea></label>' +
@@ -2508,7 +2573,8 @@
       if (STANDS.some(function (s) { return s.id !== id && K.norm(s.name) === K.norm(nm); })) { toast('There is already a stand called ' + esc(nm)); return false; }
       ensureStands();
       var like = STANDS.filter(function (s) { return s.area === ar && s.areaInfo; })[0];
-      var data = { name: nm, area: ar, areaInfo: like ? like.areaInfo : null, guests: parseInt(fval(f, 'guests'), 10) || 8, setups: fval(f, 'setups'), feel: fval(f, 'feel'), highlights: fval(f, 'hl').split(',').map(function (h) { return h.trim(); }).filter(Boolean), description: fval(f, 'desc'), photos: EDIT.photos.slice(), status: fval(f, 'isnew') ? 'new' : 'open' };
+      var gN = parseInt(fval(f, 'guests'), 10) || 8, mN = parseInt(fval(f, 'max'), 10) || Math.ceil(gN * 1.25); if (mN < gN) mN = gN;   // the most is never below the usual number
+      var data = { name: nm, area: ar, areaInfo: like ? like.areaInfo : null, guests: gN, max: mN, setups: fval(f, 'setups'), feel: fval(f, 'feel'), highlights: fval(f, 'hl').split(',').map(function (h) { return h.trim(); }).filter(Boolean), description: fval(f, 'desc'), photos: EDIT.photos.slice(), status: fval(f, 'isnew') ? 'new' : 'open' };
       var st;
       if (isNew) {
         var base = slugify(nm), sid = base, n = 2; while (STANDS.some(function (s) { return s.id === sid; }) || DB.gone[sid]) sid = base + '-' + n++;
@@ -2519,7 +2585,12 @@
       log((isNew ? (src ? 'Copied ' + src.name + ' to ' : 'Added ') : 'Updated ') + st.name);
       if (!save()) toast('This browser is out of space for photos. Try fewer photos (the live version keeps them on the server).');
       EDIT = null; render(); toast(isNew ? esc(st.name) + ' added. It can be booked straight away.' : esc(st.name) + ' saved');
-    }, { wide: true, noFocus: !isNew });
+    }, { wide: true, noFocus: !isNew, onOpen: function (f) {
+      // the most follows the usual number (a quarter more) until someone types their own
+      var gi = f.elements.guests, mi = f.elements.max, own = !!(src && src.max);
+      mi.addEventListener('input', function () { own = true; });
+      gi.addEventListener('input', function () { var g = parseInt(gi.value, 10) || 0; if (g && !own) mi.value = Math.ceil(g * 1.25); });
+    } });
   }
   // "Inside 4" becomes "Inside 5" (the first free number), otherwise "Copy of ..."
   function nextName(n) {
@@ -2638,7 +2709,9 @@
       '<div class="att-demo">' + ic('note') + '<div><b>' + esc(a.name) + '</b><p class="muted small">Made-up demo file, so there is nothing to open. In the live version the real document opens here.</p></div></div>';
     modal(esc(a.name), body + '<p class="muted small">' + [a.size ? kb(a.size) : '', a.via || '', a.at || ''].filter(Boolean).map(esc).join(' · ') + '</p>', null, null, { wide: true, noFocus: true });
   }
-  function popChips(b) { return (b.pops || []).length ? '<div class="att-row">' + b.pops.map(function (a, i) { return attChip(a, 'b:' + b.ref + ':' + i); }).join('') + '</div>' : ''; }
+  // proof of payment sent with an email address that is not the one on the booking is still kept, with a small note
+  function popOther(a) { return a.emailMatch === false ? 'sent from another email address' + (a.email ? ': ' + a.email : '') : ''; }
+  function popChips(b) { return (b.pops || []).length ? '<div class="att-row">' + b.pops.map(function (a, i) { return attChip(a, 'b:' + b.ref + ':' + i); }).join('') + b.pops.filter(popOther).map(function (a) { return '<span class="muted small pop-other">' + esc(a.name) + ': ' + esc(popOther(a)) + '</span>'; }).join('') + '</div>' : ''; }
 
   /* =========================================================
      Inbox: every email with a guest, kept as one conversation
@@ -2896,7 +2969,7 @@
         k.pairs([['Booking', b.ref], ['Stand', standById(b.stand).name], ['Arrive', fd(b.ci, LONGD)], ['Depart', fd(b.co, LONGD)], ['Vehicle', c.reg || '________________'], ['Driver', c.driver || '________________']]);
         k.para(K.ind.plain(indText()), 9.2);
         var names = [c.driver].concat(c.guests || []).filter(Boolean);
-        k.table(['Full name', 'ID or passport number', 'Signature', 'Date'], [56, 44, 52, 22], names.map(function (nm) { return [nm, '', '', '']; }), Math.min(12, Math.max(4, names.length + 1, c.people || 0)));
+        k.table(['Full name', 'ID or passport number', 'Signature', 'Date'], [56, 44, 52, 22], names.map(function (nm) { return [nm + (nm !== c.driver && isMinor(c, nm) ? ' (under 18)' : ''), '', '', '']; }), Math.min(12, Math.max(4, names.length + 1, c.people || 0)));
         k.para('Every adult in the vehicle signs. A parent or guardian signs for children under 18.', 8.5);
       });
       k.foot();
@@ -3274,7 +3347,7 @@
     var days = []; for (var i = 0; i < 14; i++) days.push(add(TODAY, i));
     return '<div class="page-h"><div><h1>Game drives</h1><p class="muted">Guided drives with a Kyleu guide. ' + money(num('Game drives', 'Game drive 3 or more people per person', 400)) + ' per person for 3 or more, ' + money(num('Game drives', 'Game drive 2 people per person', 450)) + ' each for 2, ' + money(num('Game drives', 'Game drive 1 person', 900)) + ' for one person.</p></div><div class="ph-act"><button class="btn" data-act="drive-add">' + ic('plus') + 'Add a game drive</button></div></div>' +
       '<div class="kpis">' + tile('Drives in the next 7 days', Object.keys(slotsWk).length, wk.reduce(function (a, b) { return a + b.extras.gd; }, 0) + ' guests going') + tile('Waiting for a time', need.length, need.length ? 'Pick a time and a guide' : 'Everything is scheduled', null, need.length ? 'warn' : 'ok') + tile('Drive income this month', money(inc), 'at EFT prices') + '</div>' +
-      (need.length ? '<section class="card"><header class="card-h"><h3>Waiting for a time</h3><span class="muted small">Booked with the stay, time not set yet</span></header>' + need.map(function (b) { return '<div class="brow"><span class="brow-st">' + b.extras.gd + ' ' + (b.extras.gd === 1 ? 'person' : 'people') + '</span><span class="brow-g" data-open="' + b.ref + '"><b>' + esc(guestName(b)) + '</b><small>' + esc(standById(b.stand).name) + ' · staying ' + fd(b.ci) + ' to ' + fd(b.co) + '</small></span><button class="btn sm" data-act="drive-set" data-ref="' + b.ref + '">' + ic('clock') + 'Set a time</button></div>'; }).join('') + '</section>' : '') +
+      (need.length ? '<section class="card"><header class="card-h"><h3>Waiting for a time</h3><span class="muted small">No time set yet</span></header>' + need.map(function (b) { return '<div class="brow"><span class="brow-st">' + b.extras.gd + ' ' + (b.extras.gd === 1 ? 'person' : 'people') + '</span><span class="brow-g" data-open="' + b.ref + '"><b>' + esc(guestName(b)) + '</b><small>' + esc(standById(b.stand).name) + ' · staying ' + fd(b.ci) + ' to ' + fd(b.co) + '</small></span><button class="btn sm" data-act="drive-set" data-ref="' + b.ref + '">' + ic('clock') + 'Set a time</button></div>'; }).join('') + '</section>' : '') +
       '<section class="card"><header class="card-h"><h3>The next two weeks</h3><div class="ph-act">' + fsel('GD:guide', GD.guide, [['', 'All guides']].concat(GUIDES.map(function (g) { return [g, 'Guide: ' + g]; }))) + fsel('GD:slot', GD.slot, [['', 'Morning and afternoon'], ['am', 'Mornings only'], ['pm', 'Afternoons only']]) + '</div></header>' + days.map(function (d) {
         var any = sched.some(function (b) { return b.drive.d === d; });
         if (!any && (GD.guide || GD.slot)) return '';
@@ -3846,7 +3919,7 @@
   function seedInd(force) {
     var FLAG = 'kyleu-ind-demo';
     try { if (!force && localStorage.getItem(FLAG)) return; } catch (e) { return; }
-    var out = force ? [] : K.ind.all(), seedN = 7, rnd = function () { seedN = (seedN * 16807) % 2147483647; return seedN / 2147483647; };
+    var out = force ? [] : K.ind.all().filter(function (x) { return !x.demo; }), seedN = 7, rnd = function () { seedN = (seedN * 16807) % 2147483647; return seedN / 2147483647; };
     var cv = document.createElement('canvas'); cv.width = 300; cv.height = 64; var g = cv.getContext('2d'), n = 0, ver = K.ind.version(indText());
     var sigOf = function (name) { g.clearRect(0, 0, 300, 64); g.fillStyle = '#1d1410'; g.font = '30px "Segoe Print", "Bradley Hand", cursive'; g.textBaseline = 'middle'; g.fillText(name, 8, 34); return cv.toDataURL('image/png'); };
     var pick = DB.bookings.filter(function (b) { return !b.demoInd && live(b) && (b.status === 'in' || b.status === 'out' || (b.status === 'confirmed' && paidUp(b) && b.ci >= TODAY && diff(TODAY, b.ci) <= 6)); }).slice(-45);
@@ -3881,7 +3954,7 @@
   }
   function signLink(b) { if (!b.key) { b.key = newKey(); save(); } return new URL(K.ind.signUrl(b.ref, b.key, '../'), location.href).href; }
   function indRec(id) { return K.ind.all().filter(function (r) { return r.id === id; })[0] || null; }
-  function indNames(b) { var out = []; ensureCars(b).forEach(function (c, i) { if (c.driver) out.push({ name: c.driver, reg: c.reg, car: 'Vehicle ' + (i + 1), role: 'Driver' }); (c.guests || []).filter(Boolean).forEach(function (n) { out.push({ name: n, reg: c.reg, car: 'Vehicle ' + (i + 1), role: 'Passenger' }); }); }); if (!out.some(function (p) { return K.ind.nkey(p.name) === K.ind.nkey(guestName(b)); })) out.unshift({ name: guestName(b), reg: '', car: '', role: '' }); return out; }
+  function indNames(b) { var out = []; ensureCars(b).forEach(function (c, i) { if (c.driver) out.push({ name: c.driver, reg: c.reg, car: 'Vehicle ' + (i + 1), role: 'Driver' }); (c.guests || []).filter(Boolean).forEach(function (n) { var p = { name: n, reg: c.reg, car: 'Vehicle ' + (i + 1), role: 'Passenger' }; if (isMinor(c, n)) p.minor = true; out.push(p); }); }); if (!out.some(function (p) { return K.ind.nkey(p.name) === K.ind.nkey(guestName(b)); })) out.unshift({ name: guestName(b), reg: '', car: '', role: '' }); return out; }
   function carSigned(b, c) { var ns = [c.driver].concat(c.guests || []).filter(Boolean), cov = K.ind.status(b.ref, people(b)).cov; return ns.length > 0 && ns.every(function (n) { return cov[K.ind.nkey(n)]; }); }
   function indPill(b) { var s = K.ind.status(b.ref, people(b)); return '<span class="pill ' + (s.done ? 'ok' : s.covered ? 'warn' : 'muted') + '">' + (s.done ? ic('check') + 'Everyone signed for' : Math.min(s.covered, s.total) + ' of ' + s.total + ' signed for') + '</span>'; }
   function indHTML(b) {
@@ -4228,6 +4301,8 @@
     }
     if (act === 'claim-no') { var nb = byRef(ref); nb.notes.push({ at: nowStamp(), by: ME.name, text: 'Checked the bank: the ' + money(nb.paidClaim.amt) + ' the guest told us about is not in yet.' }); nb.paidClaim = null; if (nb.status !== 'pending' || !(nb.pops || []).length) nb.pop = false; log('Payment not in the bank yet for ' + nb.ref, nb.ref); save(); refresh(); toast('Noted. Use Send a message to let ' + esc(nb.guest.first) + ' know.'); return; }
     if (act === 'veh-ok') { var vb = byRef(ref); vb.vehTbc = false; log('Number of vehicles confirmed on ' + vb.ref, vb.ref); save(); refresh(); toast('Marked as confirmed'); return; }
+    if (act === 'size-ok') { var szb = byRef(ref), szc = szb && szb.sizeCheck; if (!szc) return; szc.done = { at: nowStamp(), by: ME.name }; szb.notes.push({ at: nowStamp(), by: ME.name, text: 'Agreed to ' + szc.people + ' people on a stand that usually takes ' + szc.usual + '.' }); log('Agreed to ' + szc.people + ' people on ' + standById(szb.stand).name + ' (usually ' + szc.usual + ')', szb.ref); save(); refresh(); toast('Noted: ' + szc.people + ' people on ' + esc(standById(szb.stand).name) + ' is fine'); return; }
+    if (act === 'cancel-keep') { var ckb = byRef(ref); if (!ckb || !ckb.cancelReq) return; ckb.cancelReq.done = { at: nowStamp(), by: ME.name, kept: true }; ckb.notes.push({ at: nowStamp(), by: ME.name, text: 'Cancellation request from the website: the booking is kept.' }); log('Cancellation request on ' + ckb.ref + ': the booking is kept', ckb.ref); save(); refresh(); toast('Booking kept. Use Send a message to let ' + esc(ckb.guest.first) + ' know.'); return; }
     if (act === 'req-done') { var rb = byRef(ref); rb.changeReq.done = { at: nowStamp(), by: ME.name }; rb.notes.push({ at: nowStamp(), by: ME.name, text: 'Change request from the website dealt with.' }); log('Change request on ' + rb.ref + ' dealt with', rb.ref); save(); refresh(); toast('Change request marked as dealt with'); return; }
     if (act === 'send-doc') { var sd = ref.split('|'); return sendTemplate(byRef(sd[0]), sd[1]); }
     if (act === 'dgr-send') { var so = carOf(ref); if (so.c) sendCodes(so.b, [so.c]); return; }
@@ -4359,7 +4434,8 @@
     if (t.matches('[data-match]')) {
       var q = t.value.trim().toUpperCase().replace(/\s/g, ''), out = $('[data-match-out]');
       if (q.length < 3) { out.innerHTML = 'Tip: guests use their booking reference when they pay, so you can paste it straight from the bank app.'; return; }
-      var hits = DB.bookings.filter(function (b) { return b.ref.replace('-', '').indexOf(q.replace('-', '')) >= 0 || guestName(b).toUpperCase().indexOf(q) >= 0; }).slice(0, 4);
+      var refKey = q.replace(/[^A-Z0-9]/g, '');   // "KY265903", "KY26 5903" and "KY26-5903" all find booking "KY26 5903"
+      var hits = DB.bookings.filter(function (b) { return (refKey && b.ref.toUpperCase().replace(/[^A-Z0-9]/g, '').indexOf(refKey) >= 0) || guestName(b).toUpperCase().indexOf(q) >= 0; }).slice(0, 4);
       out.innerHTML = hits.length ? hits.map(function (b) { return '<button class="brow" data-open="' + b.ref + '"><span class="brow-st">' + esc(b.ref) + '</span><span class="brow-g"><b>' + esc(guestName(b)) + '</b><small>' + (b.status === 'pending' ? 'Expecting ' + money(deposit(b)) + ' deposit' : 'Balance ' + money(balance(b))) + '</small></span>' + pill(stateOf(b)) + '</button>'; }).join('') : 'No booking with that reference.';
       return;
     }

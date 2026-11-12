@@ -17,7 +17,7 @@
 
   /* ---------- dates ---------- */
   function iso(d) { var z = new Date(d.getTime() - d.getTimezoneOffset() * 6e4); return z.toISOString().slice(0, 10); }
-  function parse(s) { if (!s) return null; var p = s.split('-'); return new Date(+p[0], p[1] - 1, +p[2]); }
+  function parse(s) { if (!/^\d{4}-\d{2}-\d{2}$/.test(String(s || ''))) return null; var p = s.split('-'), d = new Date(+p[0], p[1] - 1, +p[2]); return isNaN(+d) ? null : d; }
   function addDays(d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; }
   function today() { var t = new Date(); t.setHours(0, 0, 0, 0); return t; }
   function nightsOf(ci, co) { var out = []; for (var d = new Date(ci); d < co; d = addDays(d, 1)) out.push(new Date(d)); return out; }
@@ -43,14 +43,14 @@
     TAKEN = []; var db = null;
     try { db = JSON.parse(localStorage.getItem('kyleu-admin-demo-v1') || 'null'); } catch (e) {}
     // an unpaid quotation holds the stand for 5 days (one more day if the guest said they paid); after that the stand is free again
-    var claimed = {}, popAt = {}; try { (K.paidClaims ? K.paidClaims() : []).forEach(function (c) { claimed[c.ref] = 1; }); JSON.parse(localStorage.getItem('kyleu-web-pop') || '[]').forEach(function (x) { if (x.ref) { claimed[x.ref] = 1; var d = String(x.at || '').slice(0, 10); if (d && (!popAt[x.ref] || d < popAt[x.ref])) popAt[x.ref] = d; } }); } catch (e) {}
-    var popOf = function (b) { var a = (b.pops || []).map(function (p) { return String(p.at || '').slice(0, 10); }).filter(Boolean).concat(popAt[b.ref] ? [popAt[b.ref]] : []).sort(); return a[0] || ''; };
+    var rk = function (s) { return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }, claimed = {}, popAt = {}; try { (K.paidClaims ? K.paidClaims() : []).forEach(function (c) { claimed[rk(c.ref)] = 1; }); JSON.parse(localStorage.getItem('kyleu-web-pop') || '[]').forEach(function (x) { if (x.ref) { var r0 = rk(x.ref); claimed[r0] = 1; var d = String(x.at || '').slice(0, 10); if (d && (!popAt[r0] || d < popAt[r0])) popAt[r0] = d; } }); } catch (e) {}
+    var popOf = function (b) { var a = (b.pops || []).map(function (p) { return String(p.at || '').slice(0, 10); }).filter(Boolean).concat(popAt[rk(b.ref)] ? [popAt[rk(b.ref)]] : []).sort(); return a[0] || ''; };
     var t0 = iso(today()), dueOf = function (created, ci) { var c = parse(String(created || t0).slice(0, 10)), d = addDays(c, depDays()), bd = addDays(parse(ci), -P.num('Booking rules', 'Balance due days before arrival', 7)), soon = addDays(c, 1); if (soon > parse(ci)) soon = parse(ci); return iso(bd < d ? (bd < soon ? soon : bd) : d); };
     var released = function (due, paidAmt, claim, pa) { return K.quoteHold && P && K.quoteHold({ due: due, paid: paidAmt, claimed: claim, popAt: pa || '', today: t0, hol: P.holidays }).state === 'released'; };
     if (db && db.bookings) {
       db.bookings.forEach(function (b) {
         if (b.status === 'cancelled') return;
-        if (b.status === 'pending' && released(dueOf(b.created, b.ci), (b.payments || []).reduce(function (a, p) { return a + (p.amt || 0); }, 0), !!(b.paidClaim || b.pop || claimed[b.ref]), popOf(b))) return;
+        if (b.status === 'pending' && released(dueOf(b.created, b.ci), (b.payments || []).reduce(function (a, p) { return a + (p.amt || 0); }, 0), !!(b.paidClaim || b.pop || claimed[rk(b.ref)]), popOf(b))) return;
         TAKEN.push({ stand: b.stand, from: b.ci, to: b.co });
       });
       (db.blocks || []).forEach(function (k) { TAKEN.push({ stand: k.stand, from: k.from, to: k.to }); });
@@ -58,7 +58,7 @@
     }
     try { JSON.parse(localStorage.getItem('kyleu-web-bookings') || '[]').forEach(function (b) {
       if (!b.stand || !b.ci || !b.co || b.cancelled) return;
-      if (!b.paid && released((b.invoice && b.invoice.depositDue) || dueOf(b.created, b.ci), 0, !!claimed[b.ref], popAt[b.ref])) return;
+      if (!b.paid && released((b.invoice && b.invoice.depositDue) || dueOf(b.created, b.ci), 0, !!claimed[rk(b.ref)], popAt[rk(b.ref)])) return;
       TAKEN.push({ stand: b.standId || b.stand, from: b.ci, to: b.co });
     }); } catch (e) {}
     return TAKEN;
@@ -90,13 +90,16 @@
       if (!wk && d.getDay() >= 1 && d.getDay() <= 4) pensWd++;
       acc += g.adults * (wk ? R.weekend : R.weekday) + g.pens * pensRate + g.kids * R.kid;
     });
-    var people = g.adults + g.pens;
-    if (wkN) lines.push({ t: wkN + ' weekend night' + (wkN > 1 ? 's' : '') + ' × ' + people + ' × ' + K.money(K.toCard(R.weekend, P)), v: wkN * people * R.weekend, c: wkN * people * K.toCard(R.weekend, P) });
-    if (wdN) {
-      var wdTotal = wdN * g.adults * R.weekday + g.pens * (pensWd * R.pens + (wdN - pensWd) * R.weekday);
-      lines.push({ t: wdN + ' weekday night' + (wdN > 1 ? 's' : '') + ' × ' + people + (g.pens && pensWd ? ' (pensioner rate Mon-Thu)' : ' × ' + K.money(K.toCard(R.weekday, P))), v: wdTotal, c: wdN * g.adults * K.toCard(R.weekday, P) + g.pens * (pensWd * K.toCard(R.pens, P) + (wdN - pensWd) * K.toCard(R.weekday, P)) });
-    }
-    if (g.kids) lines.push({ t: g.kids + ' child' + (g.kids > 1 ? 'ren' : '') + ' under 12', v: 0, free: true });
+    var people = g.adults + g.pens, cm = function (v) { return K.money(K.toCard(v, P)); };
+    var pw = function (n, one, many) { return n + ' ' + (n === 1 ? one : many); }, nt = function (n, w) { return n + ' ' + w + ' night' + (n > 1 ? 's' : ''); };
+    var add = function (t, n, ppl, rate) { if (n && ppl) lines.push({ t: t, v: n * ppl * rate, c: n * ppl * K.toCard(rate, P) }); };
+    add(nt(wkN, 'weekend') + ' × ' + pw(people, 'person', 'people') + ' × ' + cm(R.weekend), wkN, people, R.weekend);
+    if (g.pens && pensWd && R.pens !== R.weekday) {   // pensioners pay less on Monday to Thursday nights: say so on a line of its own
+      add(nt(wdN, 'weekday') + ' × ' + pw(g.adults, 'adult', 'adults') + ' × ' + cm(R.weekday), wdN, g.adults, R.weekday);
+      add(nt(pensWd, 'weekday') + ' × ' + pw(g.pens, 'pensioner', 'pensioners') + ' × ' + cm(R.pens) + ' (pensioner rate, Mon to Thu)', pensWd, g.pens, R.pens);
+      add(nt(wdN - pensWd, 'weekday') + ' × ' + pw(g.pens, 'pensioner', 'pensioners') + ' × ' + cm(R.weekday), wdN - pensWd, g.pens, R.weekday);
+    } else add(nt(wdN, 'weekday') + ' × ' + pw(people, 'person', 'people') + ' × ' + cm(R.weekday), wdN, people, R.weekday);
+    if (g.kids) { if (R.kid) add(nights.length + ' night' + (nights.length > 1 ? 's' : '') + ' × ' + pw(g.kids, 'child', 'children') + ' under 12 × ' + cm(R.kid), nights.length, g.kids, R.kid); else lines.push({ t: pw(g.kids, 'child', 'children') + ' under 12', v: 0, free: true }); }
     var stay = acc;
     // extras
     var exLines = [];
@@ -129,18 +132,10 @@
   /* ---------- add-ons (prices from prices.md) ---------- */
   var EXTRAS = [];
   function buildExtras() {
-    var wood = P.num('Camp shop', 'Sekelbos firewood 6kg bag', 25), lwood = P.num('Camp shop', 'Long-burning wood 20kg', 40), ice = P.num('Camp shop', 'Ice per bag', 15), fl = P.num('Camp shop', 'Firelighters pack of 10', 25), pp = P.num('Self-sufficient', 'Porta potty hire per night', 100);
-    var gd3 = P.num('Game drives', 'Game drive 3 or more people per person', 400), gd2 = P.num('Game drives', 'Game drive 2 people per person', 450), gd1 = P.num('Game drives', 'Game drive 1 person', 900);
+    var pp = P.num('Self-sufficient', 'Porta potty hire per night', 100);
+    // game drives are not booked here: guests arrange them on WhatsApp and Kyleu adds them in the admin
     EXTRAS = [
       { id: 'pp', only: 'self-sufficient', img: 'assets/img/photos/ablution-bathroom.jpg', name: 'Porta potty hire', sub: K.money(pp) + ' per night incl. cleaning', unit: 'toggle', max: 1, price: function (q, n) { return q * n * pp; }, label: function (q, n) { return 'Porta potty · ' + n + ' night' + (n > 1 ? 's' : ''); } }
-    ];
-    var OLD_EXTRAS = [
-      { id: 'gd', img: 'assets/img/photos/game-drive-vehicle.jpg', name: 'Guided game drive', sub: K.money(gd3) + ' pp (3+), ' + K.money(gd2) + ' pp (2), ' + K.money(gd1) + ' (1) · kids over 5', unit: 'people', max: 10, price: function (q) { return q >= 3 ? q * gd3 : q === 2 ? 2 * gd2 : gd1; }, label: function (q) { return 'Game drive · ' + q + ' ' + (q > 1 ? 'people' : 'person'); } },
-      { id: 'pp', only: 'self-sufficient', img: 'assets/img/photos/ablution-bathroom.jpg', name: 'Porta potty hire', sub: K.money(pp) + ' per night incl. cleaning', unit: 'toggle', max: 1, price: function (q, n) { return q * n * pp; }, label: function (q, n) { return 'Porta potty · ' + n + ' night' + (n > 1 ? 's' : ''); } },
-      { id: 'wood', img: 'assets/img/shop/sekelbos-wood.jpg', name: 'Extra sekelbos wood (6 kg)', sub: K.money(wood) + ' a bag · 1 free bag per night on ablution stands', unit: 'bags', max: 20, price: function (q) { return q * wood; }, label: function (q) { return q + ' × extra wood'; } },
-      { id: 'lwood', img: 'assets/img/shop/long-burning-wood.jpg', name: 'Long-burning wood (20 kg)', sub: K.money(lwood) + ' a bag', unit: 'bags', max: 10, price: function (q) { return q * lwood; }, label: function (q) { return q + ' × long-burning wood'; } },
-      { id: 'ice', img: 'assets/img/shop/ice.jpg', name: 'Ice', sub: K.money(ice) + ' a bag · waiting on arrival', unit: 'bags', max: 20, price: function (q) { return q * ice; }, label: function (q) { return q + ' × ice'; } },
-      { id: 'fl', img: 'assets/img/shop/firelighters.jpg', name: 'Firelighters (10)', sub: K.money(fl) + ' a pack', unit: 'packs', max: 10, price: function (q) { return q * fl; }, label: function (q) { return q + ' × firelighters'; } }
     ];
   }
 
@@ -155,7 +150,7 @@
   function noFee(q) { return !q.fee; }
 
   function cardHTML(st) {
-    var free = isFree(st, state.ci, state.co), fits = guestsTotal() <= st.guests;
+    var free = isFree(st, state.ci, state.co), size = sizeOf(st), n0 = guestsTotal();
     var q = quote(st, state.ci, state.co);
     var ph = photosOf(st);
     return '<article class="stand-card' + (free ? '' : ' booked') + '" data-id="' + st.id + '" data-reveal>' +
@@ -167,9 +162,9 @@
       (st.photos.length ? '<span class="sc-photo-count"><svg><use href="#i-camera"/></svg>' + st.photos.length + '</span>' : '') +
       '</div><div class="sc-body"><div class="sc-title"><h3>' + K.esc(st.name) + '</h3></div><div class="sc-feel">' + K.esc(st.feel) + '</div>' +
       '<div class="sc-meta"><span><svg><use href="#i-users"/></svg>Up to ' + st.guests + '</span><span><svg><use href="#i-tent"/></svg>' + K.esc(st.setups) + '</span><span><svg><use href="#' + (st.area === 'self-sufficient' ? 'i-bolt-off' : 'i-shower') + '"/></svg>' + facilityText(st) + '</span></div>' +
-      (!fits ? '<div class="rule-note" style="margin:0;padding:8px 12px;font-size:.8rem"><svg><use href="#i-info"/></svg>Fits up to ' + st.guests + ' guests. WhatsApp us for bigger groups</div>' : '') +
-      '<div class="sc-foot"><div class="sc-price">' + K.dualPair(q.cardStay, q.stay) + '<small>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + ' · ' + (state.adults + state.pens) + ' adult' + (state.adults + state.pens > 1 ? 's' : '') + (state.kids ? ' + ' + state.kids + ' kid' + (state.kids > 1 ? 's' : '') : '') + '</small></div>' +
-      '<button class="btn btn-sm' + (free ? '' : ' btn-ghost') + '" type="button" data-open="' + st.id + '">' + (free ? 'View &amp; book' : 'Other dates') + '</button></div></div></article>';
+      (size === 'over' ? '<div class="rule-note size-note" style="margin:0;padding:8px 12px;font-size:.8rem"><svg><use href="#i-info"/></svg><span>Usually up to ' + st.guests + ' people. You can still ask for ' + n0 + ': we check and confirm with you.</span></div>' : size === 'max' ? '<div class="rule-note size-note bad" style="margin:0;padding:8px 12px;font-size:.8rem"><svg><use href="#i-info"/></svg><span>Too small for ' + n0 + ' people: it takes ' + st.guests + (K.standMax(st) > st.guests ? ', at most ' + K.standMax(st) : '') + '.</span></div>' : '') +
+      '<div class="sc-foot"><div class="sc-price">' + K.dualPair(q.cardStay, q.stay) + '<small>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + ' · ' + K.peopleText(state) + '</small></div>' +
+      '<button class="btn btn-sm' + (free && size !== 'max' ? '' : ' btn-ghost') + '" type="button" data-open="' + st.id + '">' + (!free ? 'Other dates' : size === 'max' ? 'See the stand' : 'View &amp; book') + '</button></div></div></article>';
   }
 
   function filtered() { return STANDS.filter(function (s) { return !state.area || s.area === state.area; }); }
@@ -186,11 +181,13 @@
       renderMap();
       return;
     }
-    var freeList = list.filter(function (s) { return isFree(s, state.ci, state.co); });
+    var freeList = list.filter(function (s) { return isFree(s, state.ci, state.co); }), rank = { ok: 0, over: 1, max: 2 };
+    freeList = freeList.map(function (s, i) { return [s, i]; }).sort(function (a, b) { return rank[sizeOf(a[0])] - rank[sizeOf(b[0])] || a[1] - b[1]; }).map(function (x) { return x[0]; });
+    var tooBig = freeList.length && freeList.every(function (s) { return sizeOf(s) === 'max'; });
     var n = nightsOf(state.ci, state.co).length;
     resultsTitle.textContent = freeList.length ? freeList.length + ' stand' + (freeList.length > 1 ? 's' : '') + ' free for your dates' : 'No stands free for these dates';
     resultsSub.textContent = nice(state.ci) + ' → ' + nice(state.co) + ' · ' + n + ' night' + (n > 1 ? 's' : '') + ' · ' + guestsTotal() + ' guest' + (guestsTotal() > 1 ? 's' : '');
-    grid.innerHTML = freeList.length ? freeList.map(cardHTML).join('') : '<div class="empty date-first"><svg><use href="#i-cal"/></svg><h3>Everything is booked for these dates</h3><p class="muted">Try other dates' + (state.area ? ' or another camp area' : '') + ', or WhatsApp us and we\'ll help you find a gap.</p><a class="btn btn-green" href="https://wa.me/27604584478" target="_blank" rel="noopener"><svg><use href="#i-wa"/></svg>WhatsApp us</a></div>';
+    grid.innerHTML = freeList.length ? (tooBig ? '<div class="rule-note size-note bad" style="grid-column:1/-1"><svg><use href="#i-info"/></svg><span><b>No single stand takes ' + guestsTotal() + ' people.</b> Big groups book two stands next to each other, as two bookings. WhatsApp us and we will help you choose them.<span class="size-acts"><a class="btn btn-green btn-sm" href="https://wa.me/27604584478" target="_blank" rel="noopener"><svg><use href="#i-wa"/></svg>WhatsApp us</a></span></span></div>' : '') + freeList.map(cardHTML).join('') : '<div class="empty date-first"><svg><use href="#i-cal"/></svg><h3>Everything is booked for these dates</h3><p class="muted">Try other dates' + (state.area ? ' or another camp area' : '') + ', or WhatsApp us and we\'ll help you find a gap.</p><a class="btn btn-green" href="https://wa.me/27604584478" target="_blank" rel="noopener"><svg><use href="#i-wa"/></svg>WhatsApp us</a></div>';
     wireCards(); K.reveal(grid);
     renderMap();
     checkWeekendRule();
@@ -224,7 +221,7 @@
       info: function (st) {
         if (!state.ci || !state.co) { var R = rates(st); return { free: null, price: 'from ' + K.money(R.weekday), sub: 'per person / night · pick dates to check availability' }; }
         var free = isFree(st, state.ci, state.co), q = quote(st, state.ci, state.co);
-        return { free: free, price: K.dualPair(q.cardStay, q.stay), sub: q.nights + ' night' + (q.nights > 1 ? 's' : '') + ' · ' + (state.adults + state.pens) + ' adult' + (state.adults + state.pens > 1 ? 's' : '') };
+        return { free: free, price: K.dualPair(q.cardStay, q.stay), sub: q.nights + ' night' + (q.nights > 1 ? 's' : '') + ' · ' + K.peopleText(state) };
       },
       onOpen: function (st) { openSheet(st.id); }
     });
@@ -232,27 +229,58 @@
   }
 
   /* ---------- weekend rule ---------- */
-  // A stay that includes a Friday or Saturday night is at least 2 nights ("Minimum nights over a weekend").
-  // Friday + Saturday and Saturday + Sunday are both fine; one weekend night on its own is not.
+  // A stay with a weekend-rate night in it is at least 2 nights ("Minimum nights over a weekend").
+  // Weekend-rate nights: Friday, Saturday and Sunday, and the night before a public holiday.
+  // Friday + Saturday, Saturday + Sunday and Sunday + Monday are all fine; one such night on its own is not.
   function weekendShort(ci, co) {
     var nights = nightsOf(ci, co), minN = P ? P.num('Booking rules', 'Minimum nights over a weekend', 2) : 2;
-    var wk = nights.some(function (d) { return d.getDay() === 5 || d.getDay() === 6; });
-    return wk && nights.length < minN ? minN - nights.length : 0;
+    return nights.some(function (d) { return isWeekendNight(d); }) && nights.length < minN ? minN - nights.length : 0;
+  }
+  // a weekday night that costs the weekend rate only because the next day is a public holiday
+  function holEve(d) { var dow = d.getDay(); return !!(P && P.holidays[iso(addDays(d, 1))]) && !(P.wkDays ? P.wkDays.indexOf(dow) >= 0 : dow === 5 || dow === 6 || dow === 0); }
+  function eveNote(ci, co) {
+    var ev = P ? nightsOf(ci, co).filter(holEve) : []; if (!ev.length) return '';
+    return ev.map(function (d) { return nice(d); }).join(' and ') + (ev.length > 1 ? ' are nights before a public holiday, so they are' : ' is the night before a public holiday, so it is') + ' charged at the weekend rate.';
+  }
+  function shortWhy(ci, co) {
+    if (!P || !weekendShort(ci, co)) return '';
+    var minN = P.num('Booking rules', 'Minimum nights over a weekend', 2);
+    return nightsOf(ci, co).some(holEve) ? 'The night before a public holiday counts as a weekend night, and a stay with a weekend night is at least ' + minN + ' nights.'
+      : 'A stay with a Friday, Saturday or Sunday night is at least ' + minN + ' nights.';
   }
   function checkWeekendRule() {
     var minN = P.num('Booking rules', 'Minimum nights over a weekend', 2), short = weekendShort(state.ci, state.co);
     ruleNote.classList.toggle('hidden', !short || minN < 2);
-    if (short) $('span', ruleNote).innerHTML = '<b>Weekend stays are at least ' + minN + ' nights:</b> Friday and Saturday, or Saturday and Sunday. We can adjust your dates for you.';
+    if (short) $('span', ruleNote).innerHTML = '<b>' + shortWhy(state.ci, state.co) + '</b> For example Friday and Saturday, Saturday and Sunday, or Sunday and Monday. We can add a night for you.';
     return !short;
   }
   function fixWeekend() {
-    // add the missing night(s) at the end: a Friday becomes Friday + Saturday, a Saturday becomes Saturday + Sunday
+    // add the missing night(s) at the end: a Friday becomes Friday + Saturday, a Sunday becomes Sunday + Monday
     var short = weekendShort(state.ci, state.co); if (short) state.co = addDays(state.co, short);
     syncSearch(); render();
   }
 
   /* ---------- stand sheet ---------- */
   var sheet, backdrop, current = null, sel = { ci: null, co: null }, calMonth = null;
+  function sizeOf(st, n) { n = n == null ? guestsTotal() : n; return n <= st.guests ? 'ok' : n <= K.standMax(st) ? 'over' : 'max'; }
+  function whoHTML() {
+    var row = function (k, lab, sub) { return '<div class="bw-person"><span><b>' + lab + '</b><small>' + sub + '</small></span><span class="bw-stepper"><button type="button" data-sg="' + k + '" data-d="-1" aria-label="One less: ' + lab.toLowerCase() + '">&minus;</button><output data-sgo="' + k + '">' + state[k] + '</output><button type="button" data-sg="' + k + '" data-d="1" aria-label="One more: ' + lab.toLowerCase() + '">+</button></span></div>'; };
+    return '<div class="sheet-section" data-sheet-who><h3>Who\'s coming?</h3><div class="bw-people sheet-people">' + row('adults', 'Adults', '12 years and older') + row('pens', 'Pensioners', 'South African pensioners pay less on weeknights') + row('kids', 'Children', 'Under 12 years old: free') + '</div><div data-size-note></div></div>';
+  }
+  // what the stand's size means for this group: fine, a few more than usual (Kyleu checks), or too many (stopped here)
+  function sizeNote() {
+    var sn = $('[data-size-note]', sheet); if (!sn || !current) return 'ok';
+    var size = sizeOf(current), n = guestsTotal(), mx = K.standMax(current);
+    sn.innerHTML = size === 'over' ? '<div class="rule-note size-note"><svg><use href="#i-info"/></svg><span><b>' + K.esc(current.name) + ' usually takes up to ' + current.guests + ' people, and you are ' + n + '.</b> You can still send your booking. We check that everyone will fit and confirm with you, or suggest a bigger stand.</span></div>'
+      : size === 'max' ? '<div class="rule-note size-note bad"><svg><use href="#i-info"/></svg><span><b>' + n + ' people is too many for ' + K.esc(current.name) + '.</b> It usually takes ' + current.guests + (mx > current.guests ? ', and ' + mx + ' at the very most' : '') + '. Would you rather book a bigger stand, or talk to us about it?<span class="size-acts"><button type="button" class="btn btn-sm" data-fit>See stands that fit</button><a class="btn btn-green btn-sm" target="_blank" rel="noopener" href="https://wa.me/27604584478?text=' + encodeURIComponent('Hi Kyleu! We are a group of ' + n + ' and would like to camp at ' + current.name + '. Can you help us find a stand that fits?') + '"><svg><use href="#i-wa"/></svg>WhatsApp us</a></span></span></div>' : '';
+    var fb = $('[data-fit]', sn);
+    if (fb) fb.onclick = function () {
+      if (sel.ci && sel.co && !weekendShort(sel.ci, sel.co)) { state.ci = sel.ci; state.co = sel.co; }
+      closeSheet(); syncSearch();
+      if (state.ci && state.co) { reached = Math.max(reached, PICK); wGo(PICK, true); } else wGo(1, true);
+    };
+    return size;
+  }
   function openSheet(id) {
     var st = STANDS.filter(function (s) { return s.id === id; })[0]; if (!st) return;
     current = st; sel.ci = state.ci; sel.co = state.co; var cm = state.ci || today(); calMonth = new Date(cm.getFullYear(), cm.getMonth(), 1);
@@ -273,11 +301,16 @@
       '<div class="sheet-section"><h3>What\'s at the stand</h3><ul class="hl-list">' + base + '</ul></div>' +
       (st.map ? '<div class="sheet-section"><h3>Where it is</h3><div class="mini-map">' + K.campMapMini(STANDS, st.id) + '</div><p class="muted" style="font-size:.82rem;margin:8px 0 0"><a href="#map" data-close-sheet>Open the full camp map</a></p></div>' : '') +
       '<div class="sheet-section"><h3>Pick your dates</h3><div class="cal dp-inline"></div><div class="cal-note"><span><i class="k-free"></i>Available</span><span><i class="k-bk"></i>Booked</span><span><i class="k-we"></i>Weekend rate</span></div></div>' +
-      '<div class="sheet-section"><h3>Price</h3><div class="breakdown" data-bd></div><p class="muted" style="font-size:.8rem;margin:8px 0 0">Dinokeng conservation &amp; self-drive fees are paid separately to the reserve. <a href="dinokeng.html#fees">See the Dinokeng page</a></p></div>' +
+      whoHTML() + '<div class="sheet-section"><h3>Price</h3><div class="breakdown" data-bd></div><p class="muted" style="font-size:.8rem;margin:8px 0 0">Dinokeng conservation &amp; self-drive fees are paid separately to the reserve. <a href="dinokeng.html#fees">See the Dinokeng page</a></p></div>' +
       '</div>';
     $$('.sg-thumbs button', sheet).forEach(function (b) { b.onclick = function () { $('.sg-main img', sheet).src = ph[+b.dataset.i]; $$('.sg-thumbs button', sheet).forEach(function (x) { x.classList.toggle('on', x === b); }); }; });
     $('.sg-main', sheet).onclick = function () { var i = $$('.sg-thumbs button', sheet).findIndex(function (b) { return b.classList.contains('on'); }); K.lightbox(ph.map(function (p) { return { src: p, cap: st.name }; }), Math.max(0, i)); };
     $$('[data-close-sheet]', sheet).forEach(function (a) { a.onclick = function (e) { e.preventDefault(); closeSheet(); setView('map'); $('#results').scrollIntoView({ behavior: 'smooth' }); }; });
+    $$('[data-sg]', sheet).forEach(function (b) { b.onclick = function () {
+      var k = b.dataset.sg; state[k] = Math.max(0, Math.min(20, state[k] + (+b.dataset.d))); if (state.adults + state.pens < 1) state[k] = 1;
+      state.peopleSet = true; $$('[data-sgo]', sheet).forEach(function (o) { o.textContent = state[o.dataset.sgo]; });
+      syncSearch(); updateSheetPrice(); if (state.ci && state.co) render();
+    }; });
     calHover = null; calBusy = false; renderCal(); calWire(); updateSheetPrice();
     sheet.classList.add('open'); backdrop.classList.add('open'); document.body.classList.add('lock'); sheet.setAttribute('aria-hidden', 'false');
     $('.sheet-scroll', sheet).scrollTop = 0;
@@ -320,6 +353,8 @@
     else if (!sel.ci || dt < sel.ci) { if (!startHere()) return; var keep = sel.co && isFree(current, dt, sel.co); sel.ci = dt; if (!keep) sel.co = null; }   // an earlier day moves the arrival
     else {
       if (!isFree(current, sel.ci, dt)) { K.toast('Some nights in between are booked. Try other dates'); return; }
+      var why = shortWhy(sel.ci, dt);
+      if (why) { K.toast(why); calHover = null; renderCal(); var hb = $('.dp-hint', sheet); if (hb) { hb.textContent = why + ' Tap a later day to go home.'; hb.classList.add('bad'); } return; }
       sel.co = dt; calHover = null; renderCal(); updateSheetPrice();
       var box = $('.cal', sheet); calBusy = true; box.classList.add('dp-lock');                // lock in: the band sweeps, the circles pop
       var n = nightsOf(sel.ci, sel.co).length, hn = $('.dp-hint', box); if (hn) hn.textContent = 'Locked in: ' + n + ' night' + (n > 1 ? 's' : '') + ', ' + nice(sel.ci) + ' to ' + nice(sel.co) + '.';
@@ -329,50 +364,75 @@
     calHover = null; renderCal(); updateSheetPrice();
     var f = $('.cal [data-d="' + iso(dt) + '"]', sheet); if (f && !f.disabled) f.focus();
   }
+  // while the pointer moves only the classes change, so a tap or quick click always lands on the day that was pressed
+  function paintCal() {
+    var grid = $('.cal .dp-grid', sheet); if (!grid) return;
+    var end = !sel.co && sel.ci && calHover && calHover > sel.ci ? calHover : null, bad = !!end && !isFree(current, sel.ci, end), idx = 0;
+    $$('.dp-c:not(.dp-blank)', grid).forEach(function (c) {
+      var d = parse($('.dp-d', c).dataset.d), inR = !!end && d > sel.ci && d < end, isEnd = !!end && +d === +end, nn = $('.dp-nn', c);
+      c.classList.toggle('hin', inR); c.classList.toggle('hend', isEnd); if (+d === +sel.ci) c.classList.toggle('has-band', !!end);
+      if (inR) c.style.setProperty('--i', ++idx); else c.style.removeProperty('--i');
+      if (nn) nn.remove();
+      if (isEnd) { var n = nightsOf(sel.ci, end).length, sm = document.createElement('small'); sm.className = 'dp-nn'; sm.textContent = bad ? 'Booked in between' : n + ' night' + (n > 1 ? 's' : ''); c.appendChild(sm); }
+    });
+    grid.classList.toggle('previewing', !!end); grid.classList.toggle('dp-bad', bad);
+  }
   function calWire() {
     var box = $('.cal', sheet); if (!box || box._wired) return; box._wired = true;
+    var touchAt = 0;   // a finger tap also sends a pretend mouse move: ignore those
+    box.addEventListener('touchstart', function () { touchAt = Date.now(); }, { passive: true });
     box.addEventListener('click', function (e) { var b = e.target.closest('.dp-d'); if (b && !b.disabled) calPick(parse(b.dataset.d)); });
     box.addEventListener('mouseover', function (e) {
-      if (!sel.ci || sel.co || calBusy) return;
+      if (!sel.ci || sel.co || calBusy || Date.now() - touchAt < 1200) return;
       var c = e.target.closest('.dp-c'); if (!c || c.classList.contains('dp-blank')) return;
       var b = c.querySelector('.dp-d'), d = b && !b.disabled ? parse(b.dataset.d) : null;
-      if ((d && +d) !== (calHover && +calHover)) { calHover = d; renderCal(); }
+      if ((d && +d) !== (calHover && +calHover)) { calHover = d; paintCal(); }
     });
-    box.addEventListener('mouseleave', function () { if (calHover) { calHover = null; renderCal(); } });
-    box.addEventListener('mouseout', function (e) { if (calHover && !box.contains(e.relatedTarget)) { calHover = null; renderCal(); } });
+    box.addEventListener('mouseleave', function () { if (calHover) { calHover = null; paintCal(); } });
+    box.addEventListener('mouseout', function (e) { if (calHover && !box.contains(e.relatedTarget)) { calHover = null; paintCal(); } });
   }
 
   function updateSheetPrice() {
-    var bd = $('[data-bd]', sheet), bb = $('.book-box', sheet);
+    var bd = $('[data-bd]', sheet), bb = $('.book-box', sheet), size = sizeNote();
     if (!sel.co) {
       bd.innerHTML = '<div class="row sub"><span>' + (sel.ci ? 'Now pick your departure date' : 'Pick your arrival date on the calendar above') + '</span></div>';
       $('.tot', bb).innerHTML = '<b>-</b><small>Pick your departure date</small>';
       $('[data-reserve]', bb).disabled = true; return;
     }
-    var free = isFree(current, sel.ci, sel.co), q = quote(current, sel.ci, sel.co);
+    var free = isFree(current, sel.ci, sel.co), q = quote(current, sel.ci, sel.co), ev = eveNote(sel.ci, sel.co);
     bd.innerHTML = '<div class="row sub"><span>' + nice(sel.ci) + ' → ' + nice(sel.co) + '</span><span>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + '</span></div>' +
       q.lines.map(function (l) { return '<div class="row"><span>' + l.t + '</span><span>' + (l.free ? 'Free' : K.money(l.c)) + '</span></div>'; }).join('') +
+      (ev ? '<div class="row sub"><span>' + ev + '</span></div>' : '') +
       (noFee(q) ? '<div class="row total"><span>Total</span><span>' + K.money(q.stay) + '</span></div>' :
       '<div class="row"><span><b>Total</b> (card price, incl. ' + q.fee + '% card fee)</span><span><b>' + K.money(q.cardStay) + '</b></span></div>' +
       '<div class="row eft-row"><span>EFT discount</span><span>-' + K.money(q.cardStay - q.stay) + '</span></div>' +
       '<div class="row total"><span>Total with EFT</span><span>' + K.money(q.stay) + '</span></div>');
-    $('.tot', bb).innerHTML = '<b>' + K.dualPair(q.cardStay, q.stay) + '</b><small>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + (noFee(q) ? '' : ' · ' + K.money(q.cardStay) + ' by card') + ' · ' + (q.payFull ? 'full payment due now' : 'deposit secures it') + '</small>';
-    var btn = $('[data-reserve]', bb); btn.disabled = !free;
-    btn.innerHTML = free ? 'Reserve <svg><use href="#i-arrow"/></svg>' : 'Not available';
+    $('.tot', bb).innerHTML = '<b>' + K.dualPair(q.cardStay, q.stay) + '</b><small>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + ' · ' + K.peopleText(state) + (noFee(q) ? '' : ' · ' + K.money(q.cardStay) + ' by card') + ' · ' + (q.payFull ? 'full payment due ' + (q.fullDue <= today() ? 'now' : 'by ' + nice(q.fullDue, { day: 'numeric', month: 'short' })) : 'deposit secures it') + '</small>';
+    var btn = $('[data-reserve]', bb); btn.disabled = !free || size === 'max';
+    btn.innerHTML = !free ? 'Not available' : size === 'max' ? 'Too many people' : 'Reserve <svg><use href="#i-arrow"/></svg>';
   }
 
   /* ---------- checkout ---------- */
   var modal, step = 1, booking = null;
   function openCheckout() {
     if (!sel.co) return;
-    if (weekendShort(sel.ci, sel.co)) { K.toast('Weekend stays are at least 2 nights: Friday and Saturday, or Saturday and Sunday'); return; }
+    var why = shortWhy(sel.ci, sel.co); if (why) { K.toast(why); return; }
+    if (sizeOf(current) === 'max') return;
+    if (!state.peopleSet) {   // came straight to this stand ("Book this stand"): ask how many people are coming before going on
+      state.peopleSet = true; var w = $('[data-sheet-who]', sheet);
+      if (w) { w.scrollIntoView({ behavior: 'smooth', block: 'center' }); w.classList.remove('attn'); void w.offsetWidth; w.classList.add('attn'); }
+      K.toast('How many people are coming? Set the numbers here, then press Reserve again.'); return;
+    }
     if ((S && /q2b/i.test(S.get('Booking mode', 'demo')))) { window.open(S.get('Live availability (Q2B)'), '_blank', 'noopener'); return; }
-    booking = { stand: current, ci: sel.ci, co: sel.co, g: { adults: state.adults, pens: state.pens, kids: state.kids } };
+    booking = { stand: current, ci: sel.ci, co: sel.co, g: { adults: state.adults, pens: state.pens, kids: state.kids }, over: sizeOf(current) === 'over' ? { people: guestsTotal(), usual: current.guests } : null };
     extras = {}; shopQty = {}; extras.__shop = shopQty;
     var intl = $('[data-intl]', modal); if (intl && K.intlNote) intl.innerHTML = K.intlNote({ what: current.name + ', ' + nice(sel.ci, { day: 'numeric', month: 'long', year: 'numeric' }) + ' to ' + nice(sel.co, { day: 'numeric', month: 'long', year: 'numeric' }) });
     step = 1; renderSide(); renderExtras(); goStep(1);
     modal.classList.add('open'); document.body.classList.add('lock');
-    var payFull = quote(booking.stand, booking.ci, booking.co).payFull, online = onlinePay();
+    var q0 = quote(booking.stand, booking.ci, booking.co), payFull = q0.payFull, online = onlinePay();
+    // "How it works": a booking close to arrival is paid in full by a date, not "valid for 5 days"
+    var how = $('[data-eft] .eft-box p', modal);
+    if (how && !online) how.innerHTML = 'You will be emailed a quotation reflecting Kyleu\'s bank details as well as your booking reference number. ' + (payFull ? 'Because you arrive soon, the full amount is due ' + (q0.fullDue <= today() ? 'as soon as you can' : 'by ' + nice(q0.fullDue, LONG)) + '.' : 'This quotation is valid for ' + depDays() + ' days.') + ' Once payment has been made, <a href="pop.html">upload your proof of payment</a> directly to your booking.';
     $$('.pay-opt', modal).forEach(function (o) { o.hidden = online ? (o.dataset.pay === 'deposit' && payFull) : o.dataset.pay !== 'invoice'; });
     $('[name=pay][value=' + (!online ? 'invoice' : payFull ? 'full' : 'deposit') + ']', modal).checked = true;
     var s3 = $('.mc-step[data-step="3"]', modal);
@@ -388,7 +448,7 @@
     var mini = $('[data-mini]', modal); if (mini) mini.hidden = n === 4 || n === 2;
     $$('.mc-step', modal).forEach(function (s) { s.classList.toggle('on', +s.dataset.step === n); });
     $$('.steps li', modal).forEach(function (li, i) { li.classList.toggle('on', i + 1 === n); li.classList.toggle('done', i + 1 < n); });
-    $('.mc-main', modal).scrollTop = 0;
+    $('.mc-main', modal).scrollTop = 0; $('.modal-card', modal).classList.toggle('done', n === 4);
     if (n === 4) $('.mc-side', modal).style.display = 'none'; else $('.mc-side', modal).style.display = '';
   }
   function renderSide() {
@@ -398,7 +458,7 @@
     side.innerHTML = '<div class="ms-img"><img src="' + cover(b.stand) + '" alt=""></div><div class="ms-body">' +
       '<div><span class="badge area-' + b.stand.area + '">' + b.stand.areaInfo.short + '</span><h3 style="margin-top:8px">' + K.esc(b.stand.name) + '</h3></div>' +
       '<div class="ms-dates"><div><small>Arrive</small><b>' + nice(b.ci) + '</b></div><div><small>Depart</small><b>' + nice(b.co) + '</b></div></div>' +
-      '<div class="muted" style="font-size:.88rem;font-weight:700">' + (b.g.adults + b.g.pens) + ' adult' + (b.g.adults + b.g.pens > 1 ? 's' : '') + (b.g.pens ? ' (' + b.g.pens + ' pensioner' + (b.g.pens > 1 ? 's' : '') + ')' : '') + (b.g.kids ? ' · ' + b.g.kids + ' child' + (b.g.kids > 1 ? 'ren' : '') : '') + '</div>' +
+      '<div class="muted" style="font-size:.88rem;font-weight:700">' + K.peopleText(b.g) + '</div>' +
       '<div class="breakdown">' + q.lines.map(function (l) { return '<div class="row"><span>' + l.t + '</span><span>' + (l.free ? 'Free' : K.money(l.c)) + '</span></div>'; }).join('') +
       q.exLines.map(function (l) { return '<div class="row"><span>' + K.esc(l.t) + '</span><span>' + K.money(l.c) + '</span></div>'; }).join('') +
       (noFee(q) ? '<div class="row total"><span>Total</span><span>' + K.money(q.total) + '</span></div>' : card
@@ -407,15 +467,20 @@
       (q.payFull ? '<div class="row sub"><span>You arrive soon, so the full amount is due ' + (q.fullDue <= today() ? 'now' : 'by ' + nice(q.fullDue, { day: 'numeric', month: 'short' })) + '</span></div>' : '<div class="row sub"><span>' + q.depPct + '% deposit to secure</span><span>' + K.money(dep) + '</span></div><div class="row sub"><span>Balance due by ' + nice(q.balanceDue, { day: 'numeric', month: 'short' }) + '</span><span>' + K.money(tot - dep) + '</span></div>') +
       '</div><p class="muted" style="font-size:.8rem;margin:0">Dinokeng Game Reserve charges its own entry fees, paid to the reserve. <a href="dinokeng.html#fees" target="_blank">Dinokeng fees</a></p></div>';
     // the same summary for phones (where the side panel is hidden) and on the "Check your booking" step
-    var gTxt = (b.g.adults + b.g.pens) + ' adult' + (b.g.adults + b.g.pens > 1 ? 's' : '') + (b.g.pens ? ' (' + b.g.pens + ' pensioner' + (b.g.pens > 1 ? 's' : '') + ')' : '') + (b.g.kids ? ' and ' + b.g.kids + ' child' + (b.g.kids > 1 ? 'ren' : '') : '');
+    var gTxt = K.peopleText(b.g), ev = eveNote(b.ci, b.co);
+    var bdRows = q.lines.map(function (l) { return '<div class="row"><span>' + l.t + '</span><span>' + (l.free ? 'Free' : K.money(card ? l.c : l.v)) + '</span></div>'; }).join('') + q.exLines.map(function (l) { return '<div class="row"><span>' + K.esc(l.t) + '</span><span>' + K.money(card ? l.c : l.v) + '</span></div>'; }).join('');
     var dueTxt = q.payFull ? 'You arrive soon, so please pay the full ' + K.money(tot) + (q.fullDue <= today() ? ' as soon as you can' : ' by ' + nice(q.fullDue, { day: 'numeric', month: 'long' })) + '.'
       : 'Pay the ' + q.depPct + '% deposit of ' + K.money(dep) + ' within ' + depDays() + ' days to secure your stand. The balance of ' + K.money(tot - dep) + ' is due by ' + nice(q.balanceDue, { day: 'numeric', month: 'long' }) + '.';
     var mini = $('[data-mini]', modal);
-    if (mini) mini.innerHTML = '<b>' + K.esc(b.stand.name) + '</b><span>' + nice(b.ci) + ' to ' + nice(b.co) + ' · ' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + '</span><span>' + gTxt + ' · <b>Total ' + K.money(tot) + '</b></span>';
+    if (mini) { var wasOpen = !!($('details', mini) || {}).open; mini.innerHTML = '<b>' + K.esc(b.stand.name) + '</b><span>' + nice(b.ci) + ' to ' + nice(b.co) + ' · ' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + '</span><span>' + gTxt + ' · <b>Total ' + K.money(tot) + '</b></span><details class="mini-bd"' + (wasOpen ? ' open' : '') + '><summary>See how the price is made up</summary><div class="breakdown">' + bdRows + '<div class="row total"><span>Total</span><span>' + K.money(tot) + '</span></div></div></details>'; }
     var cs = $('[data-check-sum]', modal);
-    if (cs) cs.innerHTML = '<dl><div><dt>Stand</dt><dd>' + K.esc(b.stand.name) + ' <small>' + b.stand.areaInfo.short + '</small></dd></div><div><dt>Arrive</dt><dd>' + nice(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }) + '</dd></div><div><dt>Depart</dt><dd>' + nice(b.co, { weekday: 'long', day: 'numeric', month: 'long' }) + ' <small>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + '</small></dd></div><div><dt>Guests</dt><dd>' + gTxt + '</dd></div>' + (q.exLines.length ? '<div><dt>Extras</dt><dd>' + q.exLines.map(function (l) { return '<small>' + K.esc(l.t) + ' · ' + K.money(card ? l.c : l.v) + '</small>'; }).join('') + '</dd></div>' : '') + '<div class="tot"><dt>Total</dt><dd>' + K.money(tot) + '</dd></div></dl><p>' + dueTxt + '</p><button type="button" class="link-btn" data-edit-stay>Change something</button>';
+    if (cs) cs.innerHTML = '<dl><div><dt>Stand</dt><dd>' + K.esc(b.stand.name) + ' <small>' + b.stand.areaInfo.short + '</small></dd></div><div><dt>Arrive</dt><dd>' + nice(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }) + '</dd></div><div><dt>Depart</dt><dd>' + nice(b.co, { weekday: 'long', day: 'numeric', month: 'long' }) + ' <small>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + '</small></dd></div><div><dt>Guests</dt><dd>' + gTxt + '</dd></div>' +
+      '<div><dt>Price</dt><dd>' + q.lines.map(function (l) { return '<small>' + l.t + ' · ' + (l.free ? 'free' : K.money(card ? l.c : l.v)) + '</small>'; }).join('') + (ev ? '<small>' + ev + '</small>' : '') + '</dd></div>' +
+      (q.exLines.length ? '<div><dt>Extras</dt><dd>' + q.exLines.map(function (l) { return '<small>' + K.esc(l.t) + ' · ' + K.money(card ? l.c : l.v) + '</small>'; }).join('') + '</dd></div>' : '') + '<div class="tot"><dt>Total</dt><dd>' + K.money(tot) + '</dd></div></dl>' +
+      (b.over ? '<p class="size-warn"><b>' + b.over.people + ' people on a stand that usually takes ' + b.over.usual + '.</b> You can send your booking: we check that everyone will fit and confirm with you, or suggest a bigger stand.</p>' : '') +
+      '<p>' + dueTxt + '</p><button type="button" class="link-btn" data-edit-stay>Change something</button>';
     var eb = cs && $('[data-edit-stay]', cs); if (eb) eb.onclick = function () { closeCheckout(); };
-    var invSmall = $('.pay-opt[data-pay="invoice"] small', modal); if (invSmall && !onlinePay()) invSmall.textContent = dueTxt;
+    var invSmall = $('.pay-opt[data-pay="invoice"] small', modal); if (invSmall && !onlinePay()) invSmall.textContent = 'Nothing to pay right now. ' + dueTxt;
     // pay option amounts
     var eftNow = q.payFull ? q.total : q.deposit, cardEq = q.payFull ? q.cardTotal : q.cardDeposit;
     var amt = { deposit: q.cardDeposit, full: q.cardTotal, eft: eftNow, invoice: eftNow };
@@ -462,7 +527,8 @@
     $$('[required]', stepEl).forEach(function (inp) {
       var v = inp.type === 'checkbox' ? inp.checked : inp.value.trim(), bad = !v;
       if (!bad && inp.type === 'email') bad = !/^\S+@\S+\.\S+$/.test(inp.value);
-      if (!bad && inp.name === 'phone') bad = inp.value.replace(/\D/g, '').length < 9;
+      if (!bad && inp.name === 'phone') bad = !K.phoneOk(inp.value);
+      if (!bad && (inp.name === 'first' || inp.name === 'last')) bad = !K.nameOk(inp.value);
       if (inp.name === 'phone') { var pm = $('.msg', inp.closest('.field')); if (pm && pm.dataset.msgBad) pm.textContent = inp.value.trim() ? pm.dataset.msgBad : pm.dataset.msgEmpty; }
       if (!bad && inp.name === 'cardnum') bad = !luhn(inp.value);
       if (!bad && inp.name === 'exp') bad = !validExp(inp.value);
@@ -482,7 +548,8 @@
     var card = v === 'deposit' || v === 'full';
     $('[data-card]', modal).hidden = !card; $('[data-eft]', modal).hidden = card;
     $$('[data-card] input', modal).forEach(function (i) { i.required = card; });
-    $('[data-pay-btn-label]', modal).textContent = card ? 'Pay ' : v === 'eft' ? 'Continue to bank & pay ' : 'Send booking request · ';
+    $('[data-pay-btn-label]', modal).textContent = card ? 'Pay ' : v === 'eft' ? 'Continue to bank & pay ' : 'Send my booking request';
+    $('[data-pay-amount]', modal).hidden = !card && v !== 'eft';   // nothing is paid on this button when a quotation is sent
     var s3t = $('.mc-step[data-step="3"] .eft-box', modal); if (s3t && !onlinePay()) s3t.hidden = false;
     renderSide();
   }
@@ -502,7 +569,7 @@
     try {
       var saved = JSON.parse(localStorage.getItem('kyleu-web-bookings') || '[]'), now = new Date();
       saved.push({ ref: ref, created: iso(now) + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'), stand: booking.stand.id, ci: iso(booking.ci), co: iso(booking.co),
-        adults: booking.g.adults, pens: booking.g.pens, kids: booking.g.kids, extras: {}, first: f('first'), last: f('last'), email: f('email'), phone: f('phone'), eta: '', notes: f('notes'), key: bkey,
+        adults: booking.g.adults, pens: booking.g.pens, kids: booking.g.kids, extras: {}, first: f('first'), last: f('last'), email: f('email'), phone: f('phone'), eta: '', notes: f('notes'), key: bkey, overCap: booking.over || undefined,
         vehicles: cv.count, vehTbc: !cv.count, cars: cv.cars,
         shop: SHOP.filter(function (it) { return shopQty[it.label]; }).map(function (it) { return { label: it.label, qty: shopQty[it.label], each: it.each }; })
           .concat(extras.pp && booking.stand.area === 'self-sufficient' ? [(function () { var n = nightsOf(booking.ci, booking.co).length; return { label: 'Porta potty hire, cleaning included (' + n + ' night' + (n === 1 ? '' : 's') + ')', qty: 1, each: n * P.num('Self-sufficient', 'Porta potty hire per night', 100) }; })()] : []),
@@ -512,9 +579,10 @@
     var box = $('[data-success]', modal);
     box.innerHTML = '<div class="success"><div class="success-badge"><svg class="ring" viewBox="0 0 110 110" fill="none" stroke="#3f7d3a" stroke-width="6" stroke-linecap="round"><circle cx="55" cy="55" r="50"/><path d="M34 57l14 14 28-30"/></svg></div>' +
       '<span class="hand">See you in the bush, ' + K.esc(f('first') || 'friend') + '!</span>' +
-      '<h2 style="margin-top:6px">' + (paid ? 'Your reservation is confirmed' : 'Your reservation request is in') + '</h2>' +
+      '<h2 style="margin-top:6px">' + (paid ? 'Your booking is confirmed' : 'Your booking request is in') + '</h2>' +
       '<p class="muted">' + K.esc(booking.stand.name) + ' · ' + nice(booking.ci, { weekday: 'long', day: 'numeric', month: 'long' }) + ' to ' + nice(booking.co, { weekday: 'long', day: 'numeric', month: 'long' }) + '</p>' +
       '<div class="ref">' + ref + '</div>' +
+      (booking.over ? '<p class="muted bk-said">You booked for ' + booking.over.people + ' people on a stand that usually takes ' + booking.over.usual + '. We will check that everyone fits and confirm with you.</p>' : '') +
       (paid ? '<p class="muted" style="font-size:.9rem">' + K.money(paid) + ' received' + (isCard ? '' : ' by instant EFT') + '.</p>' : '') +
       (f('notes') ? '<p class="muted bk-said">Your note for us: "' + K.esc(f('notes')) + '"</p>' : '') +
       // the quotation (or invoice, once something is paid) is emailed straight away, then shown here too
@@ -531,10 +599,10 @@
       '<h3 style="margin:26px 0 6px">What happens next</h3><ol class="next-steps">' +
       (pay === 'invoice' ? '<li><b>1</b><span>Pay the ' + (q.payFull ? 'full amount of ' + K.money(q.total) : q.depPct + '% deposit of ' + K.money(q.deposit)) + ' by EFT ' + (q.payFull ? (q.fullDue <= today() ? 'as soon as you can' : 'by ' + nice(q.fullDue, { day: 'numeric', month: 'long' })) : 'within ' + depDays() + ' days') + ', using reference <b>' + ref + '</b>. Then press <b>I have paid</b>, here or later with <a href="' + blink + '">the link to your booking</a>. We check the bank and confirm.</span></li>' : '') +
       (!q.payFull && pay !== 'full' ? '<li><b>' + (pay === 'invoice' ? 2 : 1) + '</b><span>Balance of ' + K.money(isCard ? q.cardTotal - q.cardDeposit : q.total - q.deposit) + ' is due by ' + nice(q.balanceDue, { day: 'numeric', month: 'long' }) + '. We\'ll send a reminder.</span></li>' : '') +
-      '<li><b>✓</b><span>Pay your Dinokeng conservation &amp; self-drive fees online or at the gate. Kyleu is a proud DGR CP member, so before your stay we send you a <b>Conservation Fee Discount Voucher</b> code for each vehicle (R85 instead of R100 per adult per night). <a href="dinokeng.html#fees">Dinokeng fees</a></span></li>' +
+      '<li><b>✓</b><span>Pay your Dinokeng conservation &amp; self-drive fees online or at the gate. Kyleu is a proud DGR CP member, so before your stay we send you a <b>Conservation Fee Discount Voucher</b> code for each vehicle (' + dgrSave() + '). <a href="dinokeng.html#fees">Dinokeng fees</a></span></li>' +
       '<li><b>✓</b><span>Once your booking is <b>paid in full</b>, we email you a link to <b>finalise</b> it: your vehicles and who is in each one, and roughly when you arrive. Want more from the camp shop later? Add it with the link to your booking.</span></li>' +
       '<li><b>✓</b><span>Enter at Dinokeng <b>Tau Gate</b>, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km. <a href="contact.html">Directions</a></span></li></ol>' +
-      '<div class="cta-actions"><button class="btn" type="button" data-ics><svg><use href="#i-cal"/></svg>Add to calendar</button><a class="btn btn-green" target="_blank" rel="noopener" href="https://wa.me/27604584478?text=' + encodeURIComponent('Hi Kyleu! My booking reference is ' + ref + ' (' + booking.stand.name + ', ' + iso(booking.ci) + ' to ' + iso(booking.co) + ').') + '"><svg><use href="#i-wa"/></svg>WhatsApp us your reference</a></div>' +
+      '<div class="cta-actions"><button class="btn" type="button" data-ics><svg><use href="#i-cal"/></svg>Add to calendar</button><a class="btn btn-green" target="_blank" rel="noopener" href="https://wa.me/27604584478?text=' + encodeURIComponent('Hi Kyleu! My booking reference is ' + ref + ' (' + booking.stand.name + ', ' + nice(booking.ci, { day: 'numeric', month: 'long', year: 'numeric' }) + ' to ' + nice(booking.co, { day: 'numeric', month: 'long', year: 'numeric' }) + ').') + '"><svg><use href="#i-wa"/></svg>WhatsApp us your reference</a></div>' +
       '<details class="inv-fold"><summary>See your ' + docW + '</summary><div class="inv-wrap">' + K.invoiceHTML(inv) + '</div></details>' +
       '<div class="inv-acts"><button class="btn btn-ghost" type="button" data-inv-pdf><svg><use href="#i-doc"/></svg>Download your reservation (PDF)</button><button class="btn btn-ghost" type="button" data-inv-print><svg><use href="#i-doc"/></svg>Print</button></div>' +
       '<div class="demo-flag" style="margin:22px 0 0;text-align:left"><svg><use href="#i-info"/></svg><span>Demo mode: this is a mock-up. No booking was made, nothing was charged and no details were sent anywhere. A copy stays in this browser only, so you can see it in the admin demo.</span></div></div>';
@@ -542,24 +610,23 @@
     setTimeout(function () { var s = $('[data-inv-sent]', box); if (s) { s.className = 'inv-sent ok'; s.innerHTML = '<svg><use href="#i-check"/></svg>' + DocW + ' sent to ' + K.esc(f('email')) + ' by email'; } }, 1400);
     $('[data-inv-pdf]', box).onclick = function () { K.downloadInvoice(inv).catch(function () { K.toast('The PDF could not be made. Check your internet connection.'); }); };
     $('[data-inv-print]', box).onclick = function () { K.printInvoice(inv).catch(function () { K.toast('The ' + docW + ' could not be printed. Try Download PDF instead.'); }); };
-    var pb = $('[data-inv-paid]', box); if (pb) pb.onclick = function () { var pbx = $('[data-paid-box]', box); K.paidForm(pbx, inv, function (c) { if (c) pb.remove(); }); pbx.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+    var pb = $('[data-inv-paid]', box); if (pb) pb.onclick = function () { var pbx = $('[data-paid-box]', box); K.paidForm(pbx, inv, function (c) { if (c) pb.remove(); }); pbx.scrollIntoView({ block: 'center' }); };
     goStep(4); confetti();
+  }
+  // what the Dinokeng voucher saves, from the prices (content/prices.md), not typed in twice
+  function dgrSave() {
+    var it = P.find('Dinokeng', 'Conservation fee adult per night'), now = it && !isNaN(it.amount) ? it.amount : 85, m = it && /R\s?(\d+)\s+without/i.exec(it.note || '');
+    return K.money(now) + (m ? ' instead of ' + K.money(+m[1]) : '') + ' per adult per night';
   }
   function depDays() { return P.num('Booking rules', 'Deposit due within days of invoice', 5); }
   // the booking's invoice: same look on the website, in the email and in the admin
   function makeInvoice(ref, q, isCard, paid, cv) {
     var g = booking.g, a = g.adults + g.pens, t = today(), due = addDays(t, depDays()), fv = function (n) { var el = $('[name=' + n + ']', modal); return el ? el.value.trim() : ''; };
     var ppl = g.adults + g.pens + g.kids;
-    var lines = q.lines.map(function (l) {
-      var amt = isCard ? l.c : l.v, m = l.t.match(/^(\d+) (weekend|weekday) night/);
-      if (m) {   // say which nights and the rate, so weekend and weekday lines are not mistaken for the same thing twice
-        var wk = m[2] === 'weekend', ds = nightsOf(booking.ci, booking.co).filter(function (d) { return isWeekendNight(d) === wk; }), R0 = rates(booking.stand), paying = g.adults + g.pens;
-        var dl = ds.map(function (d, i) { return d.toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric' }) + (i === ds.length - 1 || d.getMonth() !== ds[i + 1].getMonth() ? ' ' + d.toLocaleDateString('en-ZA', { month: 'short' }) : ''); });
-        var dtxt = dl.length > 1 ? dl.slice(0, -1).join(', ') + ' & ' + dl[dl.length - 1] : dl[0];
-        return { t: booking.stand.name + ' · ' + m[2] + ' night' + (+m[1] > 1 ? 's' : '') + ': ' + dtxt + ' · ' + paying + ' adult' + (paying === 1 ? '' : 's') + (/pensioner/.test(l.t) ? ' (pensioner rate Mon-Thu)' : ' at ' + K.money(isCard ? K.toCard(wk ? R0.weekend : R0.weekday, P) : (wk ? R0.weekend : R0.weekday)) + ' per person'), q: +m[1], u: Math.round(amt / +m[1]), amt: amt, tag: 'stay' };
-      }
-      return { t: l.free ? 'Child' + (g.kids === 1 ? '' : 'ren') + ' under 12 (free)' : l.t, q: l.free ? g.kids : undefined, amt: amt, free: !!l.free, tag: 'stay' };
-    }).concat(q.exLines.map(function (l) {
+    // which nights, how many people and at what rate (K.stayLines, also used when the booking is changed later)
+    var stayL = K.stayLines(P, booking.stand.area, booking.stand.name, iso(booking.ci), iso(booking.co), g);
+    if ((isCard && q.fee) || Math.round(stayL.reduce(function (x, l) { return x + l.amt; }, 0)) !== Math.round(q.stay)) stayL = q.lines.map(function (l) { return { t: booking.stand.name + ' · ' + l.t, amt: isCard ? l.c : l.v, free: !!l.free, tag: 'stay' }; });
+    var lines = stayL.concat(q.exLines.map(function (l) {
       var amt = isCard ? l.c : l.v, m = l.t.match(/^(\d+) × (.+)$/), pp = l.t.match(/^Porta potty · (\d+) night/);
       if (m) return { t: m[2], q: +m[1], u: Math.round(amt / +m[1]), amt: amt, tag: 'shop' };
       if (pp) return { t: 'Porta potty hire, cleaning included (per night)', q: +pp[1], u: Math.round(amt / +pp[1]), amt: amt, tag: 'extra' };
@@ -568,7 +635,7 @@
     var isQuote = !paid;
     return { id: K.docId ? K.docId() : '', kind: isQuote ? 'Quote' : 'Invoice', no: K.takeNo ? K.takeNo(isQuote ? 'Quote' : 'Invoice', ref) : K.invoiceNo(ref, 'Invoice', 1), date: iso(t), ref: ref, validTo: isQuote ? iso(q.payFull ? q.fullDue : due) : '',
       guest: { name: (fv('first') + ' ' + fv('last')).trim(), email: fv('email'), phone: fv('phone') },
-      stay: { stand: booking.stand.name, ci: iso(booking.ci), co: iso(booking.co), nights: q.nights, guests: a + ' adult' + (a === 1 ? '' : 's') + (g.pens ? ' (' + g.pens + ' pensioner' + (g.pens === 1 ? '' : 's') + ')' : '') + (g.kids ? ', ' + g.kids + ' child' + (g.kids === 1 ? '' : 'ren') : ''), vehicles: cv.count || '' },
+      stay: { stand: booking.stand.name, ci: iso(booking.ci), co: iso(booking.co), nights: q.nights, guests: K.peopleText(g), vehicles: cv.count || '' },
       lines: lines, total: isCard ? q.cardTotal : q.total, paid: paid, deposit: isCard ? q.cardDeposit : q.deposit, depPct: q.depPct, depositDue: iso(q.payFull ? q.fullDue : due), balanceDue: iso(q.balanceDue), payFull: q.payFull };
   }
   function downloadICS() {
@@ -597,7 +664,7 @@
   var STEP_NAMES = ['', 'Dates', 'Who\'s coming', 'Your stand', 'Your details', 'Check & agree', 'Pay'];
   var PICK = 3;   // the stand step (the camp area is a filter on it)
   function nextFriday(plus) { var t = today(), d = addDays(t, (5 - t.getDay() + 7) % 7); if (t.getDay() === 6) d = addDays(t, 6); return addDays(d, plus || 0); }
-  function peopleText() { var a = state.adults + state.pens, k = state.kids; return a + ' adult' + (a === 1 ? '' : 's') + (state.pens ? ' (' + state.pens + ' pensioner' + (state.pens === 1 ? '' : 's') + ')' : '') + (k ? ' and ' + k + ' child' + (k === 1 ? '' : 'ren') : ''); }
+  function peopleText() { return K.peopleText(state); }
   var picker = null;
   function openLeave() { if (picker) picker.open('out'); }
   // the dates just went in: the two date boxes give a small pop
@@ -610,7 +677,10 @@
   function wizSummary() {
     var ds = $('[data-dates-sum]'), n;
     if (ds) {
-      if (state.ci && state.co) { n = nightsOf(state.ci, state.co).length; ds.innerHTML = '<svg><use href="#i-check"/></svg><span>Arrival <b>' + nice(state.ci, LONG) + '</b>, departure <b>' + nice(state.co, LONG) + '</b>. That is <b>' + n + ' night' + (n > 1 ? 's' : '') + '</b>.</span>'; ds.className = 'bw-sum ok'; }
+      if (state.ci && state.co) {
+        n = nightsOf(state.ci, state.co).length; var ev = eveNote(state.ci, state.co);
+        ds.innerHTML = '<svg><use href="#i-check"/></svg><span>Arrival <b>' + nice(state.ci, LONG) + '</b>, departure <b>' + nice(state.co, LONG) + '</b>. That is <b>' + n + ' night' + (n > 1 ? 's' : '') + '</b>.' + (ev ? ' ' + ev : '') + (+state.ci === +today() ? ' <b>Arriving today?</b> Please WhatsApp us first on 060 458 4478, so we can get your stand ready.' : '') + '</span>'; ds.className = 'bw-sum ok';
+      }
       else { ds.innerHTML = '<svg><use href="#i-cal"/></svg><span>' + (state.ci ? 'Now choose your <b>departure</b> date.' : 'No dates chosen yet.') + '</span>'; ds.className = 'bw-sum'; }
     }
     var ps = $('[data-people-sum]'); if (ps) ps.innerHTML = '<svg><use href="#i-users"/></svg><span><b>' + peopleText() + '</b>' + (state.kids ? '. Children under 12 stay free.' : '.') + '</span>';
@@ -650,10 +720,12 @@
     placeNotes(); placeIntl();
 
     var qs = new URLSearchParams(location.search), t = today();
+    var qn = function (k, d) { var v = parseInt(qs.get(k), 10); return isNaN(v) ? d : Math.max(0, Math.min(20, v)); };
     state.ci = parse(qs.get('in')); if (state.ci && state.ci < t) state.ci = null;
     state.co = state.ci ? (parse(qs.get('out')) || addDays(state.ci, 2)) : null; if (state.co && state.co <= state.ci) state.co = addDays(state.ci, 2);
-    state.adults = Math.max(0, parseInt(qs.get('adults'), 10) || 2); state.kids = parseInt(qs.get('kids'), 10) || 0; state.pens = parseInt(qs.get('pens'), 10) || 0;
+    state.adults = qn('adults', 2); state.kids = qn('kids', 0); state.pens = qn('pens', 0);
     if (state.adults + state.pens < 1) state.adults = 1;
+    state.peopleSet = qs.has('adults');   // false when the guest came straight to one stand: the sheet then asks who is coming
     state.area = qs.get('area') || '';
 
     Promise.all([K.stands(), K.prices(), K.settings().catch(function () { return null; })]).then(function (r) {
@@ -673,7 +745,7 @@
     // search controls
     // the calendar (assets/js/datepicker.js): arrival, then departure, on one calendar
     if (K.datePicker) {
-      picker = K.datePicker({ min: today(),
+      picker = K.datePicker({ min: today(), isWeekend: function (d) { return isWeekendNight(d); }, check: function (ci, co) { var w = shortWhy(ci, co); return w ? w + ' Tap a later day to go home.' : ''; },
         get: function () { return { ci: state.ci, co: state.co }; },
         onChange: function (ci, co) { state.ci = ci; state.co = co; syncSearch(); render(); },
         onDone: function (ci, co, locked) { if (locked) popDates(); } });
@@ -681,7 +753,7 @@
     }
     $$('[data-pane="2"] [data-gstep]').forEach(function (b) {
       b.addEventListener('click', function () {
-        var k = b.dataset.gstep, d = +b.dataset.d; state[k] = Math.max(0, Math.min(20, state[k] + d));
+        var k = b.dataset.gstep, d = +b.dataset.d; state[k] = Math.max(0, Math.min(20, state[k] + d)); state.peopleSet = true;
         if (state.adults + state.pens < 1) state[k] = 1;
         syncSearch(); render();
       });
@@ -692,7 +764,7 @@
       b.addEventListener('click', function () { state.ci = f; state.co = addDays(f, 2); syncSearch(); render(); popDates(); });
     });
     $$('[data-bw-go]').forEach(function (b) { b.addEventListener('click', function () { var n = +b.dataset.bwGo; if (n <= reached) wGo(n, true); }); });
-    $$('[data-bw-next]').forEach(function (b) { b.addEventListener('click', function () { var n = +b.dataset.bwNext; if (n === 2 && !datesOk()) return; wGo(n, true); }); });
+    $$('[data-bw-next]').forEach(function (b) { b.addEventListener('click', function () { var n = +b.dataset.bwNext; if (n === 2 && !datesOk()) return; if (n === 3) state.peopleSet = true; wGo(n, true); }); });
     $$('.sb-view button').forEach(function (b) { b.addEventListener('click', function () { setView(b.dataset.view); }); });
     $('[data-fix-weekend]').addEventListener('click', fixWeekend);
     window.addEventListener('hashchange', function () { if (location.hash === '#map') { if (state.ci && state.co) wGo(PICK); setView('map'); $('#results').hidden = false; $('#results').scrollIntoView({ behavior: 'smooth' }); } });
@@ -700,7 +772,7 @@
     // sheet
     $('.sheet-close').addEventListener('click', closeSheet); backdrop.addEventListener('click', closeSheet);
     $('[data-reserve]').addEventListener('click', openCheckout);
-    document.addEventListener('keydown', function (e) { if (e.key !== 'Escape') return; if (modal.classList.contains('open')) closeCheckout(); else if (sheet.classList.contains('open')) closeSheet(); });
+    document.addEventListener('keydown', function (e) { if (e.key !== 'Escape') return; if (modal.classList.contains('open')) { if (step === 4) { closeCheckout(); closeSheet(); render(); } else closeCheckout(); } else if (sheet.classList.contains('open')) closeSheet(); });
 
     // checkout
     $('.mc-close', modal).addEventListener('click', function () { if (step === 4) { closeCheckout(); closeSheet(); render(); } else closeCheckout(); });
@@ -712,7 +784,7 @@
     $('[data-pay-now]', modal).addEventListener('click', function () {
       var cur = $('.mc-step.on', modal); if (!validate(cur)) return;
       var btn = this; btn.disabled = true; var old = btn.innerHTML; btn.innerHTML = '<span class="spin"></span> Processing…';
-      setTimeout(function () { btn.disabled = false; btn.innerHTML = old; confirmBooking(); }, 1600);
+      setTimeout(function () { btn.disabled = false; btn.innerHTML = old; if (!modal.classList.contains('open') || step !== 3) return; confirmBooking(); }, 1600);   // closed while it was busy: no booking is made
     });
     // card input helpers
     var cn = $('[name=cardnum]', modal), ex = $('[name=exp]', modal), brand = $('.card-brand', modal);

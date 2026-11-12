@@ -132,7 +132,7 @@
   function totals(inv, st) {
     var r = [['Total', money(inv.total), 'total']], c = K.docCfg();
     if (c.vatOn) r.push(['Includes VAT at ' + (+c.vatRate || 15) + '%', money(inv.total * (+c.vatRate || 15) / (100 + (+c.vatRate || 15))), ''])
-    if (st.k === 'quote' || (!inv.paid && !inv.payFull && st.k === 'due' && !st.arr)) r.push(['Deposit ' + (inv.depPct || 50) + '%', money(inv.deposit), '']);
+    if (!inv.payFull && (st.k === 'quote' || (!inv.paid && st.k === 'due' && !st.arr))) r.push(['Deposit ' + (inv.depPct || 50) + '%', money(inv.deposit), '']);
     if (st.k !== 'quote') r.push(['Total payment received', (inv.paid ? '-' : '') + money(inv.paid || 0), '']);
     if (st.k !== 'quote' && st.k !== 'cancel') r.push([st.bal ? 'Balance due' : 'Balance', money(st.bal), 'due']);
     return r;
@@ -146,6 +146,11 @@
   var ARRTIP = 'As arranged with Kyleu, you pay when you arrive. No deposit is needed, and your stand is booked for you.';
   var PAIDTIP = 'Once payment has been made, upload your proof of payment directly to your booking: press I have paid on your booking page (the link is in your booking email), or upload it at kyleu.co.za/pop.html.';
   var DGR_TXT = 'Guests staying at this DGR CP campsite qualify for Conservation Fee Discount Vouchers: R85 instead of R100 per adult per night. We send you one voucher code per vehicle before your stay. Dinokeng Game Reserve fees are paid to the reserve, not to Kyleu.';
+  if (K.prices) K.prices().then(function (P) {
+    var it = P && P.find && P.find('Dinokeng', 'Conservation fee adult per night'); if (!it || isNaN(it.amount)) return;
+    var m = /R\s?(\d+)\s+without/i.exec(it.note || '');
+    DGR_TXT = DGR_TXT.replace('R85 instead of R100', money(it.amount) + (m ? ' instead of ' + money(+m[1]) : ''));
+  }).catch(function () {});
   K.invoiceNo = function (ref, kind, n) { return (kind === 'Quote' ? 'Q-' : 'INV-') + String(ref).replace(/^KY/i, '') + '-' + (n || 1); };
 
   /* ---------- on screen ---------- */
@@ -330,6 +335,8 @@
       e.preventDefault();
       var k = f.elements.amt.value, o = opts.filter(function (x) { return x[0] === k; })[0], amt = k === 'other' ? parseFloat(String(f.elements.other.value).replace(/[^\d.]/g, '')) : o[2];
       if (!amt || amt <= 0) { (K.toast || alert)('Please type the amount you paid'); f.elements.other.focus(); return; }
+      if (amt > st.bal + 0.5) { (K.toast || alert)('That is more than the ' + money(st.bal) + ' still to pay on this booking. Please check the amount, or WhatsApp us if you really paid more.'); if (k === 'other') f.elements.other.focus(); return; }
+      if ((f.elements.date.value || iso) > iso) { (K.toast || alert)('The date you paid cannot be in the future. Please check it.'); f.elements.date.focus(); return; }
       var c = { id: 'p' + Date.now().toString(36), ref: inv.ref, at: iso + ' ' + new Date().toTimeString().slice(0, 5), date: f.elements.date.value || iso, amt: Math.round(amt), what: k === 'dep' ? 'Deposit' : k === 'all' ? (inv.paid ? 'Balance' : 'Full payment') : 'Payment', note: f.elements.note.value.trim() };
       var list = K.paidClaims(); list.push(c); try { localStorage.setItem(PAID, JSON.stringify(list.slice(-80))); } catch (er) {}
       box.innerHTML = K.paidThanks(c, inv);
@@ -337,6 +344,7 @@
     });
   };
   K.paidThanks = function (c, inv) {
-    return '<div class="paid-thanks"><svg><use href="#i-check"/></svg><div><b>Thank you! You told us you paid ' + money(c.amt) + ' on ' + esc(nice(c.date)) + '.</b><p>We check our bank account and confirm by email, usually within one working day. Want to speed it up? <a href="pop.html?ref=' + encodeURIComponent(inv.ref) + '&email=' + encodeURIComponent((inv.guest && inv.guest.email) || '') + '">Upload your proof of payment</a> (optional).</p></div></div>';
+    try { sessionStorage.setItem('kyleu-pop-email', (inv.guest && inv.guest.email) || ''); } catch (e) {}
+    return '<div class="paid-thanks"><svg><use href="#i-check"/></svg><div><b>Thank you! You told us you paid ' + money(c.amt) + ' on ' + esc(nice(c.date)) + '.</b><p>We check our bank account and confirm by email, usually within one working day. Want to speed it up? <a href="pop.html?ref=' + encodeURIComponent(inv.ref) + '">Upload your proof of payment</a> (optional).</p></div></div>';
   };
 })();
