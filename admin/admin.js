@@ -161,7 +161,7 @@
     var s = { stays: 0, nights: 0, spent: 0, last: '', next: '', now: false, pens: false, gd: false, refs: [] };
     clientBookings(c).forEach(function (b) {
       s.refs.push(b.ref); if (!live(b)) return;
-      s.stays++; s.nights += diff(b.ci, b.co); s.spent += paid(b); if (b.status === 'in') s.now = true; if (b.pens) s.pens = true; if (b.extras && b.extras.gd) s.gd = true;
+      s.stays++; s.nights += diff(b.ci, b.co); s.spent += paid(b); if (b.status === 'in') s.now = true; if (b.pens) s.pens = true; if ((b.extras && b.extras.gd) || (b.drives || []).length) s.gd = true;
       if (b.co <= TODAY && b.ci > s.last) s.last = b.ci; if (b.ci >= TODAY && (!s.next || b.ci < s.next)) s.next = b.ci;
     });
     return s;
@@ -729,9 +729,11 @@
       // made on the website before this admin had its demo data, on nights a demo booking also has: keep it, and say so
       if (overlaps(b.stand, b.ci, b.co)) b.notes.push({ at: w.created, by: 'System', text: 'Another booking or a block is on ' + standById(b.stand).name + ' for some of these nights. Check the calendar and move one of them.' });
       if (w.shop && w.shop.length) { b.charges = []; setPreShop(b, w.shop, w.created, true); }
-      ensureCars(b); DB.bookings.push(b); added++;
+      webExtras(b, w);   // promotions (already off the totals), free items and game drives (already in the totals)
+      ensureCars(b); DB.bookings.push(b); added++; webDriveFlags(b, w.created);
       if (w.invoice) { b.invoices = [Object.assign(JSON.parse(JSON.stringify(w.invoice)), { by: 'Website', sent: { at: w.created, via: 'Email (automatic)', to: w.email } })]; autoMail(b, w.invoice, w.created, 'Your Kyleu reservation ' + b.ref + ' (' + docTag(w.invoice, b.ref) + ')', invMailBody(b, w.invoice)); }
       DB.log.unshift({ at: w.created, by: 'Website', text: 'New website booking ' + b.ref + ' for ' + guestName(b), ref: b.ref });
+      if (b.promos) DB.log.unshift({ at: w.created, by: 'Website', text: 'Promotion ' + b.promos.map(function (x) { return x.name; }).join(' and ') + ' used on ' + b.ref, ref: b.ref });
       if (took) DB.log.unshift({ at: w.created, by: 'Website', text: money(took) + ' of credit ' + cr.code + ' used on ' + b.ref, ref: b.ref });
     });
     if (added) { DB.bookings.sort(function (a, b) { return a.ci < b.ci ? -1 : 1; }); save(); }
@@ -753,8 +755,8 @@
   // "cap:money" = may take off a payment, refund and change a credit. Owners can adjust the last four and make their own roles:
   // those are kept in DB.roles, so always ask roleGet(), roleCan() or can(), never ROLES[...] directly.
   var ROLES = {
-    Owner: ['dashboard', 'gate', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'indemnities', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'rates', 'settings', 'news', 'dgrnews', 'social', 'webtext', 'cap:guests', 'cap:money', 'cap:setup'],
-    Manager: ['dashboard', 'gate', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'indemnities', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'news', 'dgrnews', 'social', 'webtext', 'cap:guests', 'cap:money'],
+    Owner: ['dashboard', 'gate', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'indemnities', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'promos', 'stands', 'rates', 'settings', 'news', 'dgrnews', 'social', 'webtext', 'cap:guests', 'cap:money', 'cap:drives', 'cap:setup'],
+    Manager: ['dashboard', 'gate', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'indemnities', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'news', 'dgrnews', 'social', 'webtext', 'cap:guests', 'cap:money', 'cap:drives'],
     'Front desk': ['dashboard', 'gate', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'indemnities', 'shop', 'drives', 'news', 'dgrnews', 'social', 'cap:guests'],
     Gate: ['gate', 'shop', 'cap:guests'],
     Worker: ['site']
@@ -782,6 +784,7 @@
     { id: 'shop', t: 'Shop', i: 'cart', g: 'Shop & activities' },
     { id: 'drives', t: 'Game drives', i: 'car', g: 'Shop & activities' },
     { id: 'products', t: 'Products', i: 'box', g: 'Shop & activities' },
+    { id: 'promos', t: 'Promotions', i: 'gift', g: 'Shop & activities' },
     { id: 'stands', t: 'Stands & blocks', i: 'tent', g: 'Setup' },
     { id: 'rates', t: 'Rates & fees', i: 'tag', g: 'Setup' },
     { id: 'settings', t: 'Settings', i: 'cog', g: 'Setup' },
@@ -913,7 +916,7 @@
       (b.status === 'out' ? (b.thanks ? '<p class="callout cflex cbtn">' + ic('check') + '<span>' + esc(thanksLine(b)) + '.</span><button type="button" class="link-btn" data-act="thanks" data-ref="' + b.ref + '">Send again</button></p>'
         : '<div class="callout ' + (thanksDue(b) ? 'warn ' : '') + 'cflex cbtn">' + ic('send') + '<span><b>Thank-you not sent yet.</b> Thank ' + esc(b.guest.first) + ' for staying and ask for a Google review.</span><button type="button" class="btn sm" data-act="thanks" data-ref="' + b.ref + '">' + ic('send') + 'Send the thank-you</button></div>') : '') +
       (b.released ? '<p class="callout cflex">' + ic('info') + '<span><b>Released automatically</b> on ' + esc(atNice(b.released.at)) + ': the quotation (valid until ' + fd(b.released.due) + ') was not paid.</span></p>' : '') +
-      creditFromHTML(b);
+      driveAlerts(b) + creditFromHTML(b);
     var body = '';
     if (PTAB === 'overview') {
       var cl = clientById(b.cid);
@@ -927,16 +930,18 @@
         '<dt>Guests</dt><dd>' + people + (b.kids ? ' <span class="muted">(children under 12)</span>' : '') + '</dd>' +
         '<dt>Vehicles</dt><dd>' + (cancelled ? '<span class="muted">' + (vehKnown(b) ? vehTxt(b) : 'Not given') + '</span>' : !vehKnown(b) ? '<span class="warn-t">Not given yet</span> <button type="button" class="link-btn" data-act="veh-add" data-ref="' + b.ref + '">' + ic('plus') + 'Add vehicles</button>' : vehTxt(b)) + (b.setup ? ' · ' + esc(b.setup) : '') + '</dd>' +
         '<dt>Arrival time</dt><dd>' + (b.eta ? esc(etaTxt(b).charAt(0).toUpperCase() + etaTxt(b).slice(1)) : '<span class="muted">Not given yet</span>') + '</dd>' +
+        drivesOf(b).map(function (d) { return '<dt>Game drive</dt><dd data-drive="' + esc(d.key) + '">' + (d.d ? esc(driveWhen(d)) : '<span class="warn-t">No time set yet</span>') + ' · ' + pplTxt(d.n) + (d.guide ? ' · guide ' + esc(d.guide) : '') + (d.web ? ' <span class="tag">Booked online</span>' : '') + (!cancelled && can('drives') ? ' <button type="button" class="link-btn" data-act="drive-set" data-ref="' + esc(d.key) + '">Change' + ic('chev-r') + '</button>' : '') + '</dd>'; }).join('') +
         (live(b) ? '<dt>Indemnity</dt><dd>' + indPill(b) + ' <button type="button" class="link-btn" data-ptab="vehicles">See' + ic('chev-r') + '</button></dd>' : '') +
         '<dt>Booked</dt><dd>' + fd(b.created.slice(0, 10), { day: 'numeric', month: 'short', year: 'numeric' }) + ' via ' + esc(b.source) + '</dd></dl></section>' +
-        linkSec(b) +
+        promoSec(b) + linkSec(b) +
         ((b.notes || []).length ? '<section class="d-sec"><h4 class="h4-row">Latest note<button type="button" class="link-btn" data-ptab="notes">All notes' + ic('chev-r') + '</button></h4>' + '<ul class="notes">' + noteItem(b, b.notes.length - 1, b.notes[b.notes.length - 1]) + '</ul></section>' : '');
     } else if (PTAB === 'vehicles') {
       body = carsHTML(b) + indHTML(b) + dgrHTML(b);
     } else if (PTAB === 'money') {
       var sd0 = b.method === 'card' ? null : stayDetail(b), qs = q.lines.slice();
       if (sd0 && Math.round(sd0.reduce(function (a, x) { return a + x.amt; }, 0)) === Math.round(q.lines[0].e)) qs = sd0.map(function (x) { return { t: x.t, e: x.amt, c: x.amt, free: x.free }; }).concat(q.lines.slice(1));
-      var lines = qs.concat((b.charges || []).map(function (c) { return { t: c.desc, e: c.e, c: c.c }; })), sameCard = Math.round(b.card) === Math.round(b.eft);
+      var mc = b.method === 'card', lines = qs.concat((b.charges || []).map(function (c) { return { t: c.desc, e: c.e, c: c.c }; })), sameCard = Math.round(b.card) === Math.round(b.eft);
+      lines = lines.concat(moreLines(b, mc, lines.reduce(function (a, l) { return a + (l.free ? 0 : mc ? l.c : l.e); }, 0)).map(function (l) { return { t: (l.free && l.q ? l.q + ' × ' : '') + l.t, e: l.amt, c: l.amt, free: l.free }; }));
       body = '<section class="d-sec"><h4>Price</h4><div class="lines">' + lines.map(function (l) { return '<div class="ln"><span>' + esc(l.t) + '</span><span>' + (l.free ? 'Free' : b.method === 'card' ? money(l.c) : money(l.e)) + '</span></div>'; }).join('') +
         (sameCard ? '' : '<div class="ln sub"><span>Card price</span><span>' + (b.method === 'card' ? money(b.card) : '<s>' + money(b.card) + '</s>') + '</span></div><div class="ln sub"><span>EFT price (no card fee)</span><span>' + (b.method === 'card' ? '<s>' + money(b.eft) + '</s>' : money(b.eft)) + '</span></div>') +
         '<div class="ln tot"><span>Total' + (sameCard ? '' : ' · paying by ' + methodLabel(b.method)) + '</span><span>' + money(b.total) + '</span></div>' +
@@ -1594,6 +1599,8 @@
           if (s.co <= s.ci) { toast('Departure must be after arrival'); return false; }
           if (!s.adults && !s.pens) { toast('Add at least one adult'); return false; }
           if (moved && overlaps(s.stand, s.ci, s.co, b.ref)) { toast('That stand is not free for those nights'); return false; }
+          // more people on the booking's own game drive: never more than the seats that are open on that drive
+          if (s.gd > (ex.gd || 0) && b.drive && b.drive.d >= TODAY) { var gdLeft = driveLeft(b.drive.d, b.drive.slot, b.ref + '|main'); if (s.gd > gdLeft) { toast(gdLeft ? 'Only ' + gdLeft + ' seat' + (gdLeft === 1 ? ' is' : 's are') + ' open on that game drive (' + fdw(b.drive.d) + ')' : 'That game drive is full (' + fdw(b.drive.d) + ')'); return false; } }
         }
         var dup = findClient(g.email, g.phone, b.cid);
         if (dup && cl && clientBookings(cl).length > 1) { toast('That ' + (g.email && normEmail(dup.email) === normEmail(g.email) ? 'email address' : 'number') + ' belongs to ' + esc(clientName(dup)) + '. Open their client card instead.'); return false; }
@@ -1638,7 +1645,7 @@
           var p = priceOf(s), nt = b.total + (b.method === 'card' ? p.dc : p.de), pd = paid(b), moved = s.ci !== b.ci || s.co !== b.co || s.stand !== b.stand, st = standById(s.stand);
           box.innerHTML = (moved ? (overlaps(s.stand, s.ci, s.co, b.ref) ? '<span class="pill bad"><i></i>Stand not free for those nights</span>' : '<span class="pill ok"><i></i>Stand free</span>') : '') + sizePill(st, s.adults + s.pens + s.kids) + (vehKnown(b) && namedIn(b) > s.adults + s.pens + s.kids ? ' <span class="pill bad"><i></i>' + namedIn(b) + ' people named in the vehicles</span>' : '') +
             '<div class="qb-row"><span>' + p.nights + ' night' + (p.nights > 1 ? 's' : '') + ' · ' + methodLabel(b.method) + '</span><span class="price-pair">' + (nt !== b.total ? '<s>' + money(b.total) + '</s> ' : '') + '<b>' + money(nt) + '</b></span></div>' +
-            '<div class="muted small">Paid ' + money(pd) + ' · ' + (nt >= pd ? 'balance ' + money(nt - pd) : '<span class="warn-t">' + money(pd - nt) + ' more than the new total. Keep it as credit or refund it.</span>') + '</div>';
+            '<div class="muted small">Paid ' + money(pd) + ' · ' + (nt >= pd ? 'balance ' + money(nt - pd) : '<span class="warn-t">' + money(pd - nt) + ' more than the new total. Keep it as credit or refund it.</span>') + '</div>' + ((b.promos || []).some(function (x) { return +x.amt; }) ? '<div class="muted small">The promotion discount of ' + money(b.promos.reduce(function (a, x) { return a + (+x.amt || 0); }, 0)) + ' stays as it was when the booking was made.</div>' : '');
           if (!tellTouched) tell.checked = moved || nt !== b.total;
         };
         $$('input,select', f).forEach(function (x) { if (x.name === 'tell') return; x.addEventListener('input', u); x.addEventListener('change', u); }); u();
@@ -1663,10 +1670,12 @@
      never released) or 'paid' (a payment is recorded straight away).
      To drive it in a test: the form carries data-nb-at="1" to "5"; [data-nb-next] is Next (data-nb-next="book" on the last step, "Book it"),
      [data-nb-back] is Back, [data-nb-go="n"] the step bar, input[name=pay] the pay choice, input[name=keep] "keep the stand". */
+  // Promotions (step 2): [data-nb-promos] lists the ones this booking can get, input[data-nb-promo=ID] is the tick of one,
+  // and .qb-row.promo[data-nb-saving=ID] is its line in the price box [data-q].
   var NB_STEPS = [['Guest', 'Who is it for?'], ['Stay', 'The stay'], ['Payment', 'How will they pay?'], ['Send', 'What do we send now?'], ['Check', 'Check and book']];
   function actNew(pre) {
     pre = pre || {};
-    var ci = pre.ci || TODAY, co = pre.co || add(ci, 2), step = 1, f = null, go = null, wayTouched = false, amtTouched = false;
+    var ci = pre.ci || TODAY, co = pre.co || add(ci, 2), step = 1, f = null, go = null, wayTouched = false, amtTouched = false, ptick = {};   // ptick: the promotion ticks staff changed by hand
     var sec = function (n, html) { return '<section class="nb-step" data-nb-step="' + n + '"' + (n > 1 ? ' hidden' : '') + '><h4 class="nb-h"><span>Step ' + n + ' of ' + NB_STEPS.length + '</span>' + NB_STEPS[n - 1][1] + '</h4>' + html + '</section>'; };
     var radio = function (name) { return ($('[name=' + name + ']:checked', f) || {}).value || ''; };
     var canWa = function (p) { return waDigits(p).length >= 10; }, canMail = function (e) { return /.+@.+\..+/.test(e || ''); };
@@ -1675,11 +1684,13 @@
       var g = { adults: +fval(f, 'adults') || 0, pens: +fval(f, 'pens') || 0, kids: +fval(f, 'kids') || 0 }, pay = radio('pay') || 'quote', how = radio('how') || 'Cash', pm = radio('pm') || 'eft';
       var m = pay === 'arrival' ? (how === 'Card' ? 'card' : 'cash') : pay === 'paid' ? pm : 'eft';
       var sid = fval(f, 'stand'), a = fval(f, 'ci'), z = fval(f, 'co'), ex = { gd: +fval(f, 'gd') || 0 }, q = a && z > a ? quote(sid, a, z, g, ex) : null;
-      var cl = clientById(fval(f, 'cid')), ng = { first: fval(f, 'first'), last: fval(f, 'last'), email: fval(f, 'email'), phone: fval(f, 'phone') }, who = cl || ng, total = q ? (m === 'card' ? q.card : q.eft) : 0;
+      var cl = clientById(fval(f, 'cid')), ng = { first: fval(f, 'first'), last: fval(f, 'last'), email: fval(f, 'email'), phone: fval(f, 'phone') }, who = cl || ng;
+      // promotions: the ones the rules give are ticked, staff can change the ticks. The discount comes off the price here and is fixed when the booking is made.
+      var pr = q ? promoPick(promoCtx(sid, a, z, g, { drives: ex.gd ? 1 : 0, driveTotal: drivePrice(ex.gd) }), ptick) : null, disc = pr ? pr.res.total : 0, discC = pr ? pr.res.list.reduce(function (t, h) { return t + toCard(h.amt); }, 0) : 0, total = q ? (m === 'card' ? q.card - discC : q.eft - disc) : 0;
       var crLeft = creditLeft(who.email), cr = fval(f, 'usecredit') ? Math.min(crLeft, total) : 0;
       // a stand-in booking, so the deposit and the dates follow the same rules as a real one
       var d = { created: nowStamp(), ci: a || TODAY, co: z || TODAY, total: total, payments: [], status: 'pending' }, dep = q ? deposit(d) : 0;
-      return { g: g, ppl: g.adults + g.pens + g.kids, pay: pay, how: how, pm: pm, m: m, sid: sid, a: a, z: z, ex: ex, q: q, cl: cl, ng: ng, who: who, total: total, cr: cr, crLeft: crLeft, need: Math.max(0, total - cr), d: d, dep: dep, depLeft: Math.max(0, dep - cr), byCredit: cr > 0 && cr >= dep,
+      return { g: g, pr: pr, disc: disc, discC: discC, ppl: g.adults + g.pens + g.kids, pay: pay, how: how, pm: pm, m: m, sid: sid, a: a, z: z, ex: ex, q: q, cl: cl, ng: ng, who: who, total: total, cr: cr, crLeft: crLeft, need: Math.max(0, total - cr), d: d, dep: dep, depLeft: Math.max(0, dep - cr), byCredit: cr > 0 && cr >= dep,
         veh: Math.max(0, Math.min(20, +fval(f, 'veh') || 0)), keep: !!fval(f, 'keep'), pamt: randOf(fval(f, 'pamt')), pd: fval(f, 'pd'), way: radio('way'),
         sDoc: !!fval(f, 's_doc'), sLink: !!fval(f, 's_link'), sInd: !!fval(f, 's_ind'), sDgr: !!fval(f, 's_dgr'), codes: $$('[data-nb-code]', f).map(function (x) { return x.value.trim().toUpperCase(); }) };
     };
@@ -1709,7 +1720,8 @@
     var book = function (s) {
       var now = nowStamp(), q = s.q, cl = s.cl, linked = false, st1 = standById(s.sid), overUsual = s.ppl > (st1.guests || 8);
       if (!cl) { cl = findClient(s.ng.email, s.ng.phone); linked = !!cl; if (!cl) cl = newClient(s.ng); }
-      var b = { ref: K.takeNo('Ref'), created: now, source: fval(f, 'source'), madeBy: ME.name, cid: cl.id, guest: { first: cl.first, last: cl.last, email: cl.email, phone: cl.phone, consent: cl.consent }, stand: s.sid, ci: s.a, co: s.z, adults: s.g.adults, pens: s.g.pens, kids: s.g.kids, vehicles: Math.max(1, s.veh || 1), setup: '', extras: s.ex, method: s.m, eft: q.eft, card: q.card, total: s.total, payments: [], status: 'pending', notes: [], pop: false };
+      var b = { ref: K.takeNo('Ref'), created: now, source: fval(f, 'source'), madeBy: ME.name, cid: cl.id, guest: { first: cl.first, last: cl.last, email: cl.email, phone: cl.phone, consent: cl.consent }, stand: s.sid, ci: s.a, co: s.z, adults: s.g.adults, pens: s.g.pens, kids: s.g.kids, vehicles: Math.max(1, s.veh || 1), setup: '', extras: s.ex, method: s.m, eft: q.eft - s.disc, card: q.card - s.discC, total: s.total, payments: [], status: 'pending', notes: [], pop: false };
+      promoStamp(b, s.pr ? s.pr.res : null, now, ME.name);   // the promotion it got: b.promos, b.freeItems and a note
       if (fval(f, 'usecredit')) {   // the credit that runs out first is used first; what is not needed stays on the credit
         var need = b.total, usedC = [];
         creditsFor(b.guest.email).forEach(function (c) { var take = creditPay(b, c, need); if (!take) return; need -= take; usedC.push(money(take) + ' with credit ' + c.code + (c.from ? ' from booking ' + c.from : '')); log(money(take) + ' of credit ' + c.code + ' used on ' + b.ref, b.ref); });
@@ -1761,7 +1773,7 @@
       '<div class="grid3"><label class="fld"><span>Adults</span><input type="number" min="0" max="40" name="adults" value="2"></label><label class="fld"><span>Pensioners</span><input type="number" min="0" max="40" name="pens" value="0"></label><label class="fld"><span>Kids under 12</span><input type="number" min="0" max="40" name="kids" value="0"></label></div>' +
       '<div class="grid2"><label class="fld"><span>Game drive (people)</span><input type="number" min="0" max="10" name="gd" value="0"></label><label class="fld"><span>Vehicles (empty if not said yet)</span><input type="number" min="1" max="20" name="veh" value="" placeholder="Not given yet"></label></div>' +
       '<label class="fld"><span>Note for the team (optional)</span><input name="note" placeholder="e.g. Celebrating a birthday, arriving late on Friday"></label>' +
-      '<div class="quote-box" data-q></div>') +
+      '<div class="quote-box" data-q></div><div class="nb-promos" data-nb-promos hidden></div>') +
       sec(3, '<div class="cr-opts nb-pay">' +
       '<label class="cr-opt"><input type="radio" name="pay" value="quote" checked><span><b>Send a quotation, deposit by EFT</b><small>The normal way. The stand is held while the quotation is valid.</small></span></label>' +
       '<div class="cr-sub nb-sub" data-nb-sub="quote"><p class="hint" data-nb-qinfo></p><label class="check" data-nb-keeprow><input type="checkbox" name="keep"><span>Keep the stand even if it is not paid by then</span></label><p class="muted small" data-nb-keepnote></p></div>' +
@@ -1834,12 +1846,20 @@
           var list = function (a) { return a.length > 1 ? a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1] : a[0]; }, cap = function (t) { return t.charAt(0).toUpperCase() + t.slice(1); };
           var rows = [['Guest', '<b>' + esc(clientName(w)) + '</b>' + (s.cl ? '' : ' <span class="pill info">New client</span>') + '<br><span class="muted">' + esc([w.phone, w.email].filter(Boolean).join(' · ')) + ' · booked via ' + esc(fval(f, 'source')) + '</span>'],
             ['Stay', '<b>' + esc(st.name) + '</b> · ' + AREA_SHORT[st.area] + sizePill(st, s.ppl) + '<br>' + fdw(s.a) + ' to ' + fdw(s.z) + ' · ' + nN + ' night' + (nN === 1 ? '' : 's') + ' <span class="muted">(arrives ' + rel(s.a) + ')</span><br>' + peopleTxt(s.g) + ' · ' + (s.veh ? s.veh + ' vehicle' + (s.veh === 1 ? '' : 's') : 'vehicles not given yet') + (s.ex.gd ? ' · game drive for ' + s.ex.gd : '')],
-            ['Price', '<b>' + money(s.total) + '</b>' + (hasFee() ? ' <span class="muted">' + (s.m === 'card' ? 'card price' : 'EFT and cash price') + '</span>' : '') + (s.cr ? '<br>' + money(s.cr) + ' paid with credit, ' + money(s.need) + ' still to pay' : '')],
+            ['Price', '<b>' + money(s.total) + '</b>' + (hasFee() ? ' <span class="muted">' + (s.m === 'card' ? 'card price' : 'EFT and cash price') + '</span>' : '') + (s.cr ? '<br>' + money(s.cr) + ' paid with credit, ' + money(s.need) + ' still to pay' : '') + (s.pr ? s.pr.res.list.map(function (h) { return '<br>' + ic('gift') + ' Promotion: ' + esc(h.name) + (h.amt ? ', saves ' + money(s.m === 'card' ? toCard(h.amt) : h.amt) : '') + (h.free.length ? ', free ' + esc(freeTxt(h.free)) : ''); }).join('') : '')],
             ['Payment', payT], ['The stand', standT],
             ['Sent now', now.length && s.way ? cap(list(now)) + ', by ' + (s.way === 'wa' ? 'WhatsApp to ' + esc(w.phone) : 'email to ' + esc(w.email)) + '.<br><span class="muted">After Book it the message opens so you can read it. Then press ' + (s.way === 'wa' ? 'Send on WhatsApp' : 'Send email') + '.</span>' : 'Nothing is sent now.'],
             ['Still to do', later.length ? cap(list(later)) + '. ' + (later.length === 1 ? 'It stays' : 'They stay') + ' on the booking as still to do.' : '']];
           box.innerHTML = '<dl class="kv kv2 nb-sum">' + rows.filter(function (r) { return r[1]; }).map(function (r) { return '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>'; }).join('') + '</dl>' +
             (fval(f, 'note') ? '<p class="cl-note">' + ic('note') + '<span>' + esc(fval(f, 'note')) + '</span></p>' : '') + '<p class="muted small">Nothing is saved yet. Press Book it to make the booking, or Back to change something.</p>';
+        };
+        // step 2: the promotions this stay can get, each with a tick. One that needs a code or a shop item can be ticked by hand.
+        var nbPromos = function (s) {
+          var el = $('[data-nb-promos]', f), rows = s.pr ? s.pr.rows : [], got = {}; (s.pr ? s.pr.res.list : []).forEach(function (h) { got[h.id] = h; });
+          var key = rows.map(function (r) { var h = got[r.p.id]; return r.p.id + (r.on ? '1' : '0') + (h ? h.amt : '-'); }).join('|');
+          el.hidden = !rows.length; if (el.dataset.k === key) return; el.dataset.k = key;
+          el.innerHTML = '<span class="fld-l">Promotions this booking can get</span>' + rows.map(function (r) { var p = r.p, h = got[p.id]; return '<label class="check promo-tick"><input type="checkbox" data-nb-promo="' + esc(p.id) + '"' + (r.on ? ' checked' : '') + '><span><b>' + esc(p.name) + '</b> <small class="muted">' + esc(rewardTxt(p)) + (h && h.amt ? ', saves ' + money(h.amt) : '') + (p.combine ? ', added on top of another one' : '') + (r.byHand ? '. ' + esc(promoHandWhy(p).charAt(0).toUpperCase() + promoHandWhy(p).slice(1)) + '.' : '') + '</small></span></label>'; }).join('') +
+            (rows.filter(function (r) { return !r.p.combine; }).length > 1 ? '<p class="muted small">A booking gets one promotion: the one that saves the guest the most is ticked. Tick another one to give that instead.</p>' : '');
         };
         var u = function () {
           // the credit tick first (it only needs the email address), so the amounts below already count it
@@ -1854,13 +1874,17 @@
             $$('option', sel).forEach(function (o) { var s0 = standById(o.value), fr = !overlaps(o.value, s.a, s.z); if (fr) nFree++; o.textContent = s0.name + ' (' + sizeTxt(s0) + ') · ' + (fr ? 'free' : 'booked'); });
             if (!f._picked && overlaps(sel.value, s.a, s.z)) { var fo = $$('option', sel).filter(function (o) { return !overlaps(o.value, s.a, s.z); })[0]; if (fo) { sel.value = fo.value; s = read(); } }
             var q = s.q, m = s.m, free = !overlaps(s.sid, s.a, s.z), st = standById(s.sid);
+            var pp = function (e, c) { return !hasFee() ? '<b>' + money(e) + '</b>' : m === 'card' ? '<b>' + money(c) + '</b> <small>card price</small>' : '<s>' + money(c) + '</s> <b>' + money(e) + '</b> <small>' + methodLabel(m) + '</small>'; }, used = s.pr ? s.pr.res.list : [];
             var nts = []; for (var dd = s.a; dd < s.z; dd = add(dd, 1)) nts.push(D(dd).getDay());
             var halfWeekend = (nts.indexOf(5) >= 0 || nts.indexOf(6) >= 0) && nts.length < num('Booking rules', 'Minimum nights over a weekend', 2), full = payFullOf(s.d);
             box.innerHTML = (free ? '<span class="pill ok"><i></i>Stand free</span>' : '<span class="pill bad"><i></i>Stand not free</span>') + sizePill(st, s.ppl) +
-              '<div class="qb-row"><span>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + '</span><span class="price-pair">' + (!hasFee() ? '<b>' + money(q.eft) + '</b>' : m === 'card' ? '<b>' + money(q.card) + '</b> <small>card price</small>' : '<s>' + money(q.card) + '</s> <b>' + money(q.eft) + '</b> <small>' + methodLabel(m) + '</small>') + '</span></div>' +
+              '<div class="qb-row"><span>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + '</span><span class="price-pair">' + pp(q.eft, q.card) + '</span></div>' +
+              used.map(function (h) { return '<div class="qb-row promo" data-nb-saving="' + esc(h.id) + '"><span>' + ic('gift') + 'Promotion: ' + esc(h.name) + '</span><span>' + (h.amt ? money(-(m === 'card' ? toCard(h.amt) : h.amt)) : 'Free: ' + esc(freeTxt(h.free))) + '</span></div>'; }).join('') +
+              (s.disc ? '<div class="qb-row" data-nb-net><span>To pay with the promotion</span><span class="price-pair">' + pp(q.eft - s.disc, q.card - s.discC) + '</span></div>' : '') +
               '<div class="muted small">' + (full ? 'Arrives within 12 days, so the full amount secures the stand' : 'Deposit ' + depPct() + '%: ' + money(s.dep)) + ' · ' + nFree + ' of ' + STANDS.length + ' stands free for these dates</div>' +
               (halfWeekend ? '<div class="small warn-t">' + ic('info') + ' Only one weekend night: weekend stays are normally at least 2 nights (Friday and Saturday, or Saturday and Sunday). Fine if you agreed it with the guest.</div>' : '');
           }
+          nbPromos(s);
           payInfo(s); sendInfo(s); if (step === NB_STEPS.length) summary(read());
         };
         go = function (n) {
@@ -1875,7 +1899,7 @@
           if (to) setTimeout(function () { try { to.focus(); } catch (e) {} }, 30);
         };
         f._picked = !!pre.stand; f.elements.stand.addEventListener('change', function () { f._picked = true; });
-        var onEv = function (e) { var t = e.target, nm = t && t.name; if (nm === 'clq') return; if (nm === 'pamt') amtTouched = true; if (nm === 'way') wayTouched = true; u(); };
+        var onEv = function (e) { var t = e.target, nm = t && t.name; if (nm === 'clq') return; if (t && t.dataset && t.dataset.nbPromo) { var pid = t.dataset.nbPromo, pcur = promoBy(pid); ptick[pid] = t.checked; if (t.checked && pcur && !pcur.combine) promosDB().forEach(function (o) { if (o.id !== pid && !o.combine) ptick[o.id] = false; }); } if (nm === 'pamt') amtTouched = true; if (nm === 'way') wayTouched = true; u(); };
         f.addEventListener('input', onEv); f.addEventListener('change', onEv);
         f.addEventListener('keydown', function (e) { var t = e.target; if (e.key !== 'Enter' || e.isComposing || !t || t.tagName !== 'INPUT' || t.name === 'clq') return; e.preventDefault(); next.click(); });
         f.addEventListener('click', function (e) {
@@ -2061,7 +2085,7 @@
   function actCarIn(key) {
     var o = carOf(key), b = o.b, c = o.c, i = o.i; if (!c) return; var cs = b.cars, bal = balance(b);
     modal('Check in ' + esc(carLabel(c, i)), '<p class="muted small">' + esc(guestName(b)) + ' · ' + esc(b.ref) + ' · ' + esc(standById(b.stand).name) + (cs.length > 1 ? ' · vehicle ' + (i + 1) + ' of ' + cs.length : '') + '</p>' + indBox(key, !!c.ind) + carForm(c) +
-      (bal > 0 ? '<p class="callout warn">' + ic('alert') + ' <b>' + money(bal) + '</b> is still owing on this booking. Collect it at reception.</p>' : '') + handHTML(b) + issueField(),
+      (bal > 0 ? '<p class="callout warn">' + ic('alert') + ' <b>' + money(bal) + '</b> is still owing on this booking. Collect it at reception.</p>' : '') + handHTML(b) + freeHandHTML(b) + issueField(),
       'Check in', function (f) {
         if (f.elements.reg && !String(fval(f, 'reg')).trim()) { toast('Add the registration number first: it goes on the gate list'); f.elements.reg.focus(); return false; }
         if (!fval(f, 'ind')) { toast('The indemnity is not complete. Sign now at reception, or tick that they signed the paper form.'); var ib = $('.ind-box', f); if (ib) { ib.scrollIntoView({ block: 'center', behavior: 'smooth' }); ib.classList.remove('shake'); void ib.offsetWidth; ib.classList.add('shake'); } return false; }
@@ -2069,6 +2093,7 @@
         readCar(f, c); vehSaid(b); c.ind = c.ind || { at: nowStamp(), by: onl ? 'Online' : ME.name };
         if (!onl) { var cx = carInd(b, c), who = cx.left.concat(cx.unnamed ? [cx.unnamed + ' unnamed ' + (cx.unnamed === 1 ? 'person' : 'people')] : []); if (who.length) b.notes.push({ at: nowStamp(), by: ME.name, text: carLabel(c, i) + ': paper indemnity signed at check-in by ' + who.join(', ') + '. The scan still has to be uploaded.' }); paperRecs(b, c, nowStamp(), ME.name); } c.st = 'in'; c.inAt = nowStamp(); c.inBy = ME.name; delete c.noShow;
         var hn = handRead(f, b); if (hn) b.notes.push({ at: nowStamp(), by: ME.name, text: 'Camp shop order ' + hn + '.' });
+        if (fval(f, 'freehand')) { var fg = freeGive(b); if (fg) b.notes.push({ at: nowStamp(), by: ME.name, text: 'Free with promotion, handed over at check-in: ' + fg + '.' }); }
         issueRead(f, b);
         if (b.status !== 'in' && bal > 0) b.notes.push({ at: nowStamp(), by: ME.name, text: 'Checked in with ' + money(bal) + ' still owing. Collect at reception.' });
         b.status = 'in';
@@ -2086,7 +2111,8 @@
       (t.owing ? '<span class="fld-l" style="margin-top:12px">Settle the tab</span><div class="seg">' + [['cash', 'Cash'], ['card', 'Card'], ['eft', 'EFT'], ['later', 'Add to the booking']].map(function (m, j) { return '<label><input type="radio" name="pay" value="' + m[0] + '"' + (j ? '' : ' checked') + '><span>' + m[1] + '</span></label>'; }).join('') + '</div>' : '') +
       (last && due.length ? '<label class="check"><input type="checkbox" name="nocome"' + (b.co <= TODAY ? ' checked' : '') + '><span>The other ' + (due.length === 1 ? 'vehicle' : due.length + ' vehicles') + ' did not come</span></label>' : '') +
       (last && after > 0 ? '<p class="callout warn">' + ic('alert') + ' The booking still has <b>' + money(after) + '</b> owing' + (t.owing ? ' besides this tab' : '') + '. Record the payment before they leave.</p>' : '') +
-      (last && undel ? '<p class="callout warn">' + ic('cart') + ' Ordered but never handed over: <b>' + esc(undel) + '</b>. Give it to them now, or take it off the bill.</p>' : '') + issueField(),
+      (last && undel ? '<p class="callout warn">' + ic('cart') + ' Ordered but never handed over: <b>' + esc(undel) + '</b>. Give it to them now, or take it off the bill.</p>' : '') +
+      (last && freeLeft(b).length ? '<p class="callout warn">' + ic('gift') + ' Free with promotion, never handed over: <b>' + esc(freeTxt(freeLeft(b))) + '</b>. Give it to them now and mark it on the booking.</p>' : '') + issueField(),
       'Check out', function (f) {
         var pay = t.owing ? ($('[name=pay]:checked', f) || {}).value : '';
         if (pay && pay !== 'later') b.payments.push({ d: TODAY, amt: t.owing, m: pay, type: 'Tab', ref: 'Tab ' + carLabel(c, i), car: c.id });
@@ -2210,6 +2236,8 @@
     // stand sizes: the usual number of guests and the most each stand can ever take (the website asks Kyleu in between, and stops above the most)
     out.stands = {}; STANDS.forEach(function (s) { out.stands[s.id] = { guests: s.guests || 8, max: standMax(s) }; });
     if (DB.products) out.shop = DB.products.filter(function (p) { return p.active !== false; }).map(function (p) { return { label: p.label, amount: p.amount, note: p.note || '', img: p.img || '', cat: p.cat || '' }; });
+    out.promos = promosWeb();   // promotions that are switched on and not ended, in the shape assets/js/promos.js documents
+    out.drives = drivesWeb();   // game drives: the set-up, and the seats still open on each day the guide is here (today and later)
     try { localStorage.setItem(WEBK, JSON.stringify(out)); } catch (e) {}
   }
   // the name and description of a rate as the website shows them
@@ -2484,6 +2512,8 @@
     var tabOw = cs.reduce(function (a, c) { return a + carTab(b, c).owing; }, 0);
     var foot = [];
     if (os) foot.push('<span class="gate-order' + (os.left || os.todo.length ? ' todo' : '') + '">' + ic('cart') + '<span><b>Ordered: ' + esc(os.txt) + '</b><small>' + (os.paid ? 'Paid' : 'On the bill') + ' · ' + esc(os.note) + '</small></span></span>');
+    if (kind === 'in' && freeItems(b).length) foot.push('<span class="gate-order' + (freeLeft(b).length ? ' todo' : '') + '" data-free>' + ic('gift') + '<span><b>Free with promotion: ' + esc(freeTxt(freeItems(b))) + '</b><small>' + esc(freeItems(b)[0].name) + ' · ' + (freeLeft(b).length ? 'still to hand over' : 'handed over') + '</small></span></span>');
+    if (kind === 'in') drivesOf(b).filter(function (d) { return d.d && d.d >= day; }).forEach(function (d) { foot.push('<span class="gate-order" data-gate-drive>' + ic('car') + '<span><b>Game drive: ' + esc(driveWhen(d)) + '</b><small>' + pplTxt(d.n) + (d.guide ? ' · guide ' + esc(d.guide) : '') + '</small></span></span>'); });
     if (kind === 'out' && (balance(b) > 0)) foot.push('<span class="gate-order todo">' + ic('alert') + '<span><b>Still to pay before they leave: ' + money(balance(b)) + '</b><small>' + (tabOw ? 'includes ' + money(tabOw) + ' on the shop tab' : 'booking balance') + '</small></span></span>');
     if (b.gateNote) foot.unshift('<span class="gate-order note">' + ic('note') + '<span><b>' + esc(b.gateNote) + '</b><small>Note for the gate</small></span></span>');
     var jobsOpen = jobsDB().filter(function (j) { return j.stand === b.stand && !j.done; });
@@ -2651,8 +2681,8 @@
               '<td rowspan="' + cs.length + '">' + (b.status === 'pending' ? '<span class="owes">NOT PAID</span><br><span class="s">' + money(b.total) + '</span>' : bal > 0 ? '<span class="owes">OWES ' + money(bal) + '</span><br><span class="s">' + BOX + 'paid: cash / card</span>' : '<span class="b">PAID</span>') + '</td>') +
               '<td>' + (!vehKnown(b) && !carGiven(b, c) ? '<span class="s">Not given yet. Write in each vehicle that comes.</span>' : esc(c.make || '') + (c.driver && c.driver !== guestName(b) ? '<br><span class="s">' + esc(c.driver) + '</span>' : '')) + '</td><td class="big">' + esc(p[0]) + '</td><td class="reg2">' + esc(p[1]) + '</td>' +
               '<td class="s">' + (ind ? '<span class="b">Signed</span>' : BOX + 'signed on paper') + '</td>' +
-              (i ? '' : '<td class="s" rowspan="' + cs.length + '">' + (os && (os.left || os.todo.length) ? '<span class="b">' + esc(itemsTxt(os.left || os.items)) + '</span><br>' + BOX + 'given now<br>' + BOX + 'deliver on: <span class="w" style="min-width:12mm"></span>' : os ? esc(os.txt) + '<br>handed over' : 'ICE: <span class="w" style="min-width:10mm"></span><br>WOOD: <span class="w" style="min-width:10mm"></span>') + '</td>') +
-              '<td class="b">' + (c.st !== 'due' && c.inAt ? esc(c.inAt.slice(11, 16)) : '') + '</td><td class="s">' + (i ? '' : esc(b.gateNote || '')) + '</td></tr>';
+              (i ? '' : '<td class="s" rowspan="' + cs.length + '">' + (os && (os.left || os.todo.length) ? '<span class="b">' + esc(itemsTxt(os.left || os.items)) + '</span><br>' + BOX + 'given now<br>' + BOX + 'deliver on: <span class="w" style="min-width:12mm"></span>' : os ? esc(os.txt) + '<br>handed over' : 'ICE: <span class="w" style="min-width:10mm"></span><br>WOOD: <span class="w" style="min-width:10mm"></span>') + freePrint(b) + '</td>') +
+              '<td class="b">' + (c.st !== 'due' && c.inAt ? esc(c.inAt.slice(11, 16)) : '') + '</td><td class="s">' + (i ? '' : esc(b.gateNote || '') + drivePrint(b, day)) + '</td></tr>';
           });
         });
         for (var x = 0; x < 4; x++) html += '<tr class="newparty"><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="s">' + BOX + 'signed on paper</td><td class="s">ICE:<br>WOOD:</td><td></td><td></td></tr>';
@@ -2722,7 +2752,7 @@
           (kind === 'in' ? '<label class="fld"><span>Registration</span><input name="reg' + n + '" value="' + esc(c.reg) + '" style="text-transform:uppercase" autocomplete="off"></label><label class="fld"><span>Vehicle</span><input name="make' + n + '" value="' + esc(c.make || '') + '" placeholder="e.g. white Hilux" autocomplete="off"></label><label class="fld"><span>People in it</span><input type="number" min="1" max="12" name="ppl' + n + '" value="' + (c.people || 1) + '"></label>' : '') +
           ((kind === 'in' ? first && bal > 0 : (first ? bal : t.owing) > 0) ? '<label class="fld"><span>Paid at the gate (owes ' + money(kind === 'in' || first ? bal : t.owing) + ')</span><input name="amt' + n + '" inputmode="decimal" placeholder="0"></label><label class="fld"><span>Paid by</span><select name="m' + n + '"><option value="cash">Cash</option><option value="card">Card</option><option value="eft">EFT</option></select></label>' : '') +
           '<label class="fld paper-wide"><span>Problem written on the sheet (goes to the site jobs)</span><input name="iss' + n + '" autocomplete="off"></label></div>' +
-          (kind === 'in' ? '<div class="paper-checks">' + (ind ? '<span class="pill ok">' + ic('check') + 'Indemnity already signed</span>' : '<label class="check"><input type="checkbox" name="ind' + n + '" checked><span>Indemnity signed on paper</span></label>') + (first && left ? '<label class="check"><input type="checkbox" name="hand' + n + '" checked><span>Handed over: ' + esc(itemsTxt(left)) + '</span></label>' : '') + '</div>' : '') + '</fieldset>';
+          (kind === 'in' ? '<div class="paper-checks">' + (ind ? '<span class="pill ok">' + ic('check') + 'Indemnity already signed</span>' : '<label class="check"><input type="checkbox" name="ind' + n + '" checked><span>Indemnity signed on paper</span></label>') + (first && left ? '<label class="check"><input type="checkbox" name="hand' + n + '" checked><span>Handed over: ' + esc(itemsTxt(left)) + '</span></label>' : '') + (first && freeLeft(b).length ? '<label class="check"><input type="checkbox" name="free' + n + '" checked><span>Free with promotion handed over: ' + esc(freeTxt(freeLeft(b))) + '</span></label>' : '') + '</div>' : '') + '</fieldset>';
       }).join('') + '</div>';
     modal('Type in the paper ' + (kind === 'in' ? 'check-in' : 'check-out') + ' sheet', body, 'Save the sheet', function (f) {
       var nDone = 0, nSkip = 0, noInd = [];
@@ -2735,6 +2765,7 @@
           c.reg = String(fval(f, 'reg' + n) || c.reg || '').toUpperCase(); c.make = fval(f, 'make' + n); c.people = Math.max(1, +fval(f, 'ppl' + n) || c.people || 1);
           if (!c.ind && !carSigned(b, c)) { if (fval(f, 'ind' + n)) { c.ind = { at: stamp, by: ME.name + ' (paper)' }; paperRecs(b, c, stamp, ME.name); } else noInd.push(carLabel(c, r.i)); }
           c.st = 'in'; c.inAt = stamp; c.inBy = ME.name + ' (paper sheet)'; b.status = 'in'; delete c.auto; vehSaid(b);
+          if (fval(f, 'free' + n)) freeGive(b, stamp);
           if (fval(f, 'hand' + n)) { var left = orderLeft(b); if (left) drops(b).push({ id: uid('dr'), d: day, items: left, how: 'gate', done: { at: stamp, by: ME.name } }); }
           if (amt > 0) b.payments.push({ d: day, amt: amt, m: fval(f, 'm' + n) || 'cash', type: 'Balance', ref: 'Paid at the gate' });
         } else {
@@ -3078,6 +3109,8 @@
     if ((DB.dgrV || 0) < 2) { DB.dgrV = 2; DB.bookings.forEach(function (b) { var was = b.dgr; delete b.dgr; if (!live(b) || !(was || b.ci < add(TODAY, 3))) return; b.cars.forEach(function (c) { if (c.dgr) return; c.dgr = 'DGR' + Math.random().toString(36).slice(2, 8).toUpperCase(); c.dgrSent = { at: add(b.ci, -6) + ' 09:10', by: 'Sherri', code: c.dgr }; }); }); }
     // data from before "last reminded" was kept (b.nudges): fill it in once from what is stored, so the lists are not empty
     if ((DB.nudgeV || 0) < 1) { DB.nudgeV = 1; DB.bookings.forEach(nudgeFill); save(); }
+    // promotions and the guide's days came later: two example promotions and the guide for the next weekends, once (also for browsers that already have demo data)
+    if ((DB.promoV || 0) < 1) { DB.promoV = 1; promoDemo(); save(); }
     newsDB();
   }
 
@@ -3132,7 +3165,8 @@
       if (openCancelReq(b)) attention.push({ i: 'alert', tone: 'warn', t: '<b>' + esc(guestName(b)) + '</b> asked to cancel the booking (' + fd(b.ci) + '): cancel it, or keep it and let them know', ref: b.ref, o: 1 });
       if (openSize(b)) attention.push({ i: 'users', tone: 'warn', t: '<b>' + esc(guestName(b)) + '</b>: ' + esc(sizeLine(b)) + ' Agree to it or contact them.', ref: b.ref, o: 1 });
       if (live(b) && b.status !== 'in' && b.status !== 'out' && b.ci >= TODAY && diff(TODAY, b.ci) <= 10 && paidUp(b) && !b.finalised) attention.push({ i: 'car', tone: 'warn', t: '<b>' + esc(guestName(b)) + '</b> has paid but not finalised the booking (' + fdw(b.ci) + '): ' + (diff(TODAY, b.ci) <= 7 ? 'their link is locked now, so add the vehicles and arrival time yourself (WhatsApp them) or at check-in' : 'send the finalise link or fill it in'), ref: b.ref, o: 5 });
-      var ps = preShop(b); if (ps && live(b) && b.status !== 'out' && (b.ci === TODAY || b.ci === add(TODAY, 1))) attention.push({ i: 'cart', tone: 'info', t: 'Have ready for <b>' + esc(guestName(b)) + '</b> (' + (b.ci === TODAY ? 'today' : 'tomorrow') + '): ' + esc(ps.desc.replace(/^Shop order for arrival: /, '')), ref: b.ref, o: 3 });
+      var ps = preShop(b), fl = freeLeft(b); if ((ps || fl.length) && live(b) && b.status !== 'out' && (b.ci === TODAY || b.ci === add(TODAY, 1))) attention.push({ i: 'cart', tone: 'info', t: 'Have ready for <b>' + esc(guestName(b)) + '</b> (' + (b.ci === TODAY ? 'today' : 'tomorrow') + '): ' + [ps ? esc(ps.desc.replace(/^Shop order for arrival: /, '')) : '', fl.length ? 'free with promotion: ' + esc(freeTxt(fl)) : ''].filter(Boolean).join('; '), ref: b.ref, o: 3 });
+      drivesOf(b).filter(driveFlag).forEach(function (d) { attention.push({ i: 'car', tone: 'bad', t: DRIVE_FLAG[driveFlag(d)] + ' (<b>' + esc(guestName(b)) + '</b>, ' + esc(driveWhen(d)) + ')', ref: b.ref, o: 1 }); });
       if (s.k === 'pop' || (s.k === 'soft' && b.holdWhy === 'pop' && diff(TODAY, b.softHold) > 2)) attention.push({ i: 'note', tone: 'info', t: 'Proof of payment from <b>' + esc(guestName(b)) + '</b>: check the bank for ' + money(deposit(b)), ref: b.ref, o: 1 });
       if (s.k === 'overdue') attention.push({ i: 'alert', tone: 'bad', t: '<b>' + esc(guestName(b)) + '</b> has not paid the EFT deposit (due ' + fd(depositDue(b)) + '). Remind or release the stand.', ref: b.ref, o: 2 });
       if (s.k === 'baldue' && s.tone === 'bad') attention.push({ i: 'alert', tone: 'bad', t: 'Balance overdue: <b>' + esc(guestName(b)) + '</b> owes ' + money(balance(b)) + ', arriving ' + fdw(b.ci), ref: b.ref, o: 3 });
@@ -3643,6 +3677,7 @@
     var q = quote(b.stand, b.ci, b.co, b, b.extras), card = b.method === 'card', sum = 0;
     q.lines.forEach(function (l) { var v = card ? l.c : l.e; sum += v; k.line(l.t, money(v)); });
     (b.charges || []).forEach(function (c) { var v = card ? c.c : c.e; sum += v; k.line(c.desc, money(v)); });
+    moreLines(b, card, sum).forEach(function (l) { sum += l.amt; k.line((l.free && l.q ? l.q + ' × ' : '') + l.t, l.free ? 'Free' : money(l.amt)); });
     if (Math.round(sum) !== Math.round(b.total)) k.line('Discount or adjustment', money(b.total - sum));
     k.line('Total', money(b.total), true); k.line('Paid so far', money(paid(b)), true); k.line('Balance', money(balance(b)), true);
   }
@@ -3681,6 +3716,7 @@
       }
       L.push({ t: c.desc, amt: amt, tag: c.pre ? 'shop' : c.adj ? 'adj' : 'extra' });
     });
+    L = L.concat(moreLines(b, card, L.reduce(function (a, l) { return a + l.amt; }, 0)));   // more game drives (tag 'drive'), promotion discounts and free items (tag 'promo')
     var sum = L.reduce(function (a, l) { return a + l.amt; }, 0);
     if (Math.round(sum) !== Math.round(b.total)) L.push({ t: 'Discount or adjustment', amt: b.total - sum, tag: 'adj' });
     return L;
@@ -4526,51 +4562,598 @@
   }
 
   /* =========================================================
-     Game drives: a schedule, like an activity booking system
+     Promotions: special offers that the website and the staff booking screen work out by themselves.
+     DB.promos holds them in exactly the shape assets/js/promos.js documents, and K.promoEval decides what a
+     booking gets, so the admin and the website always agree. publishWeb() hands the ones that are switched on
+     and not ended to the website (out.promos).
+     On a booking: b.promos = [{ id, name, amt }] (the discount, fixed when it was booked and already off b.eft,
+     b.card and b.total: later edits keep it) and b.freeItems = [{ label, qty, promo, name, given: { at, by } }]
+     (handed over at the gate, then taken off the stock).
+     To drive it in a test: [data-act="promo-add"], [data-act="promo-quick"][data-ref="wood|drive|night"],
+     .promo-card[data-promo=ID] with input[data-promo-on=ID] and [data-act="promo-edit|promo-copy|promo-del"][data-ref=ID].
+     The form: [name=name], [name=blurb], [name=kind] (pctStay, amtStay, pctDrive, freeItem, freeNight) with
+     [name=v_pctStay], [name=v_amtStay], [name=v_pctDrive], [name=gift] (the free product) + [name=qty], [name=v_freeNight];
+     [name=minN], [name=maxN], [name=days], [name=stayFrom], [name=stayTo], [name=bookFrom], [name=bookTo],
+     [data-pm-area], [name=needDrive], [name=needItem] + [name=needQty], [name=code], [name=combine]; the example is [data-pm-example].
      ========================================================= */
-  var SLOTS = { am: 'Morning · 06:00', pm: 'Afternoon · 15:30' }, SEATS = 10, GUIDES = ['Devon', 'Kyran'], GD = { guide: '', slot: '' };
-  function drivePrice(n) { return n >= 3 ? n * num('Game drives', 'Game drive 3 or more people per person', 400) : n === 2 ? 2 * num('Game drives', 'Game drive 2 people per person', 450) : n === 1 ? num('Game drives', 'Game drive 1 person', 900) : 0; }
-  function vDrives() {
-    var all = DB.bookings.filter(function (b) { return live(b) && b.extras && b.extras.gd; });
-    var need = all.filter(function (b) { return !b.drive && b.co >= TODAY; }).sort(function (a, b) { return a.ci < b.ci ? -1 : 1; });
-    var sched = all.filter(function (b) { return b.drive && b.drive.d >= TODAY && (!GD.guide || b.drive.guide === GD.guide) && (!GD.slot || b.drive.slot === GD.slot); });
-    var wk = sched.filter(function (b) { return b.drive.d <= add(TODAY, 6); }), slotsWk = {}; wk.forEach(function (b) { slotsWk[b.drive.d + b.drive.slot] = 1; });
-    var month = TODAY.slice(0, 7), inc = all.filter(function (b) { return (b.drive ? b.drive.d : b.ci).slice(0, 7) === month; }).reduce(function (a, b) { return a + drivePrice(b.extras.gd); }, 0);
-    var days = []; for (var i = 0; i < 14; i++) days.push(add(TODAY, i));
-    return '<div class="page-h"><div><h1>Game drives</h1><p class="muted">Guided drives with a Kyleu guide. ' + money(num('Game drives', 'Game drive 3 or more people per person', 400)) + ' per person for 3 or more, ' + money(num('Game drives', 'Game drive 2 people per person', 450)) + ' each for 2, ' + money(num('Game drives', 'Game drive 1 person', 900)) + ' for one person.</p></div><div class="ph-act"><button class="btn" data-act="drive-add">' + ic('plus') + 'Add a game drive</button></div></div>' +
-      '<div class="kpis">' + tile('Drives in the next 7 days', Object.keys(slotsWk).length, wk.reduce(function (a, b) { return a + b.extras.gd; }, 0) + ' guests going') + tile('Waiting for a time', need.length, need.length ? 'Pick a time and a guide' : 'Everything is scheduled', null, need.length ? 'warn' : 'ok') + tile('Drive income this month', money(inc), 'at EFT prices') + '</div>' +
-      (need.length ? '<section class="card"><header class="card-h"><h3>Waiting for a time</h3><span class="muted small">No time set yet</span></header>' + need.map(function (b) { return '<div class="brow"><span class="brow-st">' + b.extras.gd + ' ' + (b.extras.gd === 1 ? 'person' : 'people') + '</span><span class="brow-g" data-open="' + b.ref + '"><b>' + esc(guestName(b)) + '</b><small>' + esc(standById(b.stand).name) + ' · staying ' + fd(b.ci) + ' to ' + fd(b.co) + '</small></span><button class="btn sm" data-act="drive-set" data-ref="' + b.ref + '">' + ic('clock') + 'Set a time</button></div>'; }).join('') + '</section>' : '') +
-      '<section class="card"><header class="card-h"><h3>The next two weeks</h3><div class="ph-act">' + fsel('GD:guide', GD.guide, [['', 'All guides']].concat(GUIDES.map(function (g) { return [g, 'Guide: ' + g]; }))) + fsel('GD:slot', GD.slot, [['', 'Morning and afternoon'], ['am', 'Mornings only'], ['pm', 'Afternoons only']]) + '</div></header>' + days.map(function (d) {
-        var any = sched.some(function (b) { return b.drive.d === d; });
-        if (!any && (GD.guide || GD.slot)) return '';
-        return '<div class="gd-day' + (any ? '' : ' quiet') + '"><div class="gd-date"><b>' + fd(d, { weekday: 'short', day: 'numeric', month: 'short' }) + '</b><small>' + (d === TODAY ? 'Today' : rel(d)) + '</small></div><div class="gd-slots">' + ['am', 'pm'].map(function (s) {
-          var ps = sched.filter(function (b) { return b.drive.d === d && b.drive.slot === s; }), n = ps.reduce(function (a, b) { return a + b.extras.gd; }, 0);
-          if (!n) return '<div class="gd-slot empty"><b>' + SLOTS[s] + '</b><span class="muted small">No one booked</span></div>';
-          return '<div class="gd-slot"><div class="gd-top"><b>' + SLOTS[s] + '</b><span class="small">Guide: <b>' + esc(ps[0].drive.guide || 'not set') + '</b></span></div><div class="seats' + (n > SEATS ? ' over' : '') + '"><span style="width:' + Math.min(100, n / SEATS * 100) + '%"></span></div><small class="' + (n > SEATS ? 'bad-t' : 'muted') + '">' + n + ' of ' + SEATS + ' seats' + (n > SEATS ? ': needs a second vehicle' : '') + '</small>' +
-            '<ul>' + ps.map(function (b) { return '<li><button data-act="drive-set" data-ref="' + b.ref + '"><b>' + esc(guestName(b)) + '</b> · ' + b.extras.gd + (b.extras.gd === 1 ? ' person' : ' people') + ' · ' + esc(standById(b.stand).name) + '</button></li>'; }).join('') + '</ul></div>';
-        }).filter(function (h, si) { return !GD.slot || ['am', 'pm'][si] === GD.slot; }).join('') + '</div></div>';
-      }).join('') + '</section>';
+  var PROMO_KINDS = [
+    ['pctStay', 'A percentage off the stay', 'For example 10% off the camping fees.'],
+    ['amtStay', 'A rand amount off the stay', 'For example R100 off the camping fees.'],
+    ['pctDrive', 'A percentage off the game drive', 'For guests who book a game drive with their stay.'],
+    ['freeItem', 'A free shop item', 'For example a bag of firewood. It is handed over when they arrive.'],
+    ['freeNight', 'A free night', 'For example stay 4 nights and pay for 3. The cheapest nights are the free ones.']
+  ];
+  var PROMO_QUICK = [
+    { k: 'wood', i: 'fire', name: 'Stay 3 nights, get a free bag of firewood', d: 'A free shop item for longer stays.' },
+    { k: 'drive', i: 'car', name: '10% off your stay when you book a game drive', d: 'Money off the stay for guests who add a drive.' },
+    { k: 'night', i: 'tent', name: 'Stay 4 nights, pay for 3', d: 'The cheapest night of the stay is free.' }
+  ];
+  function promosDB() { if (!DB.promos) DB.promos = []; return DB.promos; }
+  function promoBy(id) { return promosDB().filter(function (p) { return p.id === id; })[0] || null; }
+  function promoEval(list, c) { return K.promoEval ? K.promoEval(list, c) : { list: [], total: 0, free: [] }; }
+  function rewardTxt(p) { var r = (p && p.reward) || {}, t = (r.kind === 'freeItem' && !r.item) || !K.promoRewardText ? '' : K.promoRewardText(p); return t ? t.charAt(0).toUpperCase() + t.slice(1) : 'Nothing chosen yet'; }
+  function promoNew(o) { return Object.assign({ id: uid('pm'), name: '', blurb: '', on: true, bookFrom: '', bookTo: '', stayFrom: '', stayTo: '', minNights: 0, maxNights: 0, days: 'any', areas: [], needDrive: false, needItem: null, code: '', reward: { kind: 'pctStay', value: 10 }, combine: false }, o || {}); }
+  // Running, Starts on, Ended or Switched off
+  function promoState(p) {
+    var end = [p.bookTo, p.stayTo].filter(function (d) { return d && d < TODAY; }).sort()[0];
+    if (p.on === false) return { k: 'off', t: 'Switched off', tone: 'muted' };
+    if (end) return { k: 'ended', t: 'Ended ' + fdp(end), tone: 'muted' };
+    if (p.bookFrom && p.bookFrom > TODAY) return { k: 'soon', t: 'Starts on ' + fdp(p.bookFrom), tone: 'info' };
+    return { k: 'on', t: 'Running', tone: 'ok' };
   }
-  // set (or change) the time, the guide and how many people; the price on the booking follows
-  function actDrive(ref) {
-    var pre = ref ? byRef(ref) : null, here = DB.bookings.filter(function (b) { return live(b) && b.status !== 'pending' && b.co >= TODAY; }).sort(function (a, b) { return a.ci < b.ci ? -1 : 1; });
-    var dr = pre && pre.drive ? pre.drive : { d: pre ? (pre.ci < TODAY ? TODAY : pre.ci) : TODAY, slot: 'pm', guide: GUIDES[0] };
-    modal(pre && pre.extras && pre.extras.gd ? 'Game drive for ' + esc(guestName(pre)) : 'Add a game drive',
-      (pre ? '<p class="muted small">' + esc(standById(pre.stand).name) + ' · staying ' + fd(pre.ci) + ' to ' + fd(pre.co) + '</p><input type="hidden" name="b" value="' + pre.ref + '">' : '<label class="fld"><span>Booking</span><select name="b">' + here.map(function (b) { return '<option value="' + b.ref + '">' + esc(standById(b.stand).name + ' · ' + guestName(b) + ' · ' + fd(b.ci) + ' to ' + fd(b.co)) + '</option>'; }).join('') + '</select></label>') +
-      '<div class="grid2"><label class="fld"><span>People</span><input name="n" inputmode="numeric" data-stp min="1" max="20" value="' + (pre && pre.extras && pre.extras.gd || 2) + '" data-gd-n></label><label class="fld"><span>Price (EFT)</span><input data-gd-p value="' + money(drivePrice(pre && pre.extras && pre.extras.gd || 2)) + '" disabled></label></div>' +
-      '<div class="grid2"><label class="fld"><span>Date</span><input type="date" name="d" value="' + dr.d + '"></label><label class="fld"><span>Guide</span><select name="g">' + GUIDES.map(function (g) { return '<option' + (g === dr.guide ? ' selected' : '') + '>' + g + '</option>'; }).join('') + '</select></label></div>' +
-      '<div class="seg">' + ['am', 'pm'].map(function (s) { return '<label><input type="radio" name="s" value="' + s + '"' + (dr.slot === s ? ' checked' : '') + '><span>' + SLOTS[s] + '</span></label>'; }).join('') + '</div>' +
-      (pre && pre.drive ? '<div class="m-extra"><button type="button" class="btn ghost sm danger-t" data-act="drive-del" data-ref="' + pre.ref + '">Cancel this game drive</button></div>' : ''),
+  function fdp(s) { return s.slice(0, 4) === TODAY.slice(0, 4) ? fd(s) : fdy(s); }   // the year only when it is not this year
+  function spanTxt(a, z, lead) { return a && z ? lead + ' ' + fdp(a) + ' to ' + fdp(z) : a ? lead + ' from ' + fdp(a) : z ? lead + ' until ' + fdp(z) : ''; }
+  function nightsWord(n) { return n + ' night' + (n === 1 ? '' : 's'); }
+  function promoAreas(p) { var ar = p.areas || []; return ar.length && ar.length < Object.keys(AREA_SHORT).length ? listAnd(ar.map(function (a) { return AREA_SHORT[a] || a; })) : ''; }
+  // the conditions in one plain sentence: "3 nights or more, weekend stays, arriving 1 Dec to 31 Jan"
+  function promoWhen(p) {
+    var out = [], mn = +p.minNights || 0, mx = +p.maxNights || 0, ar = promoAreas(p);
+    if (mn && mx) out.push(mn === mx ? nightsWord(mn) + ' exactly' : mn + ' to ' + nightsWord(mx)); else if (mn) out.push(nightsWord(mn) + ' or more'); else if (mx) out.push('up to ' + nightsWord(mx));
+    if (p.days === 'weekend') out.push('weekend stays'); if (p.days === 'weekday') out.push('weekday stays');
+    var s1 = spanTxt(p.stayFrom, p.stayTo, 'arriving'), s2 = spanTxt(p.bookFrom, p.bookTo, 'booked'); if (s1) out.push(s1); if (s2) out.push(s2);
+    if (ar) out.push(ar + ' stands only');
+    if (p.needDrive) out.push('with a game drive');
+    if (p.needItem && p.needItem.label) out.push('when they buy ' + (p.needItem.qty || 1) + ' × ' + p.needItem.label);
+    if (p.code) out.push('with the code ' + p.code);
+    var t = out.join(', '); return t ? t.charAt(0).toUpperCase() + t.slice(1) : 'Every booking';
+  }
+  // the line guests see, written from the choices (used when the box is left empty)
+  function promoBlurb(p) {
+    var r = p.reward || {}, mn = +p.minNights || 0, mx = +p.maxNights || 0, lead = [], got = (r.kind === 'freeItem' && !r.item) || !K.promoRewardText ? '' : K.promoRewardText(p), ar = promoAreas(p);
+    if (!got) return '';
+    if (mn && mx) lead.push(mn === mx ? 'stay ' + nightsWord(mn) : 'stay ' + mn + ' to ' + nightsWord(mx)); else if (mn) lead.push('stay ' + nightsWord(mn) + ' or more'); else if (mx) lead.push('stay up to ' + nightsWord(mx));
+    if (p.needDrive) lead.push('book a game drive with your stay');
+    if (p.needItem && p.needItem.label) lead.push('buy ' + (p.needItem.qty || 1) + ' × ' + p.needItem.label);
+    var s = lead.length ? listAnd(lead) + ' and get ' + got + '.' : 'Get ' + got + ' when you book.';
+    s = s.charAt(0).toUpperCase() + s.slice(1);
+    if (p.days === 'weekend') s += ' For weekend stays.'; if (p.days === 'weekday') s += ' For weekday stays.';
+    var a = spanTxt(p.stayFrom, p.stayTo, 'For stays arriving'); if (a) s += ' ' + a + '.';
+    if (p.bookTo) s += ' Book by ' + fdp(p.bookTo) + '.';
+    if (ar) s += ' On ' + ar + ' stands.';
+    if (p.code) s += ' Use the code ' + p.code + ' when you book.';
+    return s;
+  }
+  // how many bookings used each promotion, the discount it gave and the free items: { id: { n, amt, free } }
+  function promoUsage() {
+    var u = {}, at = function (id) { return u[id] || (u[id] = { n: 0, amt: 0, free: 0 }); };
+    DB.bookings.forEach(function (b) { if (!live(b)) return; (b.promos || []).forEach(function (x) { var o = at(x.id); o.n++; o.amt += +x.amt || 0; }); (b.freeItems || []).forEach(function (f) { at(f.promo).free += +f.qty || 0; }); });
+    return u;
+  }
+  // a stay the way K.promoEval wants it (the same details the website gives it). o: { today, drives, driveTotal, shop, code }
+  function promoCtx(sid, ci, co, g, o) {
+    o = o || {}; var q = quote(sid, ci, co, g, {}), amts = [], prices = {};
+    for (var d = ci; d < co; d = add(d, 1)) amts.push(quote(sid, d, add(d, 1), g, {}).eft);
+    shopItems().forEach(function (p) { prices[p.label] = p.amount; });
+    return { today: o.today || TODAY, ci: ci, nights: q.nights, wkN: q.wkN, area: standById(sid).area, stay: q.eft, nightAmts: amts, driveTotal: o.driveTotal || 0, drives: o.drives || 0, shop: o.shop || {}, prices: prices, code: o.code || '' };
+  }
+  // the same promotion without its code and without the shop item it asks for: staff may give it by hand
+  function promoLoose(p) { var x = JSON.parse(JSON.stringify(p)); x.code = ''; x.needItem = null; return x; }
+  function promoHandWhy(p) { var a = []; if (p.code) a.push('needs the code ' + p.code); if (p.needItem && p.needItem.label) a.push('only when they buy ' + (p.needItem.qty || 1) + ' × ' + p.needItem.label); return a.join(' and ') + ': tick it if that is so'; }
+  // the promotions a new booking can get. ticks = { id: true or false } is what staff chose by hand; a promotion they did
+  // not touch is ticked when K.promoEval gives it. Returns { rows: [{ p, byHand, on }], res: K.promoEval of the ticked ones }
+  function promoPick(c, ticks) {
+    ticks = ticks || {};
+    var list = promosDB().filter(function (p) { return p.on !== false && p.reward; }), auto = {}, rows = [];
+    promoEval(list, c).list.forEach(function (h) { auto[h.id] = 1; });
+    list.forEach(function (p) {
+      var hit = promoEval([p], c).list[0], loose = hit ? null : promoEval([promoLoose(p)], c).list[0];
+      if (hit || loose) rows.push({ p: p, byHand: !hit, on: ticks[p.id] != null ? !!ticks[p.id] : !!auto[p.id] });
+    });
+    return { rows: rows, res: promoEval(rows.filter(function (r) { return r.on; }).map(function (r) { return r.byHand ? promoLoose(r.p) : r.p; }), c) };
+  }
+  function promoNote(x, free) { var mine = (free || []).filter(function (f) { return f.promo === x.id; }); return 'Promotion: ' + x.name + (+x.amt ? ', saved ' + money(x.amt) : '') + (mine.length ? ', free ' + freeTxt(mine) : '') + '.'; }
+  // put what K.promoEval gave on a new booking: the discount (the totals are already less), the free items and a note
+  function promoStamp(b, res, at, by) {
+    if (!res || !res.list || !res.list.length) return;
+    b.promos = res.list.map(function (h) { return { id: h.id, name: h.name, amt: h.amt || 0 }; });
+    if (res.free && res.free.length) b.freeItems = res.free.map(function (x) { return { label: x.label, qty: x.qty, promo: x.promo, name: x.name }; });
+    b.promos.forEach(function (x) { b.notes.push({ at: at, by: by, text: promoNote(x, b.freeItems) }); });
+  }
+  // the lines a booking has besides the stay and the shop: more game drives, promotion discounts (a minus) and free items
+  function driveLines(b, card) { return (b.drives || []).filter(function (x) { return +x.amt; }).map(function (x) { return { t: 'Game drive · ' + fdw(x.d) + ', ' + slotTxt(x.slot, x) + ' · ' + x.n + (x.n === 1 ? ' person' : ' people'), amt: card ? toCard(x.amt) : x.amt, tag: 'drive' }; }); }
+  function promoLines(b, card) {
+    var out = (b.promos || []).filter(function (x) { return +x.amt > 0; }).map(function (x) { return { t: 'Promotion: ' + x.name, amt: -(card ? toCard(x.amt) : x.amt), tag: 'promo' }; });
+    freeItems(b).forEach(function (f) { out.push({ t: 'Free with promotion: ' + f.label, q: f.qty, amt: 0, free: true, tag: 'promo' }); });
+    return out;
+  }
+  // sumSoFar = what the other lines add up to. On a card booking a rand or two of rounding goes on the promotion line, not on a line of its own.
+  function moreLines(b, card, sumSoFar) {
+    var sum = function (a) { return a.reduce(function (t, l) { return t + l.amt; }, 0); }, L = driveLines(b, card), pl = promoLines(b, card);
+    var exp = sum(pl), gap = b.total - sumSoFar - sum(L) - exp, lastP = pl.filter(function (l) { return l.amt < 0; }).pop();
+    if (card && lastP && gap && Math.abs(gap) <= Math.max(3, Math.abs(exp) * .04)) lastP.amt += gap;
+    return L.concat(pl);
+  }
+  /* ----- free items from a promotion: shown wherever the shop order for arrival is, and off the stock when handed over ----- */
+  function freeItems(b) { return (b && b.freeItems) || []; }
+  function freeLeft(b) { return b && live(b) ? freeItems(b).filter(function (f) { return !f.given; }) : []; }
+  function freeTxt(list) { return (list || []).map(function (f) { return f.qty + ' × ' + f.label; }).join(', '); }
+  // handed to the guest: marked on the booking and taken off the stock (with a line in the product's stock history). Returns what was given.
+  function freeGive(b, at) {
+    var left = freeLeft(b); if (!left.length) return '';
+    left.forEach(function (f) {
+      f.given = { at: at || nowStamp(), by: ME ? ME.name : 'System' };
+      var p = shopItems().filter(function (x) { return x.label === f.label; })[0];
+      if (p && p.stock != null) { var was = p.stock; p.stock = Math.max(0, p.stock - f.qty); f.stock = was - p.stock; stockNote(p, was, p.stock, 'Promotion', 'Free with promotion, booking ' + b.ref); }
+    });
+    return freeTxt(left);
+  }
+  // marked by mistake: back to "still to hand over", and back on the stock
+  function freeUngive(b) {
+    freeItems(b).forEach(function (f) {
+      if (!f.given) return;
+      var p = shopItems().filter(function (x) { return x.label === f.label; })[0];
+      if (p && p.stock != null && f.stock) { stockNote(p, p.stock, p.stock + f.stock, 'Promotion', 'Free item not handed over after all, booking ' + b.ref); p.stock += f.stock; }
+      delete f.given; delete f.stock;
+    });
+  }
+  // at check-in: the free items with a tick, next to the shop order
+  function freeHandHTML(b) {
+    var left = freeLeft(b); if (!left.length) return '';
+    return '<div class="hand-box free" data-free-hand><b>' + ic('gift') + 'Free with promotion</b><p>' + esc(freeTxt(left)) + ' <small>(' + esc(left[0].name) + ')</small></p><label class="check"><input type="checkbox" name="freehand" checked><span>Handed over now <small class="muted">Untick it if they get it later: it stays on the booking as still to hand over.</small></span></label></div>';
+  }
+  function freePrint(b) { var fr = freeItems(b), left = freeLeft(b); return fr.length ? '<br><span class="b">FREE (promotion): ' + esc(freeTxt(fr)) + '</span><br>' + (left.length ? BOX + 'given' : 'handed over') : ''; }
+  // on the booking: the promotion it got, and the free items with their state
+  function promoSec(b) {
+    var ps = b.promos || [], fr = freeItems(b), left = freeLeft(b), cancelled = !live(b); if (!ps.length && !fr.length) return '';
+    var g = fr.filter(function (f) { return f.given; })[0];
+    return '<section class="d-sec promo-sec" data-promo-sec><h4>Promotion</h4>' + ps.map(function (x) { return '<p class="promo-line">' + ic('gift') + '<span><b>' + esc(x.name) + '</b>' + (+x.amt ? ' · saved the guest ' + money(x.amt) : '') + '</span></p>'; }).join('') +
+      (fr.length ? '<div class="free-box' + (left.length ? ' todo' : '') + '" data-free-box>' + ic('box') + '<div><b>Free with promotion: ' + esc(freeTxt(fr)) + '</b><small>' + (cancelled ? 'The booking is cancelled.' : left.length ? 'Still to hand over. Give it at check-in, or mark it here.' : 'Handed over ' + esc(whenSaid(g.given.at)) + ' by ' + esc(g.given.by) + '.') + '</small></div>' +
+        (cancelled ? '' : left.length ? '<button type="button" class="btn sm" data-act="free-give" data-ref="' + b.ref + '">' + ic('check') + 'Handed over</button>' : '<button type="button" class="link-btn" data-act="free-undo" data-ref="' + b.ref + '">Undo</button>') + '</div>' : '') + '</section>';
+  }
+  function woodLabel() { var it = shopItems().filter(function (x) { return x.active !== false; }), w = it.filter(function (x) { return /sekelbos/i.test(x.label); })[0] || it.filter(function (x) { return /wood/i.test(x.label); })[0] || it[0]; return w ? w.label : ''; }
+  // the three ready-made examples. They are added switched off, so nothing shows on the website until it is checked and switched on.
+  function promoQuick(k) {
+    var q = PROMO_QUICK.filter(function (x) { return x.k === k; })[0] || PROMO_QUICK[0];
+    var p = q.k === 'wood' ? promoNew({ name: q.name, minNights: 3, reward: { kind: 'freeItem', value: 0, item: woodLabel(), qty: 1 } }) : q.k === 'drive' ? promoNew({ name: q.name, needDrive: true, reward: { kind: 'pctStay', value: 10 } }) : promoNew({ name: q.name, minNights: 4, reward: { kind: 'freeNight', value: 1 } });
+    p.on = false; p.blurb = promoBlurb(p); return p;
+  }
+  // what is wrong with a promotion ('' when it can be saved)
+  function promoBad(p) {
+    var r = p.reward || {}, v = +r.value || 0;
+    if (!p.name) return 'Give the promotion a name';
+    if ((r.kind === 'pctStay' || r.kind === 'pctDrive') && !(v > 0)) return 'Type how many percent the guest gets off';
+    if ((r.kind === 'pctStay' || r.kind === 'pctDrive') && v > 100) return 'A percentage cannot be more than 100';
+    if (r.kind === 'amtStay' && !(v > 0)) return 'Type how many rand the guest gets off';
+    if (r.kind === 'freeItem' && !r.item) return 'Choose the product the guest gets free';
+    if (r.kind === 'freeNight' && !(v >= 1)) return 'Type how many nights are free';
+    if (p.minNights && p.maxNights && p.maxNights < p.minNights) return 'The most nights cannot be fewer than the fewest nights';
+    if (r.kind === 'freeNight' && p.maxNights && p.maxNights <= v) return 'With ' + nightsWord(v) + ' free the stay must be longer than ' + nightsWord(v) + ': make "at most" bigger or leave it empty';
+    if (p.stayFrom && p.stayTo && p.stayTo < p.stayFrom) return 'The last arrival day is before the first one';
+    if (p.bookFrom && p.bookTo && p.bookTo < p.bookFrom) return 'The last booking day is before the first one';
+    return '';
+  }
+  // the example on the form: 2 adults on the cheapest fenced stand over a weekend, long enough for the promotion.
+  // Returns { ok, text, sub } (null when there is no stand to work it out on).
+  function promoSample(p) {
+    var r = p.reward || {}, areas = p.areas && p.areas.length ? p.areas : ['fenced'], area = areas.indexOf('fenced') >= 0 ? 'fenced' : areas[0], g = { adults: 2, pens: 0, kids: 0 };
+    var pool = STANDS.filter(function (s) { return s.area === area; }); if (!pool.length) pool = STANDS.slice(); if (!pool.length) return null;
+    var n = Math.max(2, +p.minNights || 0, r.kind === 'freeNight' ? Math.max(1, Math.round(+r.value || 1)) + 1 : 0); if (+p.maxNights && n > +p.maxNights) n = +p.maxNights;
+    var from = p.stayFrom && p.stayFrom > TODAY ? p.stayFrom : TODAY, want = p.days === 'weekday' ? 1 : 5, ci = from;
+    for (var i = 0; i < 7 && D(ci).getDay() !== want; i++) ci = add(ci, 1);
+    if (p.stayTo && ci > p.stayTo) ci = from;
+    var co = add(ci, n), st = pool.map(function (s) { return { s: s, v: quote(s.id, ci, co, g, {}).eft }; }).sort(function (a, b) { return a.v - b.v; })[0].s;
+    var gd = p.needDrive || r.kind === 'pctDrive' ? 2 : 0, shop = {}; if (p.needItem && p.needItem.label) shop[p.needItem.label] = p.needItem.qty || 1;
+    var today = p.bookFrom && p.bookFrom > TODAY ? p.bookFrom : p.bookTo && p.bookTo < TODAY ? p.bookTo : TODAY;
+    var c = promoCtx(st.id, ci, co, g, { today: today, drives: gd ? 1 : 0, driveTotal: gd ? drivePrice(gd) : 0, shop: shop, code: p.code || '' });
+    var one = JSON.parse(JSON.stringify(p)); one.on = true; one.id = one.id || 'sample';
+    var h = promoEval([one], c).list[0], sub = 'The sample stay: 2 adults on ' + st.name + ', ' + fdw(ci) + ' to ' + fdw(co) + (gd ? ', with a game drive for 2' : '') + (p.needItem && p.needItem.label ? ', buying ' + (p.needItem.qty || 1) + ' × ' + p.needItem.label : '') + (p.code ? ', with the code ' + p.code : '') + '.';
+    if (!h) return { ok: false, text: 'This sample stay would not get the promotion. Check the conditions in step 3.', sub: sub };
+    var stayT = 'A ' + n + ' night stay of ' + money(c.stay);
+    var text = h.free.length ? stayT + ' gets ' + freeTxt(h.free) + ' free' + (h.worth ? ': the guest saves ' + money(h.worth) : '') + '.'
+      : h.onDrive ? 'A game drive for 2 of ' + money(c.driveTotal) + ' becomes ' + money(c.driveTotal - h.amt) + ': the guest saves ' + money(h.amt) + '.'
+      : stayT + ' becomes ' + money(c.stay - h.amt) + ': the guest saves ' + money(h.amt) + '.';
+    return { ok: true, text: text, sub: sub, save: h.amt || h.worth || 0 };
+  }
+  function vPromos() {
+    var list = promosDB(), use = promoUsage(), run = list.filter(function (p) { return promoState(p).k === 'on'; }).length, nB = 0, amt = 0;
+    DB.bookings.forEach(function (b) { if (live(b) && ((b.promos || []).length || (b.freeItems || []).length)) nB++; }); Object.keys(use).forEach(function (k) { amt += use[k].amt; });
+    var quick = '<section class="card promo-quick" data-promo-quick><header class="card-h"><div><h3>Start with an example</h3><span class="muted small">One press adds it, switched off. Change it to fit Kyleu, then switch it on.</span></div></header><div class="promo-quick-row">' +
+      PROMO_QUICK.map(function (q) { return '<button type="button" class="promo-q" data-act="promo-quick" data-ref="' + q.k + '">' + ic(q.i) + '<span><b>' + esc(q.name) + '</b><small>' + esc(q.d) + '</small></span>' + ic('plus', 'add') + '</button>'; }).join('') + '</div></section>';
+    var cards = list.map(function (p) {
+      var st = promoState(p), u = use[p.id] || { n: 0, amt: 0, free: 0 };
+      return '<article class="card promo-card' + (st.k === 'on' || st.k === 'soon' ? '' : ' quiet') + '" data-promo="' + esc(p.id) + '" data-promo-state="' + st.k + '"><header class="promo-h"><div><h3>' + esc(p.name || 'Promotion') + '</h3>' + pill(st) + (p.combine ? ' <span class="tag">Added on top of others</span>' : '') + (p.code ? ' <span class="tag">Code ' + esc(p.code) + '</span>' : '') + '</div>' +
+        '<label class="switch" title="Switch this promotion on or off"><input type="checkbox" data-promo-on="' + esc(p.id) + '"' + (p.on !== false ? ' checked' : '') + ' aria-label="' + esc(p.name || 'Promotion') + ' is switched on"><span></span></label></header>' +
+        '<p class="promo-get">' + ic('gift') + '<b>' + esc(rewardTxt(p)) + '</b></p>' +
+        (p.blurb ? '<p class="promo-blurb">' + esc(p.blurb) + '</p>' : '') +
+        '<p class="promo-when">' + ic('cal') + '<span>' + esc(promoWhen(p)) + '</span></p>' +
+        '<div class="card-f" data-promo-use><span>' + ic('list') + (u.n ? 'Used on ' + u.n + ' booking' + (u.n === 1 ? '' : 's') : 'Not used yet') + '</span>' + (u.amt ? '<span>' + ic('tag') + money(u.amt) + ' discount given</span>' : '') + (u.free ? '<span>' + ic('box') + u.free + ' free item' + (u.free === 1 ? '' : 's') + ' given</span>' : '') + '</div>' +
+        '<div class="row-btns promo-acts"><button type="button" class="btn ghost sm" data-act="promo-edit" data-ref="' + esc(p.id) + '">' + ic('edit') + 'Edit</button><button type="button" class="btn ghost sm" data-act="promo-copy" data-ref="' + esc(p.id) + '">' + ic('note') + 'Copy</button><button type="button" class="btn ghost sm danger-t" data-act="promo-del" data-ref="' + esc(p.id) + '">' + ic('x') + 'Delete</button></div></article>';
+    }).join('');
+    return '<div class="page-h"><div><h1>Promotions</h1><p class="muted">Special offers for guests. The website and the staff booking screen work out who gets one, so nobody has to remember.</p></div><div class="ph-act"><button class="btn" data-act="promo-add">' + ic('plus') + 'New promotion</button></div></div>' +
+      '<div class="kpis">' + tile('Running now', run, list.length ? list.length + ' promotion' + (list.length === 1 ? '' : 's') + ' in all' : 'None made yet', null, run ? 'ok' : '') + tile('Bookings with a promotion', nB, 'Bookings that are not cancelled') + tile('Discount given', money(amt), 'Taken off those bookings') + '</div>' +
+      (list.length ? '<div class="promo-grid">' + cards + '</div>' : quick + '<p class="empty">No promotions yet. Start with an example above, or press "New promotion".</p>') +
+      '<p class="demo-note">' + ic('info') + 'A booking gets the one promotion that saves the guest the most, plus any that are set to be added on top. The discount is fixed when the booking is made: changing or deleting a promotion later does not change bookings that already have it.</p>';
+  }
+  // add, change or copy a promotion: one form, in the order Sherri thinks about it
+  function actPromo(id, copyId) {
+    if (!can('promos')) return;
+    var cur = id ? promoBy(id) : null, src = cur || (copyId ? promoBy(copyId) : null); if ((id && !cur) || (copyId && !src)) return;
+    var p0 = src ? promoNew(JSON.parse(JSON.stringify(src))) : promoNew(), r0 = p0.reward || {}, kind0 = r0.kind || 'pctStay', newId = uid('pm');
+    var auto0 = !!src && (!src.blurb || src.blurb === promoBlurb(src));   // the line was the suggestion: it keeps following the choices
+    if (!cur && src) p0.name = 'Copy of ' + (src.name || 'promotion');
+    var prods = shopItems().filter(function (x) { return x.active !== false; }).map(function (x) { return x.label; });
+    [r0.item, p0.needItem && p0.needItem.label].forEach(function (l) { if (l && prods.indexOf(l) < 0) prods.push(l); });
+    var opts = function (sel, none) { return (none ? '<option value="">' + none + '</option>' : '') + prods.map(function (l) { return '<option value="' + esc(l) + '"' + (l === sel ? ' selected' : '') + '>' + esc(l) + '</option>'; }).join(''); };
+    var val = function (k, d) { return kind0 === k && +r0.value ? +r0.value : d; };
+    var numFld = function (label, name, v, max) { return '<label class="fld pm-num"><span>' + label + '</span><input name="' + name + '" inputmode="numeric" data-stp min="1" max="' + max + '" value="' + v + '"></label>'; };
+    var subs = {
+      pctStay: numFld('How many percent off the stay?', 'v_pctStay', val('pctStay', 10), 100),
+      amtStay: numFld('How many rand off the stay?', 'v_amtStay', val('amtStay', 100), 99999),
+      pctDrive: numFld('How many percent off the game drive?', 'v_pctDrive', val('pctDrive', 10), 100),
+      freeItem: '<div class="grid2"><label class="fld"><span>Which product?</span><select name="gift">' + opts(r0.item || woodLabel()) + '</select></label>' + numFld('How many?', 'qty', kind0 === 'freeItem' ? Math.max(1, +r0.qty || 1) : 1, 99) + '</div>',
+      freeNight: numFld('How many nights are free?', 'v_freeNight', val('freeNight', 1), 14)
+    };
+    var ni = p0.needItem && p0.needItem.label ? p0.needItem : null, areas0 = p0.areas && p0.areas.length ? p0.areas : Object.keys(AREA_SHORT);
+    var body = '<p class="muted small">Guests get a promotion by themselves when their booking fits it: on the website, and when staff make a booking here.</p>' +
+      '<h5 class="m-h">1. What is it called?</h5>' +
+      '<label class="fld"><span>Name of the promotion</span><input name="name" maxlength="70" value="' + esc(p0.name) + '" placeholder="For example: Summer special" autocomplete="off"></label>' +
+      '<label class="fld"><span>The line guests see on the website</span><input name="blurb" maxlength="220" value="' + esc(auto0 ? '' : p0.blurb || '') + '" autocomplete="off"></label><p class="hint pm-sugg" data-pm-sugg></p>' +
+      '<h5 class="m-h">2. What does the guest get?</h5><p class="muted small">Choose one.</p><div class="cr-opts pm-kinds">' +
+      PROMO_KINDS.map(function (k) { return '<label class="cr-opt"><input type="radio" name="kind" value="' + k[0] + '"' + (kind0 === k[0] ? ' checked' : '') + '><span><b>' + k[1] + '</b><small>' + k[2] + '</small></span></label><div class="cr-sub pm-sub" data-pm-sub="' + k[0] + '"' + (kind0 === k[0] ? '' : ' hidden') + '>' + subs[k[0]] + '</div>'; }).join('') + '</div>' +
+      '<h5 class="m-h">3. When does it apply?</h5><p class="muted small">Everything here is optional. Leave it all empty and every booking gets the promotion.</p>' +
+      '<div class="grid2"><label class="fld"><span>The stay is at least (nights)</span><input name="minN" inputmode="numeric" data-stp min="1" max="60" value="' + (+p0.minNights || '') + '" placeholder="Any"></label><label class="fld"><span>The stay is at most (nights)</span><input name="maxN" inputmode="numeric" data-stp min="1" max="60" value="' + (+p0.maxNights || '') + '" placeholder="Any"></label></div>' +
+      '<span class="fld-l">Which stays?</span><div class="seg wrap">' + [['any', 'Any stay'], ['weekend', 'Weekend stays'], ['weekday', 'Weekday stays']].map(function (d) { return '<label><input type="radio" name="days" value="' + d[0] + '"' + ((p0.days || 'any') === d[0] ? ' checked' : '') + '><span>' + d[1] + '</span></label>'; }).join('') + '</div><p class="muted small pm-tight">A weekend stay has at least one weekend night. A weekday stay has none.</p>' +
+      '<div class="grid2"><label class="fld"><span>Arriving from</span><input type="date" name="stayFrom" value="' + esc(p0.stayFrom || '') + '"></label><label class="fld"><span>Arriving until</span><input type="date" name="stayTo" value="' + esc(p0.stayTo || '') + '"></label></div>' +
+      '<div class="grid2"><label class="fld"><span>Booked from</span><input type="date" name="bookFrom" value="' + esc(p0.bookFrom || '') + '"></label><label class="fld"><span>Booked until</span><input type="date" name="bookTo" value="' + esc(p0.bookTo || '') + '"></label></div>' +
+      '<span class="fld-l">Which camp areas?</span><div class="pm-areas">' + Object.keys(AREA_SHORT).map(function (a) { return '<label class="check"><input type="checkbox" data-pm-area="' + a + '"' + (areas0.indexOf(a) >= 0 ? ' checked' : '') + '><span>' + AREA_SHORT[a] + '</span></label>'; }).join('') + '</div>' +
+      '<label class="check"><input type="checkbox" name="needDrive"' + (p0.needDrive ? ' checked' : '') + '><span>Only when a game drive is booked with the stay</span></label>' +
+      '<div class="grid2"><label class="fld"><span>Only when they buy this from the camp shop</span><select name="needItem">' + opts(ni ? ni.label : '', 'Nothing has to be bought') + '</select></label>' + numFld('How many of it?', 'needQty', ni ? Math.max(1, +ni.qty || 1) : 1, 99) + '</div>' +
+      '<label class="fld"><span>A promo code the guest must type</span><input name="code" maxlength="20" value="' + esc(p0.code || '') + '" placeholder="No code: everyone who fits gets it" autocomplete="off" style="text-transform:uppercase"></label><p class="muted small pm-tight">With a code, the promotion is not shown on the website: only guests who have the code get it.</p>' +
+      '<h5 class="m-h">4. Can it be added on top of another promotion?</h5><label class="switch"><input type="checkbox" name="combine"' + (p0.combine ? ' checked' : '') + '><span></span>Yes, give it as well as another promotion</label>' +
+      '<p class="muted small pm-tight">Off is the normal way: a booking gets the one promotion that saves the guest the most. On: this one is given on top of that.</p>' +
+      '<h5 class="m-h">5. An example</h5><div class="quote-box pm-example" data-pm-example></div>';
+    var read = function (f) {
+      var kind = ($('[name=kind]:checked', f) || {}).value || 'pctStay', n = function (k) { var v = parseFloat(String(fval(f, k)).replace(/[^\d.]/g, '')); return isNaN(v) ? 0 : v; };
+      var areas = $$('[data-pm-area]', f).filter(function (x) { return x.checked; }).map(function (x) { return x.dataset.pmArea; }); if (areas.length === Object.keys(AREA_SHORT).length) areas = [];
+      var need = fval(f, 'needItem');
+      return { id: cur ? cur.id : newId, name: fval(f, 'name'), blurb: fval(f, 'blurb'), on: src ? src.on !== false : true, bookFrom: fval(f, 'bookFrom'), bookTo: fval(f, 'bookTo'), stayFrom: fval(f, 'stayFrom'), stayTo: fval(f, 'stayTo'),
+        minNights: Math.round(n('minN')), maxNights: Math.round(n('maxN')), days: ($('[name=days]:checked', f) || {}).value || 'any', areas: areas, needDrive: !!fval(f, 'needDrive'),
+        needItem: need ? { label: need, qty: Math.max(1, Math.round(n('needQty')) || 1) } : null, code: fval(f, 'code').toUpperCase().replace(/[^A-Z0-9]/g, ''),
+        reward: kind === 'freeItem' ? { kind: kind, value: 0, item: fval(f, 'gift'), qty: Math.max(1, Math.round(n('qty')) || 1) } : { kind: kind, value: kind === 'pctStay' || kind === 'pctDrive' ? n('v_' + kind) : Math.round(n('v_' + kind)) },
+        combine: !!fval(f, 'combine') };
+    };
+    modal(cur ? 'Edit promotion' : src ? 'Copy a promotion' : 'New promotion', body, cur ? 'Save promotion' : 'Add promotion', function (f) {
+      var p = read(f), why = promoBad(p); if (why) { toast(esc(why)); return false; }
+      if (!p.blurb) p.blurb = promoBlurb(p);
+      var list = promosDB(); if (cur) list[list.indexOf(cur)] = p; else list.push(p);
+      log((cur ? 'Promotion changed: ' : 'New promotion: ') + p.name); save(); render();
+      var st = promoState(p); toast(esc(p.name) + (cur ? ' saved' : ' added') + (st.k === 'on' ? '. It is running: guests get it from now.' : st.k === 'soon' ? '. It starts on ' + fdp(p.bookFrom) + '.' : st.k === 'off' ? '. It is switched off.' : '. Its dates are over, so nobody gets it.'));
+    }, { xl: true, noFocus: !!cur, onOpen: function (f) {
+      f.classList.add('pm-form'); if (cur) f.dataset.pm = cur.id;
+      var u = function () {
+        var p = read(f), sg = promoBlurb(p), box = $('[data-pm-example]', f), why = promoBad(Object.assign({}, p, { name: p.name || 'x' }));
+        $$('[data-pm-sub]', f).forEach(function (x) { x.hidden = x.dataset.pmSub !== p.reward.kind; });
+        f.elements.blurb.placeholder = sg; $('[data-pm-sugg]', f).textContent = p.blurb || !sg ? '' : 'Left empty, guests see: ' + sg;
+        var s = why ? null : promoSample(p);
+        box.className = 'quote-box pm-example' + (s && s.ok ? ' ok' : '');
+        box.innerHTML = why ? '<span class="muted">' + esc(why) + ', and the example shows here.</span>' : !s ? '<span class="muted">There is no stand to work an example out on.</span>' : '<b class="' + (s.ok ? '' : 'warn-t') + '">' + esc(s.text) + '</b><span class="muted small">' + esc(s.sub) + '</span>';
+      };
+      f.addEventListener('input', u); f.addEventListener('change', u); f.addEventListener('click', function (e) { if (e.target.closest && e.target.closest('.stp-b')) setTimeout(u, 0); }); u();
+    } });
+  }
+  function actPromoDel(id) {
+    var p = promoBy(id); if (!p || !can('promos')) return; var u = promoUsage()[id];
+    modal('Delete this promotion?', '<p class="callout"><b>' + esc(p.name || 'Promotion') + '</b><br>' + esc(rewardTxt(p)) + ' · ' + esc(promoWhen(p)) + '</p><p class="muted small">' + (u && u.n ? 'It was used on ' + u.n + ' booking' + (u.n === 1 ? '' : 's') + '. Those bookings keep what they got. ' : '') + 'It comes off the website straight away. To stop it for a while, switch it off instead.</p>', 'Delete promotion', function () {
+      var l = promosDB(), i = l.indexOf(p); if (i >= 0) l.splice(i, 1);
+      log('Promotion deleted: ' + p.name); save(); render(); toast(esc(p.name || 'Promotion') + ' deleted');
+    }, { danger: true });
+  }
+  // once: two example promotions, the guide for the next weekends (and for the drives already planned), so the new screens are not empty
+  function promoDemo() {
+    Object.keys(DB.roles || {}).forEach(function (k) { var r = DB.roles[k]; if (!r || !r.can) return; if (r.can.indexOf('rates') >= 0 && r.can.indexOf('promos') < 0) r.can.push('promos'); if (k === 'Manager' && r.can.indexOf('drives') >= 0 && r.can.indexOf('cap:drives') < 0) r.can.push('cap:drives'); });
+    if (!(DB.promos && DB.promos.length)) {
+      var a = promoQuick('wood'), b2 = promoQuick('drive'); a.id = 'pm-wood'; a.on = true; b2.id = 'pm-drive'; DB.promos = [a, b2];
+      // a few bookings already got the firewood, so the list, the check-in sheet and the reports have something to show
+      if (a.reward.item) DB.bookings.filter(function (b) { return b.status === 'confirmed' && b.ci >= TODAY && diff(b.ci, b.co) >= 3 && !b.promos; }).slice(0, 3).forEach(function (b) {
+        b.promos = [{ id: a.id, name: a.name, amt: 0 }]; b.freeItems = [{ label: a.reward.item, qty: 1, promo: a.id, name: a.name }]; b.notes = b.notes || []; b.notes.push({ at: b.created, by: 'System', text: promoNote(b.promos[0], b.freeItems) });
+      });
+    }
+    if (!Object.keys(DB.driveDays || {}).length) {
+      var dd = driveDays(), ids = driveCfg().times.map(function (t) { return t.id; }), firstSat = '';
+      for (var i = 0; i < 28; i++) { var day = add(TODAY, i), dow = D(day).getDay(); if (dow === 6 || dow === 0) { dd[day] = ids.slice(); if (dow === 6 && !firstSat && i) firstSat = day; } }
+      // nobody on a drive yet: one booking that is here on the next Saturday goes on the morning drive
+      if (firstSat && !allDrives().some(function (d) { return d.d >= TODAY; })) {
+        var b1 = DB.bookings.filter(function (b) { return live(b) && b.status === 'confirmed' && b.ci <= firstSat && firstSat <= b.co && !(b.extras && b.extras.gd) && balance(b) > 0; })[0];
+        if (b1) { var v = drivePrice(2); b1.extras = b1.extras || {}; b1.extras.gd = 2; b1.drive = { d: firstSat, slot: ids[0], guide: GUIDES[0] }; b1.eft += v; b1.card += toCard(v); b1.total = b1.method === 'card' ? b1.card : b1.eft; }
+      }
+      // the drives that already have a time: the guide is here for them
+      allDrives().forEach(function (d) { if (!d.d || d.d < TODAY || ids.indexOf(d.slot) < 0) return; var l = dd[d.d] || []; if (l.indexOf(d.slot) < 0) l.push(d.slot); dd[d.d] = ids.filter(function (id) { return l.indexOf(id) >= 0; }); });
+    }
+  }
+
+  /* =========================================================
+     Game drives: when the guide is here, who is on which drive, and booking a drive online
+     DB.driveCfg = { on (guests can add a drive when they book online), seats, minAge, times: [{ id, label, at }] }
+     DB.driveDays = { 'yyyy-mm-dd': ['am', 'pm'] }: the drives that run on a day, which is the same as "the guide is here".
+     A booking's drives: its own one (b.extras.gd people, priced by quote(); b.drive = { d, slot, guide } once it has a time)
+     and any more in b.drives = [{ id, d, slot, n, guide, amt, web, label, at, flag }] (a second drive, and every drive booked
+     online: its amount is already in the booking's total). Always read them through drivesOf(b) or allDrives().
+     publishWeb() hands the set-up and the seats still open to the website (out.drives), for today and later.
+     To drive it in a test: input[data-gd-on] (the online switch), [data-act="gd-setup"], [data-gd-cal="yyyy-mm"] with
+     [data-gd-day="yyyy-mm-dd"] cells, [data-gd-mon="-1|1"], [data-act="gd-weekends"], [data-act="gd-clear"],
+     [data-act="drive-add"], [data-act="drive-set"][data-ref="REF|driveId"], [data-gd-slot="yyyy-mm-dd|am"] in the upcoming list.
+     ========================================================= */
+  var GUIDES = ['Devon', 'Kyran'], GD = { guide: '', slot: '', mon: 0 }, GD_MONTHS = 3;   // the calendar shows this month and the next two
+  var DRIVE_TIMES0 = [{ id: 'am', label: 'Morning drive', at: '06:00' }, { id: 'pm', label: 'Afternoon drive', at: '16:00' }];
+  var DRIVE_FLAG = { noguide: 'Game drive booked online for a day the guide is not set: sort it out with the guest', full: 'Game drive booked online for a drive that is already full: sort it out with the guest' };
+  function drivePrice(n) { return n >= 3 ? n * num('Game drives', 'Game drive 3 or more people per person', 400) : n === 2 ? 2 * num('Game drives', 'Game drive 2 people per person', 450) : n === 1 ? num('Game drives', 'Game drive 1 person', 900) : 0; }
+  // the set-up, with the standard values for anything that is missing (browser data from before this existed)
+  function driveCfg() {
+    var c = DB.driveCfg || (DB.driveCfg = {});
+    c.on = !!c.on; if (!(c.seats > 0)) c.seats = 10; if (c.minAge == null || isNaN(+c.minAge)) c.minAge = 5;
+    if (!c.times || !c.times.length) c.times = JSON.parse(JSON.stringify(DRIVE_TIMES0));
+    return c;
+  }
+  function driveDays() { if (!DB.driveDays) DB.driveDays = {}; return DB.driveDays; }
+  function driveTime(id) { return driveCfg().times.filter(function (t) { return t.id === id; })[0] || null; }
+  // "Morning drive · 06:00". x = a drive that remembers its own label and time (booked online, or its time was removed since)
+  function slotTxt(id, x) { var t = driveTime(id); return t ? t.label + ' · ' + t.at : x && x.label ? x.label + (x.at ? ' · ' + x.at : '') : id === 'am' ? 'Morning drive' : id === 'pm' ? 'Afternoon drive' : 'Game drive'; }
+  function slotShort(id) { var t = driveTime(id), l = t ? t.label : id === 'am' ? 'Morning' : id === 'pm' ? 'Afternoon' : 'Drive'; return String(l).replace(/\s*(game\s+)?drive$/i, '') || l; }
+  function pplTxt(n) { return n + (n === 1 ? ' person' : ' people'); }
+  function drivesOf(b) {
+    var out = [];
+    if (b.extras && b.extras.gd) out.push({ b: b, id: 'main', key: b.ref + '|main', d: b.drive ? b.drive.d : '', slot: b.drive ? b.drive.slot : '', n: +b.extras.gd, guide: b.drive ? b.drive.guide || '' : '', amt: drivePrice(+b.extras.gd), main: true });
+    (b.drives || []).forEach(function (x) { out.push({ b: b, id: x.id, key: b.ref + '|' + x.id, d: x.d, slot: x.slot, n: +x.n || 0, guide: x.guide || '', amt: +x.amt || 0, web: !!x.web, x: x }); });
+    return out;
+  }
+  function allDrives() { var out = []; DB.bookings.forEach(function (b) { if (live(b)) drivesOf(b).forEach(function (d) { out.push(d); }); }); return out; }
+  // people on each drive: { 'yyyy-mm-dd|am': 6 }. skip = the key of a drive that is being changed
+  function driveMap(skip) { var m = {}; allDrives().forEach(function (d) { if (d.d && d.key !== skip) m[d.d + '|' + d.slot] = (m[d.d + '|' + d.slot] || 0) + d.n; }); return m; }
+  function driveTaken(day, tid, skip) { return driveMap(skip)[day + '|' + tid] || 0; }
+  function driveRuns(day, tid) { return (driveDays()[day] || []).indexOf(tid) >= 0; }
+  function driveLeft(day, tid, skip) { return Math.max(0, driveCfg().seats - driveTaken(day, tid, skip)); }
+  // a drive booked online that does not fit the calendar. It clears itself when the guide is set for that day or seats open up.
+  function driveFlag(d) {
+    var f = d.x && d.x.flag; if (!f || !live(d.b) || !d.d || d.d < TODAY) return '';
+    if (f === 'noguide') return driveRuns(d.d, d.slot) ? '' : f;
+    if (f === 'full') return driveTaken(d.d, d.slot) > driveCfg().seats ? f : '';
+    return '';
+  }
+  function driveWhen(d) { return d.d ? fdw(d.d) + ', ' + slotTxt(d.slot, d.x) : 'no time set yet'; }
+  // on the booking: a drive booked online that needs sorting out
+  function driveAlerts(b) { return drivesOf(b).filter(driveFlag).map(function (d) { return '<div class="callout warn cflex req" data-drive-flag="' + esc(d.key) + '">' + ic('car') + '<div><b>' + DRIVE_FLAG[driveFlag(d)] + '.</b><br>' + esc(driveWhen(d)) + ', ' + pplTxt(d.n) + '.<div class="row-btns">' + (can('drives') ? '<button type="button" class="btn sm" data-act="drive-set" data-ref="' + esc(d.key) + '">' + ic('edit') + 'Change the drive</button>' : '') + '<button type="button" class="btn ghost sm" data-act="drive-ok" data-ref="' + esc(d.key) + '">' + ic('check') + 'It is sorted</button></div></div></div>'; }).join(''); }
+  function drivePrint(b, day) { var ds = drivesOf(b).filter(function (d) { return d.d && d.d >= day; }); return ds.length ? (b.gateNote ? '<br>' : '') + ds.map(function (d) { return 'Game drive: ' + esc(driveWhen(d)) + ' (' + d.n + ')'; }).join('<br>') : ''; }
+  // what the website gets: the set-up, and for each day from today the seats still open on every drive that runs
+  function drivesWeb() {
+    var c = driveCfg(), dd = driveDays(), m = driveMap(), days = {};
+    Object.keys(dd).sort().forEach(function (day) {
+      if (day < TODAY) return; var o = {}, any = false;
+      c.times.forEach(function (t) { if ((dd[day] || []).indexOf(t.id) < 0) return; o[t.id] = Math.max(0, c.seats - (m[day + '|' + t.id] || 0)); any = true; });
+      if (any) days[day] = o;
+    });
+    return { on: !!c.on, seats: c.seats, minAge: c.minAge, times: c.times.map(function (t) { return { id: t.id, label: t.label, at: t.at }; }), days: days };
+  }
+  function promosWeb() { return promosDB().filter(function (p) { var k = promoState(p).k; return p.reward && (k === 'on' || k === 'soon'); }).map(function (p) { return JSON.parse(JSON.stringify(p)); }); }
+  // what a website booking carries besides the stay: promotions (already off its totals), free items and game drives (already in its totals)
+  function webExtras(b, w) {
+    var ps = (w.promos || []).filter(function (x) { return x && x.id; }), fr = (w.freeItems || []).filter(function (x) { return x && x.label; });
+    if (ps.length) b.promos = ps.map(function (x) { return { id: x.id, name: x.name || 'Promotion', amt: +x.amt || 0 }; });
+    if (fr.length) b.freeItems = fr.map(function (x) { return { label: x.label, qty: Math.max(1, +x.qty || 1), promo: x.promo || '', name: x.name || 'Promotion' }; });
+    (b.promos || []).forEach(function (x) { b.notes.push({ at: w.created, by: 'System', text: promoNote(x, b.freeItems) }); });
+    freeItems(b).filter(function (f) { return !ps.some(function (x) { return x.id === f.promo; }); }).forEach(function (f) { b.notes.push({ at: w.created, by: 'System', text: 'Promotion: ' + f.name + ', free ' + freeTxt([f]) + '.' }); });
+    var ds = (w.drives || []).filter(function (x) { return x && x.day && +x.people > 0; });
+    if (ds.length) b.drives = ds.map(function (x, i) { return { id: uid('gd') + i, d: x.day, slot: x.tid || '', n: +x.people, guide: '', amt: +x.amt || 0, web: true, label: x.label || '', at: x.at || '' }; });
+  }
+  // after the booking is on the list: is each of its online drives on a day the guide is set, with seats for everyone?
+  function webDriveFlags(b, at) {
+    (b.drives || []).forEach(function (x) {
+      if (!x.web) return;
+      var flag = !driveRuns(x.d, x.slot) ? 'noguide' : driveTaken(x.d, x.slot) > driveCfg().seats ? 'full' : '';
+      if (flag) x.flag = flag;
+      b.notes.push({ at: at, by: 'System', text: 'Game drive booked online: ' + fdw(x.d) + ', ' + slotTxt(x.slot, x) + ', ' + pplTxt(x.n) + (x.amt ? ' (' + money(x.amt) + ')' : '') + '.' + (flag ? ' ' + DRIVE_FLAG[flag] + '.' : '') });
+    });
+  }
+  function vDrives() {
+    var c = driveCfg(), dd = driveDays(), setup = can('cap:drives'), all = allDrives(), m = driveMap();
+    var need = all.filter(function (d) { return d.main && !d.d && d.b.co >= TODAY; }).sort(function (a, b) { return a.b.ci < b.b.ci ? -1 : 1; });
+    var flagged = all.filter(driveFlag);
+    var sched = all.filter(function (d) { return d.d && d.d >= TODAY; }), show = sched.filter(function (d) { return (!GD.guide || d.guide === GD.guide) && (!GD.slot || d.slot === GD.slot); });
+    var wk = sched.filter(function (d) { return d.d <= add(TODAY, 6); }), slotsWk = {}; wk.forEach(function (d) { slotsWk[d.d + d.slot] = 1; });
+    var month = TODAY.slice(0, 7), inc = all.filter(function (d) { return (d.d || d.b.ci).slice(0, 7) === month; }).reduce(function (a, d) { return a + d.amt; }, 0);
+    var future = Object.keys(dd).filter(function (d) { return d >= TODAY && dd[d].length; }), filtered = !!(GD.guide || GD.slot);
+    // the days to list: every day with someone on a drive, and the days the guide is here in the next two weeks
+    var dayOn = {}; show.forEach(function (d) { dayOn[d.d] = 1; }); if (!filtered) future.forEach(function (d) { if (d <= add(TODAY, 13)) dayOn[d] = 1; });
+    var list = Object.keys(dayOn).sort().map(function (d) {
+      var ids = c.times.map(function (t) { return t.id; }); show.forEach(function (x) { if (x.d === d && ids.indexOf(x.slot) < 0) ids.push(x.slot); });
+      var slots = ids.filter(function (s) { return !GD.slot || s === GD.slot; }).map(function (s) {
+        var ps = show.filter(function (x) { return x.d === d && x.slot === s; }), n = m[d + '|' + s] || 0, runs = driveRuns(d, s);
+        if (!ps.length && (!runs || filtered)) return '';
+        if (!ps.length) return '<div class="gd-slot empty" data-gd-slot="' + d + '|' + esc(s) + '"><b>' + esc(slotTxt(s)) + '</b><span class="muted small">No one booked yet · ' + c.seats + ' seats open</span></div>';
+        var guides = ps.map(function (x) { return x.guide; }).filter(function (g, i, a) { return g && a.indexOf(g) === i; });
+        return '<div class="gd-slot" data-gd-slot="' + d + '|' + esc(s) + '"><div class="gd-top"><b>' + esc(slotTxt(s, ps[0].x)) + '</b><span class="small">Guide: <b>' + esc(guides.join(', ') || 'not chosen') + '</b></span></div><div class="seats' + (n > c.seats ? ' over' : '') + '"><span style="width:' + Math.min(100, n / c.seats * 100) + '%"></span></div><small class="' + (n > c.seats ? 'bad-t' : 'muted') + '">' + n + ' of ' + c.seats + ' seats taken' + (n > c.seats ? ': ' + (n - c.seats) + ' too many' : '') + '</small>' +
+          (runs ? '' : '<small class="warn-t gd-noguide">' + ic('alert') + 'The guide is not set for this day</small>') +
+          '<ul>' + ps.map(function (x) { var fl = driveFlag(x); return '<li><button type="button" data-act="drive-set" data-ref="' + esc(x.key) + '"><b>' + esc(guestName(x.b)) + '</b> · ' + pplTxt(x.n) + ' · ' + esc(standById(x.b.stand).name) + '</button><span class="gd-meta"><span class="gd-ref" data-open="' + esc(x.b.ref) + '" role="button" tabindex="0" title="Open the booking">' + esc(x.b.ref) + '</span>' + (x.web ? '<span class="tag">Booked online</span>' : '') + (fl ? '<span class="tag bad">Sort out</span>' : '') + '</span></li>'; }).join('') + '</ul></div>';
+      }).join('');
+      return slots ? '<div class="gd-day" data-gd-list="' + d + '"><div class="gd-date"><b>' + fd(d, { weekday: 'short', day: 'numeric', month: 'short' }) + '</b><small>' + (d === TODAY ? 'Today' : rel(d)) + '</small></div><div class="gd-slots">' + slots + '</div></div>' : '';
+    }).join('');
+    return '<div class="page-h"><div><h1>Game drives</h1><p class="muted">Guided drives with a Kyleu guide. ' + money(num('Game drives', 'Game drive 3 or more people per person', 400)) + ' per person for 3 or more, ' + money(num('Game drives', 'Game drive 2 people per person', 450)) + ' each for 2, ' + money(num('Game drives', 'Game drive 1 person', 900)) + ' for one person.</p></div><div class="ph-act"><button class="btn" data-act="drive-add">' + ic('plus') + 'Add a game drive</button></div></div>' +
+      '<section class="card gd-setup-card"><div class="gd-online"><label class="switch"><input type="checkbox" data-gd-on' + (c.on ? ' checked' : '') + (setup ? '' : ' disabled') + '><span></span><b>Guests can add a game drive when they book online</b></label>' +
+      '<p class="muted small">' + (c.on ? 'On: on the website guests see the days the guide is here and can add a drive to their booking. It comes in here with the booking.' : 'Off: the website only tells guests about game drives. Staff add the drives here.') + '</p>' +
+      (c.on && !future.length ? '<p class="callout warn">' + ic('alert') + ' No days are set under "When the guide is here", so guests have nothing to choose from yet.</p>' : '') + '</div>' +
+      '<div class="gd-setup" data-gd-setup><div><h4>Set-up</h4><p>' + c.times.map(function (t) { return '<b>' + esc(t.label) + '</b> ' + esc(t.at); }).join(' · ') + '</p><p class="muted small">' + c.seats + ' seats on the vehicle · ' + (c.minAge > 0 ? 'no children under ' + c.minAge : 'children of any age') + '</p></div>' + (setup ? '<button type="button" class="btn ghost sm" data-act="gd-setup">' + ic('edit') + 'Change</button>' : '') + '</div></section>' +
+      '<div class="kpis">' + tile('Drives in the next 7 days', Object.keys(slotsWk).length, wk.reduce(function (a, d) { return a + d.n; }, 0) + ' guests going') + tile('Waiting for a time', need.length, need.length ? 'Pick a day and a time' : 'Everything has a time', null, need.length ? 'warn' : 'ok') + tile('Drive income this month', money(inc), 'at EFT prices') + '</div>' +
+      (flagged.length ? '<section class="card gd-flagged" data-gd-flagged><header class="card-h"><h3>Sort out with the guest</h3><span class="muted small">Booked online, but it does not fit the calendar</span></header>' + flagged.map(function (d) { return '<div class="brow"><span class="brow-st">' + pplTxt(d.n) + '</span><span class="brow-g" data-open="' + esc(d.b.ref) + '"><b>' + esc(guestName(d.b)) + '</b><small>' + esc(driveWhen(d)) + ' · ' + (driveFlag(d) === 'full' ? 'that drive is full' : 'the guide is not set for that day') + '</small></span><button class="btn sm" data-act="drive-set" data-ref="' + esc(d.key) + '">' + ic('edit') + 'Change</button><button class="btn ghost sm" data-act="drive-ok" data-ref="' + esc(d.key) + '">' + ic('check') + 'It is sorted</button></div>'; }).join('') + '</section>' : '') +
+      (need.length ? '<section class="card"><header class="card-h"><h3>Waiting for a time</h3><span class="muted small">No time set yet</span></header>' + need.map(function (d) { var b = d.b; return '<div class="brow"><span class="brow-st">' + pplTxt(d.n) + '</span><span class="brow-g" data-open="' + b.ref + '"><b>' + esc(guestName(b)) + '</b><small>' + esc(standById(b.stand).name) + ' · staying ' + fd(b.ci) + ' to ' + fd(b.co) + '</small></span><button class="btn sm" data-act="drive-set" data-ref="' + esc(d.key) + '">' + ic('clock') + 'Set a time</button></div>'; }).join('') + '</section>' : '') +
+      '<section class="card gd-list" data-gd-upcoming><header class="card-h"><div><h3>Drives coming up</h3><span class="muted small">Who is on each drive. Press a name to change that drive.</span></div><div class="ph-act">' + fsel('GD:guide', GD.guide, [['', 'All guides']].concat(GUIDES.map(function (g) { return [g, 'Guide: ' + g]; }))) + fsel('GD:slot', GD.slot, [['', 'All drive times']].concat(c.times.map(function (t) { return [t.id, t.label + ' only']; }))) + '</div></header>' +
+      (list || '<p class="empty">' + (filtered ? 'No drives match.' : 'No game drives coming up. Set the days the guide is here below, or press "Add a game drive".') + '</p>') + '</section>' +
+      guideCal();
+  }
+  // "When the guide is here": one month at a time. A day that is on shows each drive that runs and its seats.
+  function guideCal() {
+    var c = driveCfg(), dd = driveDays(), m = driveMap(), setup = can('cap:drives');
+    GD.mon = Math.max(0, Math.min(GD_MONTHS - 1, GD.mon || 0));
+    var first = monthAdd(TODAY, GD.mon), ym = first.slice(0, 7), nDays = new Date(+ym.slice(0, 4), +ym.slice(5, 7), 0).getDate(), lead = (D(first).getDay() + 6) % 7, cells = '', mName = D(first).toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' }), mShort = D(first).toLocaleDateString('en-ZA', { month: 'long' });
+    for (var i = 0; i < lead; i++) cells += '<span class="gdc-pad"></span>';
+    for (var k = 1; k <= nDays; k++) {
+      var day = ym + '-' + ('0' + k).slice(-2), on = dd[day] || [], past = day < TODAY, lines = '', said = [];
+      c.times.forEach(function (t) {
+        var n = m[day + '|' + t.id] || 0, runs = on.indexOf(t.id) >= 0; if (!runs && !n) return;
+        lines += '<span class="gdc-t' + (runs ? (n >= c.seats ? ' full' : '') : past ? '' : ' lost') + '"><i data-s="' + esc(slotShort(t.id).charAt(0)) + '">' + esc(slotShort(t.id)) + '</i> ' + (runs ? n + ' of ' + c.seats : past ? pplTxt(n) : n + ' booked') + '</span>';
+        said.push(t.label + (runs ? ': ' + n + ' of ' + c.seats + ' seats taken' : past ? ': ' + pplTxt(n) : ': ' + n + ' booked, but the guide is not set'));
+      });
+      var isOn = c.times.some(function (t) { return on.indexOf(t.id) >= 0; });
+      cells += '<button type="button" class="gdc-day' + (isOn ? ' on' : '') + (past ? ' past' : '') + (day === TODAY ? ' today' : '') + '" data-gd-day="' + day + '"' + (past || !setup ? ' disabled' : '') + ' aria-pressed="' + (isOn ? 'true' : 'false') + '" aria-label="' + esc(fd(day, { weekday: 'long', day: 'numeric', month: 'long' }) + (said.length ? '. ' + said.join('. ') : '. The guide is not here')) + '"><b>' + k + '</b>' + lines + '</button>';
+    }
+    return '<section class="card gd-cal" data-gd-cal="' + ym + '"><header class="card-h"><div><h3>When the guide is here</h3><span class="muted small">' + (setup ? 'Press a day to switch its drives on. Press it again to choose which drives run, or to switch the day off.' : 'Only people who may change the game drive set-up can change these days.') + '</span></div>' +
+      '<div class="ph-act gdc-nav"><button type="button" class="icon-btn" data-gd-mon="-1" aria-label="The month before"' + (GD.mon <= 0 ? ' disabled' : '') + '>' + ic('chev-l') + '</button><b class="gdc-month" data-gd-month>' + esc(mName) + '</b><button type="button" class="icon-btn" data-gd-mon="1" aria-label="The next month"' + (GD.mon >= GD_MONTHS - 1 ? ' disabled' : '') + '>' + ic('chev-r') + '</button></div></header>' +
+      (setup ? '<div class="row-btns gdc-quick"><button type="button" class="btn ghost sm" data-act="gd-weekends">' + ic('cal') + (GD.mon ? 'Every Saturday and Sunday in ' + esc(mShort) : 'Every Saturday and Sunday this month') + '</button><button type="button" class="btn ghost sm" data-act="gd-clear">' + ic('x') + (GD.mon ? 'Clear ' + esc(mShort) : 'Clear this month') + '</button></div>' : '') +
+      '<div class="gdc-grid">' + ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(function (w) { return '<span class="gdc-dow">' + w + '</span>'; }).join('') + cells + '</div>' +
+      '<p class="demo-note">' + ic('info') + 'Each day shows the drives that run and how many seats are taken. Days in the past cannot be changed.' + (c.on ? ' The website offers these days to guests who book.' : '') + '</p></section>';
+  }
+  // the drives of one day, kept in the order of the set-up (none = the guide is not here)
+  function guideSet(day, ids) { var dd = driveDays(), keep = driveCfg().times.map(function (t) { return t.id; }).filter(function (id) { return ids.indexOf(id) >= 0; }); if (keep.length) dd[day] = keep; else delete dd[day]; }
+  // press a day: off becomes on for every drive time; a day that is on asks which drives run
+  function actGuideDay(day) {
+    if (!can('cap:drives') || day < TODAY) return;
+    var c = driveCfg(), cur = (driveDays()[day] || []).filter(driveTime), m = driveMap(), all = c.times.map(function (t) { return t.id; });
+    if (!cur.length) { guideSet(day, all); log('Guide set for ' + fdw(day)); save(); render(); toast('The guide is here on ' + fdw(day) + ': ' + esc(listAnd(c.times.map(function (t) { return t.label.toLowerCase(); })))); return; }
+    var apply = function (ids) {
+      var lost = cur.filter(function (id) { return ids.indexOf(id) < 0 && m[day + '|' + id]; });
+      guideSet(day, ids); log(ids.length ? 'Guide on ' + fdw(day) + ': ' + ids.map(function (id) { return slotShort(id).toLowerCase(); }).join(' and ') : 'Guide not here on ' + fdw(day)); save(); render();
+      toast((ids.length ? 'Saved for ' + fdw(day) : 'The guide is not here on ' + fdw(day)) + (lost.length ? '. ' + lost.map(function (id) { return pplTxt(m[day + '|' + id]) + ' still booked on the ' + esc(driveTime(id).label.toLowerCase()); }).join(' and ') + ': move or cancel those drives.' : ''));
+    };
+    modal(fd(day, { weekday: 'long', day: 'numeric', month: 'long' }) + ': which drives run?', '<p class="muted small">Tick the drives the guide does on this day.</p>' +
+      c.times.map(function (t) { var n = m[day + '|' + t.id] || 0; return '<label class="check"><input type="checkbox" data-gt="' + esc(t.id) + '"' + (cur.indexOf(t.id) >= 0 ? ' checked' : '') + '><span><b>' + esc(t.label) + '</b> · ' + esc(t.at) + '<small class="muted gt-sub">' + (n ? n + ' of ' + c.seats + ' seats taken' : 'Nobody booked yet') + '</small></span></label>'; }).join('') +
+      '<div class="m-extra"><button type="button" class="btn ghost sm danger-t" data-gt-none>' + ic('x') + 'The guide is not here this day</button></div>',
+      'Save', function (f) { apply($$('[data-gt]', f).filter(function (x) { return x.checked; }).map(function (x) { return x.dataset.gt; })); },
+      { noFocus: true, onOpen: function (f) { f.dataset.gdDayForm = day; $('[data-gt-none]', f).addEventListener('click', function () { apply([]); closeModal(); }); } });
+  }
+  // the two quick buttons over the calendar, for the month that is showing
+  function guideMonth(what) {
+    if (!can('cap:drives')) return;
+    var dd = driveDays(), m = driveMap(), first = monthAdd(TODAY, GD.mon || 0), ym = first.slice(0, 7), ids = driveCfg().times.map(function (t) { return t.id; }), n = 0, kept = 0;
+    for (var day = first; day.slice(0, 7) === ym; day = add(day, 1)) {
+      if (day < TODAY) continue;
+      var dow = D(day).getDay(), cur = dd[day] || [];
+      if (what === 'weekends') { if (dow !== 6 && dow !== 0) continue; if (!ids.every(function (id) { return cur.indexOf(id) >= 0; })) n++; dd[day] = ids.slice(); }
+      else if (cur.length) { if (cur.some(function (id) { return m[day + '|' + id]; })) kept++; else { delete dd[day]; n++; } }
+    }
+    var mName = D(first).toLocaleDateString('en-ZA', { month: 'long' });
+    if (n) { log(what === 'weekends' ? 'Guide set for every Saturday and Sunday in ' + mName : 'Guide days cleared for ' + mName); save(); }
+    render();
+    toast(what === 'weekends' ? (n ? 'The guide is here every Saturday and Sunday left in ' + mName : 'Every Saturday and Sunday left in ' + mName + ' was already set')
+      : (n ? n + ' day' + (n === 1 ? '' : 's') + ' cleared in ' + mName : 'Nothing to clear in ' + mName) + (kept ? '. ' + kept + ' day' + (kept === 1 ? ' has' : 's have') + ' guests booked on a drive, so ' + (kept === 1 ? 'it stays' : 'they stay') + '.' : ''));
+  }
+  // the drive times, the seats and the youngest age
+  function actDriveSetup() {
+    if (!can('cap:drives')) return;
+    var c = driveCfg();
+    var row = function (t) { return '<div class="gt-row" data-gt-row="' + esc(t.id) + '"><label class="fld"><span>Name</span><input data-gt-label maxlength="30" value="' + esc(t.label) + '" placeholder="For example: Sunset drive" autocomplete="off"></label><label class="fld"><span>Starts at</span><input type="time" data-gt-at value="' + esc(t.at) + '"></label><button type="button" class="icon-btn" data-gt-del aria-label="Remove this drive time" title="Remove this drive time">' + ic('x') + '</button></div>'; };
+    modal('Game drive set-up', '<h5 class="m-h">Drive times</h5><p class="muted small">The drives the guide can do on a day. On the calendar you choose which of them run on each day.</p><div data-gt-rows>' + c.times.map(row).join('') + '</div><button type="button" class="btn ghost sm" data-gt-add>' + ic('plus') + 'Add a drive time</button>' +
+      '<h5 class="m-h">The vehicle</h5><div class="grid2"><label class="fld"><span>Seats on the vehicle</span><input name="seats" inputmode="numeric" data-stp min="1" max="40" value="' + c.seats + '"></label><label class="fld"><span>Youngest age that may come</span><input name="age" inputmode="numeric" data-stp min="0" max="18" value="' + c.minAge + '"></label></div>' +
+      '<p class="muted small">A drive never takes more people than the seats. Put 0 for the age if children of any age may come.</p>',
       'Save', function (f) {
-        var b = byRef(fval(f, 'b')), n = parseInt(fval(f, 'n'), 10), d = fval(f, 'd');
+        var rows = $$('[data-gt-row]', f).map(function (r) { return { id: r.dataset.gtRow, label: $('[data-gt-label]', r).value.replace(/\s+/g, ' ').trim(), at: $('[data-gt-at]', r).value }; });
+        var seats = parseInt(fval(f, 'seats'), 10), age = parseInt(fval(f, 'age'), 10);
+        if (!rows.length) { toast('Keep at least one drive time'); return false; }
+        if (rows.some(function (r) { return !r.label; })) { toast('Give every drive time a name'); return false; }
+        if (rows.some(function (r) { return !/^\d{2}:\d{2}$/.test(r.at); })) { toast('Choose the time every drive starts'); return false; }
+        if (!(seats > 0)) { toast('Type how many seats the vehicle has'); return false; }
+        var gone = c.times.filter(function (t) { return !rows.some(function (r) { return r.id === t.id; }); }), sched = allDrives().filter(function (d) { return d.d && d.d >= TODAY; });
+        var stuck = gone.filter(function (t) { return sched.some(function (d) { return d.slot === t.id; }); })[0];
+        if (stuck) { toast('People are booked on the ' + esc(stuck.label.toLowerCase()) + '. Move or cancel those drives first.'); return false; }
+        rows.forEach(function (r, i) { if (!r.id) r.id = 't' + Date.now().toString(36) + i; });   // a new time gets its own id, and an id never changes
+        c.times = rows.sort(function (a, b) { return a.at < b.at ? -1 : a.at > b.at ? 1 : 0; }); c.seats = Math.min(40, seats); c.minAge = isNaN(age) || age < 0 ? 0 : Math.min(18, age);
+        var dd = driveDays(); Object.keys(dd).forEach(function (day) { guideSet(day, dd[day]); });   // days no longer list a time that was removed
+        var m = driveMap(), over = Object.keys(m).filter(function (k) { return k.slice(0, 10) >= TODAY && m[k] > c.seats; }).length;
+        log('Game drive set-up changed: ' + c.times.map(function (t) { return t.label + ' ' + t.at; }).join(', ') + ', ' + c.seats + ' seats'); save(); render();
+        toast('Set-up saved' + (over ? '. ' + over + ' drive' + (over === 1 ? ' has' : 's have') + ' more people than seats now: check the list.' : ''));
+      }, { wide: true, noFocus: true, onOpen: function (f) {
+        f.classList.add('gt-form');
+        f.addEventListener('click', function (e) {
+          var del = e.target.closest('[data-gt-del]'), box = $('[data-gt-rows]', f);
+          if (del) { if ($$('[data-gt-row]', f).length < 2) { toast('Keep at least one drive time'); return; } del.closest('[data-gt-row]').remove(); return; }
+          if (e.target.closest('[data-gt-add]')) { if ($$('[data-gt-row]', f).length >= 6) { toast('Six drive times is the most'); return; } box.insertAdjacentHTML('beforeend', row({ id: '', label: '', at: '12:00' })); var last = $$('[data-gt-label]', f).pop(); if (last) last.focus(); }
+        });
+      } });
+  }
+  // add a drive to a booking, or change one: the days and times the guide is here come first (with the seats that are open),
+  // and any other day can still be chosen. key = 'REF|driveId' (or just the booking, or nothing to choose a booking)
+  function actDrive(key) {
+    var kp = String(key || '').split('|'), pre = kp[0] ? byRef(kp[0]) : null, c = driveCfg();
+    var here = DB.bookings.filter(function (b) { return live(b) && b.status !== 'pending' && b.co >= TODAY; }).sort(function (a, b) { return a.ci < b.ci ? -1 : 1; });
+    if (!pre && !here.length) { toast('There is no confirmed booking to add a game drive to'); return; }
+    var cur = pre ? drivesOf(pre).filter(function (d) { return kp[1] ? d.id === kp[1] : d.main; })[0] || null : null, skip = cur ? cur.key : '', n0 = cur ? cur.n : 2;
+    var times = c.times.slice(); if (cur && cur.slot && !driveTime(cur.slot)) times.push({ id: cur.slot, label: slotTxt(cur.slot, cur.x), at: '' });
+    // the drives the guide does while this booking is here, from today
+    var slotsFor = function (b) { var out = [], dd = driveDays(), m = driveMap(skip); Object.keys(dd).sort().forEach(function (day) { if (day < b.ci || day > b.co || day < TODAY) return; c.times.forEach(function (t) { if (dd[day].indexOf(t.id) >= 0) out.push({ k: day + '|' + t.id, day: day, tid: t.id, left: Math.max(0, c.seats - (m[day + '|' + t.id] || 0)) }); }); }); return out; };
+    var pickHTML = function (b) {
+      var sl = slotsFor(b), curK = cur && cur.d ? cur.d + '|' + cur.slot : '', inList = sl.some(function (s) { return s.k === curK; }), firstOpen = sl.filter(function (s) { return s.left > 0; })[0];
+      var sel = curK ? (inList ? curK : 'other') : firstOpen ? firstOpen.k : 'other';
+      return (sl.length ? sl.map(function (s) { return '<label class="cr-opt' + (s.left ? '' : ' full') + '"><input type="radio" name="pick" value="' + esc(s.k) + '"' + (sel === s.k ? ' checked' : '') + '><span><b>' + fdw(s.day) + ' · ' + esc(slotTxt(s.tid)) + '</b><small>' + (s.left ? s.left + ' of ' + c.seats + ' seats open' : 'Full') + '</small></span></label>'; }).join('')
+        : '<p class="callout">' + ic('info') + ' The guide is not set for any day of this stay. You can still add a drive: choose the day and time below.</p>') +
+        '<label class="cr-opt"><input type="radio" name="pick" value="other"' + (sel === 'other' ? ' checked' : '') + '><span><b>Another day or time</b><small>For a drive the guide agreed to on a day that is not on the calendar.</small></span></label>';
+    };
+    var b0 = pre || here[0], d0 = cur && cur.d ? cur.d : (b0.ci < TODAY ? TODAY : b0.ci);
+    modal(cur ? 'Game drive for ' + esc(guestName(pre)) : 'Add a game drive',
+      (pre ? '<p class="muted small">' + esc(standById(pre.stand).name) + ' · staying ' + fd(pre.ci) + ' to ' + fd(pre.co) + (cur && cur.web ? ' · booked online' : '') + '</p><input type="hidden" name="b" value="' + pre.ref + '">' : '<label class="fld"><span>Booking</span><select name="b">' + here.map(function (b) { return '<option value="' + b.ref + '">' + esc(standById(b.stand).name + ' · ' + guestName(b) + ' · ' + fd(b.ci) + ' to ' + fd(b.co)) + '</option>'; }).join('') + '</select></label>') +
+      '<div class="grid2"><label class="fld"><span>People</span><input name="n" inputmode="numeric" data-stp min="1" max="' + Math.max(20, c.seats) + '" value="' + n0 + '" data-gd-n></label><label class="fld"><span>Price (EFT)</span><input data-gd-p value="' + money(drivePrice(n0)) + '" disabled></label></div>' +
+      '<span class="fld-l">Day and time</span><div class="cr-opts gd-pick" data-gd-pick>' + pickHTML(b0) + '</div>' +
+      '<div class="cr-sub gd-other" data-gd-other hidden><div class="grid2"><label class="fld"><span>Date</span><input type="date" name="d" value="' + d0 + '"></label><label class="fld"><span>Time</span><select name="s">' + times.map(function (t) { return '<option value="' + esc(t.id) + '"' + (cur && cur.slot === t.id ? ' selected' : '') + '>' + esc(t.label + (t.at ? ' · ' + t.at : '')) + '</option>'; }).join('') + '</select></label></div></div>' +
+      '<p class="callout warn" data-gd-warn hidden></p>' +
+      '<label class="fld"><span>Guide</span><select name="g"><option value="">Not chosen yet</option>' + GUIDES.concat(cur && cur.guide && GUIDES.indexOf(cur.guide) < 0 ? [cur.guide] : []).map(function (g) { return '<option' + ((cur ? cur.guide : GUIDES[0]) === g ? ' selected' : '') + '>' + esc(g) + '</option>'; }).join('') + '</select></label>' +
+      (cur ? '<div class="m-extra"><button type="button" class="btn ghost sm danger-t" data-act="drive-del" data-ref="' + esc(cur.key) + '">Cancel this game drive</button></div>' : ''),
+      'Save', function (f) {
+        var b = byRef(fval(f, 'b')), n = parseInt(fval(f, 'n'), 10), pk = ($('[name=pick]:checked', f) || {}).value || 'other', d = pk === 'other' ? fval(f, 'd') : pk.split('|')[0], tid = pk === 'other' ? fval(f, 's') : pk.split('|')[1];
+        if (!b) return false;
         if (!(n > 0)) { toast('How many people?'); return false; }
+        if (!d || !tid) { toast('Choose the day and the time'); return false; }
         if (d < b.ci || d > b.co) { toast('Pick a day during the stay (' + fd(b.ci) + ' to ' + fd(b.co) + ')'); return false; }
-        var before = drivePrice((b.extras && b.extras.gd) || 0), delta = drivePrice(n) - before;
-        b.extras = b.extras || {}; b.extras.gd = n; b.drive = { d: d, slot: $('[name=s]:checked', f).value, guide: fval(f, 'g') };
+        var left = driveLeft(d, tid, skip); if (n > left) { toast(left ? 'Only ' + left + ' seat' + (left === 1 ? ' is' : 's are') + ' open on that drive' : 'That drive is full'); return false; }
+        var guide = fval(f, 'g'), tm = driveTime(tid), delta = 0, tgt = cur && cur.b === b ? cur : !(b.extras && b.extras.gd) ? { main: true, n: 0 } : null;
+        if (tgt && tgt.main) { delta = drivePrice(n) - drivePrice(tgt.n || 0); b.extras = b.extras || {}; b.extras.gd = n; b.drive = { d: d, slot: tid, guide: guide }; }   // the booking's own drive
+        else if (tgt) { var x = tgt.x; if (n !== +x.n) { delta = drivePrice(n) - (+x.amt || 0); x.amt = drivePrice(n); } x.n = n; x.d = d; x.slot = tid; x.guide = guide; delete x.flag; if (tm) { x.label = tm.label; x.at = tm.at; } }
+        else { b.drives = b.drives || []; b.drives.push({ id: uid('gd'), d: d, slot: tid, n: n, guide: guide, amt: drivePrice(n), label: tm ? tm.label : '', at: tm ? tm.at : '' }); delta = drivePrice(n); }   // one more drive for the same booking
         if (delta) { b.eft += delta; b.card += toCard(delta); b.total = b.method === 'card' ? b.card : b.eft; }
-        log('Game drive for ' + guestName(b) + ': ' + fd(d) + ' ' + SLOTS[b.drive.slot], b.ref); save(); refresh();
-        toast('Game drive set for ' + fdw(d) + ', ' + SLOTS[b.drive.slot].split(' · ')[1] + (delta ? '. ' + (delta > 0 ? money(delta) + ' added to' : money(-delta) + ' taken off') + ' the booking' : ''));
-      }, { onOpen: function (f) { var n = $('[data-gd-n]', f), p = $('[data-gd-p]', f); n.addEventListener('input', function () { p.value = money(drivePrice(parseInt(n.value, 10) || 0)); }); }, noFocus: true });
+        log('Game drive for ' + guestName(b) + ': ' + fd(d) + ' ' + slotTxt(tid), b.ref); save(); refresh();
+        toast('Game drive set for ' + fdw(d) + ', ' + esc(slotTxt(tid)) + (delta ? '. ' + (delta > 0 ? money(delta) + ' added to' : money(-delta) + ' taken off') + ' the booking' : '') + (driveRuns(d, tid) ? '' : '. The guide is not set for that day.'));
+      }, { noFocus: true, onOpen: function (f) {
+        f.classList.add('gd-form');
+        var nEl = $('[data-gd-n]', f), pEl = $('[data-gd-p]', f), warn = $('[data-gd-warn]', f);
+        var u = function () {
+          var b = byRef(fval(f, 'b')), n = parseInt(nEl.value, 10) || 0, pk = ($('[name=pick]:checked', f) || {}).value || 'other', d = pk === 'other' ? fval(f, 'd') : pk.split('|')[0], tid = pk === 'other' ? fval(f, 's') : pk.split('|')[1], msg = [];
+          pEl.value = money(drivePrice(n)); $('[data-gd-other]', f).hidden = pk !== 'other';
+          if (b && d && tid) {
+            if (d < b.ci || d > b.co) msg.push('That day is not during the stay (' + fd(b.ci) + ' to ' + fd(b.co) + ').');
+            else { var left = driveLeft(d, tid, skip); if (!driveRuns(d, tid)) msg.push('The guide is not set for ' + fdw(d) + ' (' + esc(slotTxt(tid).toLowerCase()) + '). You can still add it: check with the guide first.'); if (n > left) msg.push(left ? 'Only ' + left + ' seat' + (left === 1 ? ' is' : 's are') + ' open on that drive.' : 'That drive is full.'); }
+          }
+          warn.hidden = !msg.length; warn.innerHTML = ic('alert') + ' ' + msg.join(' ');
+        };
+        f.addEventListener('input', u); f.addEventListener('change', function (e) { if (e.target.name === 'b') { var nb = byRef(e.target.value); if (!nb) return; $('[data-gd-pick]', f).innerHTML = pickHTML(nb); f.elements.d.value = nb.ci < TODAY ? TODAY : nb.ci; } u(); });
+        f.addEventListener('click', function (e) { if (e.target.closest && e.target.closest('.stp-b')) setTimeout(u, 0); }); u();
+      } });
+  }
+  function driveCancel(key) {
+    var kp = String(key || '').split('|'), b = byRef(kp[0]); if (!b) return;
+    var d = drivesOf(b).filter(function (x) { return kp[1] ? x.id === kp[1] : x.main; })[0]; if (!d) return;
+    var was = d.amt; if (d.main) { b.extras.gd = 0; b.drive = null; } else b.drives.splice(b.drives.indexOf(d.x), 1);
+    b.eft -= was; b.card -= toCard(was); b.total = b.method === 'card' ? b.card : b.eft;
+    log('Cancelled the game drive for ' + guestName(b), b.ref); save(); closeModal(); refresh(); toast('Game drive cancelled. ' + money(was) + ' taken off the booking.');
+  }
+  // "It is sorted": staff spoke to the guest and the drive stays as it is
+  function driveOk(key) {
+    var kp = String(key || '').split('|'), b = byRef(kp[0]), d = b ? drivesOf(b).filter(function (x) { return x.id === kp[1]; })[0] : null; if (!d || !d.x) return;
+    delete d.x.flag; b.notes.push({ at: nowStamp(), by: ME.name, text: 'Game drive on ' + fdw(d.d) + ' (' + slotTxt(d.slot, d.x) + ') sorted out with the guest.' }); save(); refresh(); toast('Marked as sorted');
   }
 
   /* =========================================================
@@ -4690,7 +5273,7 @@
     var n = bk.keys.length, z = function () { var a = []; for (var i = 0; i < n; i++) a.push(0); return a; };
     var at = function (d) { return bk.idx(shift ? add(d, shift) : d); }, inR = function (d) { return d >= from && d <= to; };
     var fee = function (amt) { return amt - amt / (1 + cardFee() / 100); };
-    var S = { received: 0, card: 0, eft: 0, cash: 0, refunds: 0, fee: 0, nPay: 0, shop: 0, shopN: 0, shopQ: 0, shopCard: 0, items: {}, itemsQ: {}, byArea: {}, made: 0, madeValue: 0, cancelled: 0, src: {}, lead: 0,
+    var S = { promo: 0, promoN: 0, promoBy: {}, received: 0, card: 0, eft: 0, cash: 0, refunds: 0, fee: 0, nPay: 0, shop: 0, shopN: 0, shopQ: 0, shopCard: 0, items: {}, itemsQ: {}, byArea: {}, made: 0, madeValue: 0, cancelled: 0, src: {}, lead: 0,
       nights: 0, arrivals: 0, stayN: 0, guests: 0, kids: 0, newG: 0, retG: 0, consent: 0, groups: {}, lens: [0, 0, 0, 0], dow: [0, 0, 0, 0, 0, 0, 0], standN: {}, areaN: {}, top: {},
       s: { received: z(), card: z(), eft: z(), cash: z(), made: z(), nights: z(), guests: z(), shop: z() } };
     var first = {};
@@ -4705,7 +5288,7 @@
         if (i >= 0) { S.s.received[i] += p.amt; S.s[p.m][i] += p.amt; }
       });
       var cd = b.created.slice(0, 10);
-      if (inR(cd)) { S.made++; if (!live(b)) S.cancelled++; else { S.madeValue += b.total; S.src[b.source] = (S.src[b.source] || 0) + 1; S.lead += Math.max(0, diff(cd, b.ci)); var i2 = at(cd); if (i2 >= 0) S.s.made[i2]++; } }
+      if (inR(cd)) { S.made++; if (!live(b)) S.cancelled++; else { (b.promos || []).forEach(function (x) { S.promo += +x.amt || 0; S.promoBy[x.name] = (S.promoBy[x.name] || 0) + (+x.amt || 0); }); if ((b.promos || []).length) S.promoN++; S.madeValue += b.total; S.src[b.source] = (S.src[b.source] || 0) + 1; S.lead += Math.max(0, diff(cd, b.ci)); var i2 = at(cd); if (i2 >= 0) S.s.made[i2]++; } }
       if (!live(b)) return;
       for (var d = b.ci < from ? from : b.ci; d < b.co && d <= to; d = add(d, 1)) { S.nights++; S.standN[b.stand] = (S.standN[b.stand] || 0) + 1; S.areaN[st.area] = (S.areaN[st.area] || 0) + 1; var i3 = at(d); if (i3 >= 0) S.s.nights[i3]++; }
       if (!inR(b.ci)) return;
@@ -4951,6 +5534,11 @@
       h += main('Card and EFT', { labels: labels, tips: tips, kind: 'money', label: 'Card and EFT payments per ' + per, legend: rpLegend([{ n: 'Card', c: C_CARD }, { n: 'EFT', c: C_EFT }]), series: [{ name: 'Card', data: c.s.card, color: C_CARD }, { name: 'EFT', data: c.s.eft, color: C_EFT }] }, 'Money in, per ' + per);
       h += '<div class="rp-grid2">' + rpCard('How it was paid', rpDonut(payRows(c), 'money', 'received')) +
         rpCard('By area', rpHBars(Object.keys(AREA_SHORT).map(function (a) { return { l: AREA_SHORT[a], v: c.byArea[a] || 0 }; }), 'money'), { sub: 'Booking payments, by where the stand is' }) + '</div>';
+      // promotions: what they took off the bookings made in this period. Money received is not touched: it counts what guests really paid.
+      RP_FIG.push(['Promotion discounts given', rpFmt('money', c.promo), rpFmt('money', p.promo)]);
+      var prRows = Object.keys(c.promoBy).map(function (n) { return { l: n, v: c.promoBy[n] }; });
+      prRows.forEach(function (r) { RP_FIG.push(['Promotion: ' + r.l, rpFmt('money', r.v), rpFmt('money', p.promoBy[r.l] || 0)]); });
+      h += rpCard('Promotion discounts given', c.promoN ? '<p class="rp-promo-sum" data-rp-promo><b>' + money(c.promo) + '</b> taken off ' + c.promoN + ' booking' + (c.promoN === 1 ? '' : 's') + (RP.compare ? ' <span class="muted">· the period before: ' + money(p.promo) + '</span>' : '') + '</p>' + (prRows.some(function (r) { return r.v > 0; }) ? rpHBars(prRows, 'money') : '<p class="muted small">These bookings got a free item, no money off.</p>') : '<p class="rp-empty" data-rp-promo>No booking made in this period used a promotion.</p>', { wide: true, sub: 'Bookings made in this period, by promotion. Money received does not change: it already counts what guests really paid.' });
     }
 
     if (tab === 'stays') {
@@ -5104,8 +5692,9 @@
     payments: 'Every payment that came in, credits, and what is still owed.',
     reports: 'Income, how full the camp is and what the shop sold.',
     shop: 'The till: ring up a sale, put it on a guest\'s tab or sell to a business.',
-    drives: 'Game drive bookings and the time slots.',
+    drives: 'Game drives: who is on which drive, and adding a drive to a booking.',
     products: 'What the shop sells: prices, photos and stock counts.',
+    promos: 'Special offers for guests: money off a stay, a free night or a free shop item, and when each one runs.',
     stands: 'The stands and their details, closing a stand for some nights, and removing anyone\'s stand note.',
     rates: 'Prices per night, fees, holidays and the booking rules.',
     settings: 'Quotes and invoices, bank details, message wording, signatures and the indemnity. People and roles can only be changed by an Owner.',
@@ -5117,7 +5706,8 @@
   // what a person may see or do on top of the screens: these are checked in the code with can('cap:...')
   var RL_CAPS = [
     { id: 'cap:guests', t: 'Guest names, phone numbers and bookings', d: 'May open a booking to see the guest, their phone number, vehicles and payments, and use the "Find a booking" box at the top.' },
-    { id: 'cap:money', t: 'Money: refunds, credits and taking off a payment', d: 'May remove a payment that was entered by mistake, refund when a booking is cancelled, make or change a credit, and see "Received this month".' }
+    { id: 'cap:money', t: 'Money: refunds, credits and taking off a payment', d: 'May remove a payment that was entered by mistake, refund when a booking is cancelled, make or change a credit, and see "Received this month".' },
+    { id: 'cap:drives', t: 'Game drives: the set-up and when the guide is here', d: 'May switch booking a game drive online on or off, change the drive times, the seats and the youngest age, and set the days the guide is here.' }
   ];
   // a screen that only makes sense with one of those: ticking the screen ticks it too
   var RL_NEEDS = { dashboard: ['cap:guests'], gate: ['cap:guests'], bookings: ['cap:guests'], calendar: ['cap:guests'], enquiries: ['cap:guests'], clients: ['cap:guests'], vouchers: ['cap:guests'], indemnities: ['cap:guests'], shop: ['cap:guests'], drives: ['cap:guests'], eft: ['cap:guests', 'cap:money'], payments: ['cap:guests', 'cap:money'], reports: ['cap:money'] };
@@ -5711,13 +6301,13 @@
     return { items: list.slice(p * size, p * size + size), bar: pages > 1 ? '<div class="pager"><span>' + (p * size + 1) + ' to ' + Math.min(list.length, p * size + size) + ' of ' + list.length + '</span><button class="icon-btn sm" data-pg="' + key + '|-1"' + (p ? '' : ' disabled') + ' aria-label="Previous page">' + ic('chev-l') + '</button><button class="icon-btn sm" data-pg="' + key + '|1"' + (p < pages - 1 ? '' : ' disabled') + ' aria-label="Next page">' + ic('chev-r') + '</button></div>' : '' };
   }
 
-  var VIEWS = { site: vSite, gate: vGate, webtext: vWeb, dgrnews: vDgr, social: vSocial, dashboard: vDashboard, bookings: vBookings, eft: vEft, calendar: vCalendar, clients: vClients, payments: vPayments, shop: vShop, drives: vDrives, products: vProducts, vouchers: vVouchers, indemnities: vIndemnities, enquiries: vEnquiries, stands: vStands, rates: vRates, reports: vReports, news: vNews, settings: vSettings };
+  var VIEWS = { site: vSite, gate: vGate, webtext: vWeb, dgrnews: vDgr, social: vSocial, dashboard: vDashboard, bookings: vBookings, eft: vEft, calendar: vCalendar, clients: vClients, payments: vPayments, shop: vShop, drives: vDrives, promos: vPromos, products: vProducts, vouchers: vVouchers, indemnities: vIndemnities, enquiries: vEnquiries, stands: vStands, rates: vRates, reports: vReports, news: vNews, settings: vSettings };
   function route() { var v = (location.hash.match(/^#\/(\w+)/) || [])[1] || 'dashboard'; if (v === 'guests') v = 'clients'; return VIEWS[v] && can(v) ? v : can('dashboard') ? 'dashboard' : firstView(); }
   function firstView() { var n = NAV.filter(function (x) { return VIEWS[x.id] && can(x.id); })[0]; return n ? n.id : ''; }   // the first screen this role may open
 
   /* ---------- shell ---------- */
   function badges() {
-    return { gate: gateBadge(), eft: DB.bookings.filter(function (b) { return b.status === 'pending'; }).length, enquiries: DB.threads.filter(function (t) { return t.status === 'open'; }).length, products: shopItems().filter(lowStock).length, drives: DB.bookings.filter(function (b) { return live(b) && b.extras && b.extras.gd && !b.drive && b.co >= TODAY && diff(TODAY, b.ci) <= 14; }).length, bookings: DB.bookings.filter(function (b) { return b.isNew; }).length };
+    return { gate: gateBadge(), eft: DB.bookings.filter(function (b) { return b.status === 'pending'; }).length, enquiries: DB.threads.filter(function (t) { return t.status === 'open'; }).length, products: shopItems().filter(lowStock).length, drives: DB.bookings.filter(function (b) { return live(b) && b.extras && b.extras.gd && !b.drive && b.co >= TODAY && diff(TODAY, b.ci) <= 14; }).length + allDrives().filter(driveFlag).length, bookings: DB.bookings.filter(function (b) { return b.isNew; }).length };
   }
   function shell() {
     var bd = badges();
@@ -5806,6 +6396,8 @@
     var stb = t.closest('[data-shoptab]'); if (stb) { SHOP.tab = stb.dataset.shoptab; render(); window.scrollTo(0, 0); return; }
     var pcat = t.closest('[data-pcat]'); if (pcat) { SHOP.cat = pcat.dataset.pcat; render(); return; }
     var prc = t.closest('[data-prodcat]'); if (prc) { PROD.cat = prc.dataset.prodcat; render(); return; }
+    var gdd = t.closest('[data-gd-day]'); if (gdd) { actGuideDay(gdd.dataset.gdDay); return; }
+    var gdm = t.closest('[data-gd-mon]'); if (gdm) { GD.mon = Math.max(0, Math.min(GD_MONTHS - 1, (GD.mon || 0) + (+gdm.dataset.gdMon))); render(); return; }
     var wtb = t.closest('[data-webtab]'); if (wtb) { WTX.tab = wtb.dataset.webtab; WTX.q = ''; render(); window.scrollTo(0, 0); return; }
     var wrs = t.closest('[data-wt-reset]'); if (wrs) { var wrx = webFind(wrs.dataset.wtReset); delete webDB().text[wrs.dataset.wtReset]; log('Website wording put back to the original' + (wrx ? ': "' + wrx.def.slice(0, 60) + '"' : '')); save(); var wry = window.scrollY; render(); window.scrollTo(0, wry); toast('Back to the original wording'); return; }
     var gtb = t.closest('[data-gatetab]'); if (gtb) { GATE.tab = gtb.dataset.gatetab; GATE.show = 'todo'; resetPages(); render(); window.scrollTo(0, 0); return; }
@@ -6006,7 +6598,18 @@
     if (act === 'pay-more') { PAYF.lim += 200; render(); return; }
     if (act === 'drive-add') return actDrive(null);
     if (act === 'drive-set') return actDrive(ref);
-    if (act === 'drive-del') { var bd2 = byRef(ref), was = drivePrice(bd2.extras.gd); bd2.extras.gd = 0; bd2.drive = null; bd2.eft -= was; bd2.card -= toCard(was); bd2.total = bd2.method === 'card' ? bd2.card : bd2.eft; log('Cancelled the game drive for ' + guestName(bd2), bd2.ref); save(); closeModal(); refresh(); toast('Game drive cancelled. ' + money(was) + ' taken off the booking.'); return; }
+    if (act === 'drive-del') return driveCancel(ref);
+    if (act === 'drive-ok') return driveOk(ref);
+    if (act === 'gd-setup') return actDriveSetup();
+    if (act === 'gd-weekends') return guideMonth('weekends');
+    if (act === 'gd-clear') return guideMonth('clear');
+    if (act === 'promo-add') return actPromo(null);
+    if (act === 'promo-edit') return actPromo(ref);
+    if (act === 'promo-copy') return actPromo(null, ref);
+    if (act === 'promo-del') return actPromoDel(ref);
+    if (act === 'promo-quick') { if (!can('promos')) return; var pq = promoQuick(ref); promosDB().push(pq); log('New promotion from an example: ' + pq.name); save(); render(); toast(esc(pq.name) + ' added, switched off. Check it, then switch it on.'); return; }
+    if (act === 'free-give') { var fb = byRef(ref), fgv = fb ? freeGive(fb) : ''; if (!fgv) return; fb.notes.push({ at: nowStamp(), by: ME.name, text: 'Free with promotion, handed over: ' + fgv + '.' }); log('Free promotion items handed over for ' + guestName(fb), fb.ref); save(); refresh(); toast('Handed over: ' + esc(fgv)); return; }
+    if (act === 'free-undo') { var fu = byRef(ref); if (!fu) return; freeUngive(fu); fu.notes.push({ at: nowStamp(), by: ME.name, text: 'Free promotion items marked as not handed over yet.' }); save(); refresh(); toast('Back to still to hand over'); return; }
     if (act === 'rates-discard') { render(); return; }
     if (act === 'csv-sales') { var rgs = simpleRange(SHOP.range); csv('kyleu-shop-sales-' + rgs[0] + '-to-' + rgs[1] + '.csv', [['Date', 'Time', 'Item', 'Qty', 'Paid by', 'Amount', 'Stand', 'Booking', 'Staff', 'Business', 'Account paid on']].concat(DB.sales.filter(function (x) { return x.d >= rgs[0] && x.d <= rgs[1]; }).map(function (x) { var xp = x.paid ? shopPaidBy(x.paid) : null; return [x.d, x.t, x.item, x.qty, saleMethod(x.m), x.amt, x.stand, x.ref, x.by, x.cust ? bizName(x.cust, x.custName) : '', xp ? xp.d : '']; }))); return; }
     if (act === 'csv-report') { var rr = rpRange(RP.range); csv('kyleu-report-' + RP.tab + '-' + rr.from + '-to-' + rr.to + '.csv', [['Figure', rpRangeText(rr.from, rr.to), 'Period before: ' + rpRangeText(rr.pf, rr.pt)]].concat(RP_FIG)); return; }
@@ -6174,6 +6777,8 @@
     if (t.matches('[data-ph-file]')) { Array.prototype.slice.call(t.files || []).slice(0, 10).forEach(function (file) { shrink(file, function (url) { if (EDIT) { EDIT.photos.push(url); phRefresh(); } }); }); t.value = ''; }
     if (t.matches('[data-doc][type=checkbox]')) { var dv = K.docCfg(); dv[t.dataset.doc] = t.checked; K.docSave(dv); var dk_ = t.dataset.doc, dw_ = dk_ === 'sepQuote' ? 'Quotations' : 'Invoices';
       log(dk_ === 'vatOn' ? 'VAT switched ' + (t.checked ? 'on' : 'off') + ' for quotations and invoices' : dw_ + (t.checked ? ' now get their own numbers' : ' now use the booking reference')); render(); return; }
+    if (t.matches('[data-promo-on]')) { var pon = promoBy(t.dataset.promoOn); if (!pon || !can('promos')) { render(); return; } pon.on = t.checked; log('Promotion ' + pon.name + ' switched ' + (t.checked ? 'on' : 'off')); save(); render(); var pst = promoState(pon); toast(esc(pon.name) + (pst.k === 'on' ? ' is running: guests get it from now' : pst.k === 'soon' ? ' is switched on. It starts on ' + fdp(pon.bookFrom) : pst.k === 'ended' ? ' is switched on, but its dates are over: change the dates to run it again' : ' is switched off')); return; }
+    if (t.matches('[data-gd-on]')) { if (!can('cap:drives')) { render(); return; } driveCfg().on = t.checked; log('Booking a game drive online switched ' + (t.checked ? 'on' : 'off')); save(); render(); toast(t.checked ? 'Guests can now add a game drive when they book online' : 'Game drives are no longer offered when guests book online'); return; }
     if (t.matches('[data-keep]')) { actKeep(t.dataset.keep, t.checked); return; }
     if (t.matches('[data-close-stand]')) { var id = t.dataset.closeStand; if (t.checked) delete DB.closed[id]; else DB.closed[id] = true; log(standById(id).name + (t.checked ? ' opened' : ' closed') + ' for bookings'); save(); render(); toast(standById(id).name + (t.checked ? ' is open for bookings' : ' is closed to new bookings')); }
   }

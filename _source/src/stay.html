@@ -1,5 +1,5 @@
 <!--META
-{"title":"Book a Campsite | Stands, Availability & Prices | Kyleu Bush Camp","desc":"See every campsite at Kyleu Bush Camp in Dinokeng: photos, size, facilities and live price for your dates. Fenced, unfenced and self-sufficient stands from R100 pp. Book online.","path":"stay.html","ogimg":"camp-panorama.jpg","nav":"stay","headerclass":"","footbg":"","extra_js":"<script src=\"assets/js/campmap-data.js\" defer></script><script src=\"assets/js/campmap.js\" defer></script><link rel=\"stylesheet\" href=\"assets/css/invoice.css\"><script src=\"assets/js/invoice.js\" defer></script><script src=\"assets/js/bookparts.js\" defer></script><script src=\"assets/js/datepicker.js\" defer></script><script src=\"assets/js/booking.js\" defer></script>"}
+{"title":"Book a Campsite | Stands, Availability & Prices | Kyleu Bush Camp","desc":"See every campsite at Kyleu Bush Camp in Dinokeng: photos, size, facilities and live price for your dates. Fenced, unfenced and self-sufficient stands from R100 pp. Book online.","path":"stay.html","ogimg":"camp-panorama.jpg","nav":"stay","headerclass":"","footbg":"","extra_js":"<script src=\"assets/js/campmap-data.js\" defer></script><script src=\"assets/js/campmap.js\" defer></script><link rel=\"stylesheet\" href=\"assets/css/invoice.css\"><script src=\"assets/js/invoice.js\" defer></script><script src=\"assets/js/bookparts.js\" defer></script><script src=\"assets/js/promos.js\" defer></script><script src=\"assets/js/datepicker.js\" defer></script><script src=\"assets/js/booking.js\" defer></script>"}
 -->
 <section class="page-hero" style="padding-bottom:110px">
   <div class="bg" data-parallax="0.15" style="background-image:url('assets/img/photos/camp-panorama.jpg')"></div>
@@ -143,6 +143,7 @@
         <h2>Check your booking</h2>
         <p class="muted">Make sure everything below is right, then tick the boxes to agree.</p>
         <div class="check-sum" data-check-sum></div>
+        <div data-drives></div>
         <div class="bk-shop">
           <h3>Anything from the camp shop? <span class="opt">(optional)</span></h3>
           <p class="muted small-note">Add firewood, ice and more now and it goes on this quotation, so you pay for everything at once. It is waiting at reception when you arrive. You can still add more later with the link to your booking.</p>
@@ -150,6 +151,11 @@
           <div data-shop></div>
         </div>
         <div class="field bk-notes"><label for="f-notes">Anything we should know? <span class="opt">(optional)</span></label><textarea id="f-notes" name="notes" placeholder="For example: one bag of ice per day, please. Celebrating something? Travelling with a big group?"></textarea></div>
+        <div class="bk-credit bk-promo" data-promo-box hidden>
+          <h3>Have a promo code? <span class="opt">(optional)</span></h3>
+          <div class="bk-credit-row"><input id="f-promo" name="promo" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Type your code" aria-label="Promo code"><button class="btn btn-sm" type="button" data-promo-apply>Use this code</button></div>
+          <div class="bk-credit-msg" data-promo-msg role="status"></div>
+        </div>
         <div class="bk-credit">
           <h3>Have a credit from a cancelled booking? <span class="opt">(optional)</span></h3>
           <p class="muted small-note">Type the credit code from your cancellation email and it comes off this booking. It works with the email address of the booking that was cancelled.</p>

@@ -14,6 +14,7 @@
   var STANDS = [], P = null, S = null;
   var state = { ci: null, co: null, adults: 2, pens: 0, kids: 0, area: '', view: 'grid' };
   var extras = {}, shopQty = {}, SHOP = [], carsEd = null;
+  var PROMOS = [], DR = null, gdPick = {};   // promotions and guided game drives, set up in the admin (assets/js/promos.js)
 
   /* ---------- dates ---------- */
   function iso(d) { var z = new Date(d.getTime() - d.getTimezoneOffset() * 6e4); return z.toISOString().slice(0, 10); }
@@ -82,13 +83,13 @@
   }
   function quote(stand, ci, co, g, ex) {
     g = g || state; ex = ex || {};
-    var R = rates(stand), nights = nightsOf(ci, co), lines = [], acc = 0, wkN = 0, wdN = 0, pensWd = 0;
+    var R = rates(stand), nights = nightsOf(ci, co), lines = [], acc = 0, wkN = 0, wdN = 0, pensWd = 0, nightAmts = [];
     nights.forEach(function (d) {
       var wk = isWeekendNight(d);
       if (wk) wkN++; else wdN++;
       var pensRate = (!wk && d.getDay() >= 1 && d.getDay() <= 4) ? R.pens : (wk ? R.weekend : R.weekday);
       if (!wk && d.getDay() >= 1 && d.getDay() <= 4) pensWd++;
-      acc += g.adults * (wk ? R.weekend : R.weekday) + g.pens * pensRate + g.kids * R.kid;
+      var na = g.adults * (wk ? R.weekend : R.weekday) + g.pens * pensRate + g.kids * R.kid; acc += na; nightAmts.push(na);
     });
     var people = g.adults + g.pens, cm = function (v) { return K.money(K.toCard(v, P)); };
     var pw = function (n, one, many) { return n + ' ' + (n === 1 ? one : many); }, nt = function (n, w) { return n + ' ' + w + ' night' + (n > 1 ? 's' : ''); };
@@ -111,15 +112,26 @@
     });
     // camp shop items ordered with the booking
     if (ex.__shop) SHOP.forEach(function (it) { var q = ex.__shop[it.label] || 0; if (q) exLines.push({ t: q + ' × ' + it.label, v: q * it.each, shop: true }); });
+    // guided game drives added to the booking (only on days the guide is here)
+    var drv = (ex.__drives || []).filter(function (x) { return x.people > 0; }), driveTotal = 0;
+    drv.forEach(function (x) { var v = K.drivePrice(P, x.people); driveTotal += v; exLines.push({ t: 'Game drive · ' + nice(parse(x.day)) + ', ' + String(x.label).toLowerCase() + ' ' + x.at + ' · ' + x.people + (x.people === 1 ? ' person' : ' people'), v: v, drive: x }); });
     var exTotal = exLines.reduce(function (a, l) { return a + l.v; }, 0);
+    // promotions the booking qualifies for (the same rules as the admin: K.promoEval)
+    var prices = {}; SHOP.forEach(function (it) { prices[it.label] = it.each; });
+    var pe = PROMOS.length && K.promoEval ? K.promoEval(PROMOS, { today: iso(today()), ci: iso(ci), nights: nights.length, wkN: wkN, area: stand.area, stay: stay, nightAmts: nightAmts, driveTotal: driveTotal, drives: drv.length, shop: ex.__shop || {}, prices: prices, code: ex.__code || '' }) : { list: [], total: 0, free: [] };
     // card price = normal (EFT) price + the card company's fee; EFT takes it off again
     lines.concat(exLines).forEach(function (l) { if (l.c === undefined) l.c = K.toCard(l.v, P); });
-    var cardStay = lines.reduce(function (a, l) { return a + l.c; }, 0), cardTotal = cardStay + exLines.reduce(function (a, l) { return a + l.c; }, 0);
-    var total = stay + exTotal;
+    var cardStay = lines.reduce(function (a, l) { return a + l.c; }, 0), cardTotal = cardStay + exLines.reduce(function (a, l) { return a + l.c; }, 0) - pe.total;
+    var total = stay + exTotal - pe.total;
     var depPct = P.num('Booking rules', 'Deposit percentage', 50);
     var daysToArrive = Math.round((ci - today()) / DAY);
     var balDays = P.num('Booking rules', 'Balance due days before arrival', 7);
-    return { nights: nights.length, wkN: wkN, wdN: wdN, lines: lines, stay: stay, exLines: exLines, exTotal: exTotal, total: total, deposit: Math.round(total * depPct / 100), depPct: depPct, cardStay: cardStay, cardTotal: cardTotal, cardDeposit: Math.round(cardTotal * depPct / 100), fee: K.cardFee(P), payFull: daysToArrive <= balDays + depDays(), balanceDue: addDays(ci, -balDays), fullDue: daysToArrive <= balDays ? (daysToArrive >= 1 ? addDays(today(), 1) : today()) : addDays(ci, -balDays), R: R };
+    return { promos: pe.list, discount: pe.total, freeItems: pe.free, driveTotal: driveTotal, nights: nights.length, wkN: wkN, wdN: wdN, lines: lines, stay: stay, exLines: exLines, exTotal: exTotal, total: total, deposit: Math.round(total * depPct / 100), depPct: depPct, cardStay: cardStay, cardTotal: cardTotal, cardDeposit: Math.round(cardTotal * depPct / 100), fee: K.cardFee(P), payFull: daysToArrive <= balDays + depDays(), balanceDue: addDays(ci, -balDays), fullDue: daysToArrive <= balDays ? (daysToArrive >= 1 ? addDays(today(), 1) : today()) : addDays(ci, -balDays), R: R };
+  }
+  // promotion lines for a price breakdown: the saving, and anything that comes free
+  function promoRows(q) {
+    return q.promos.filter(function (x) { return x.amt; }).map(function (x) { return '<div class="row eft-row promo-row"><span>Promotion: ' + K.esc(x.name) + '</span><span>-' + K.money(x.amt) + '</span></div>'; }).join('') +
+      q.freeItems.map(function (f) { return '<div class="row promo-row"><span>' + f.qty + ' × ' + K.esc(f.label) + ' <small>(' + K.esc(f.name) + ')</small></span><span>Free</span></div>'; }).join('');
   }
   function dinokengFees(ci, co, g, vehicles) {
     var n = nightsOf(ci, co).length, cap = P.num('Dinokeng', 'Conservation fee cap per person per stay', 300);
@@ -159,6 +171,7 @@
       '<div class="sc-badges"><span class="badge area-' + st.area + '"><svg width="13" height="13"><use href="#' + areaIcon(st.area) + '"/></svg>' + st.areaInfo.short + '</span>' +
       (free ? '<span class="badge"><i></i>Available</span>' : '<span class="badge booked"><i></i>Booked</span>') + '</div>' +
       (st.status === 'new' ? '<span class="badge new" style="position:absolute;bottom:10px;left:10px">✨ New stand</span>' : '') +
+      (q.promos.length ? '<span class="badge promo" style="position:absolute;bottom:10px;right:10px">Special: ' + K.esc(q.promos[0].name) + '</span>' : '') +
       (st.photos.length ? '<span class="sc-photo-count"><svg><use href="#i-camera"/></svg>' + st.photos.length + '</span>' : '') +
       '</div><div class="sc-body"><div class="sc-title"><h3>' + K.esc(st.name) + '</h3></div><div class="sc-feel">' + K.esc(st.feel) + '</div>' +
       '<div class="sc-meta"><span><svg><use href="#i-users"/></svg>Up to ' + st.guests + '</span><span><svg><use href="#i-tent"/></svg>' + K.esc(st.setups) + '</span><span><svg><use href="#' + (st.area === 'self-sufficient' ? 'i-bolt-off' : 'i-shower') + '"/></svg>' + facilityText(st) + '</span></div>' +
@@ -402,12 +415,12 @@
     var free = isFree(current, sel.ci, sel.co), q = quote(current, sel.ci, sel.co), ev = eveNote(sel.ci, sel.co);
     bd.innerHTML = '<div class="row sub"><span>' + nice(sel.ci) + ' → ' + nice(sel.co) + '</span><span>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + '</span></div>' +
       q.lines.map(function (l) { return '<div class="row"><span>' + l.t + '</span><span>' + (l.free ? 'Free' : K.money(l.c)) + '</span></div>'; }).join('') +
-      (ev ? '<div class="row sub"><span>' + ev + '</span></div>' : '') +
-      (noFee(q) ? '<div class="row total"><span>Total</span><span>' + K.money(q.stay) + '</span></div>' :
+      (ev ? '<div class="row sub"><span>' + ev + '</span></div>' : '') + promoRows(q) +
+      (noFee(q) ? '<div class="row total"><span>Total</span><span>' + K.money(q.total) + '</span></div>' :
       '<div class="row"><span><b>Total</b> (card price, incl. ' + q.fee + '% card fee)</span><span><b>' + K.money(q.cardStay) + '</b></span></div>' +
       '<div class="row eft-row"><span>EFT discount</span><span>-' + K.money(q.cardStay - q.stay) + '</span></div>' +
       '<div class="row total"><span>Total with EFT</span><span>' + K.money(q.stay) + '</span></div>');
-    $('.tot', bb).innerHTML = '<b>' + K.dualPair(q.cardStay, q.stay) + '</b><small>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + ' · ' + K.peopleText(state) + (noFee(q) ? '' : ' · ' + K.money(q.cardStay) + ' by card') + ' · ' + (q.payFull ? 'full payment due ' + (q.fullDue <= today() ? 'now' : 'by ' + nice(q.fullDue, { day: 'numeric', month: 'short' })) : 'deposit secures it') + '</small>';
+    $('.tot', bb).innerHTML = '<b>' + K.dualPair(q.cardTotal, q.total) + '</b><small>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + ' · ' + K.peopleText(state) + (noFee(q) ? '' : ' · ' + K.money(q.cardStay) + ' by card') + ' · ' + (q.payFull ? 'full payment due ' + (q.fullDue <= today() ? 'now' : 'by ' + nice(q.fullDue, { day: 'numeric', month: 'short' })) : 'deposit secures it') + '</small>';
     var btn = $('[data-reserve]', bb); btn.disabled = !free || size === 'max';
     btn.innerHTML = !free ? 'Not available' : size === 'max' ? 'Too many people' : 'Reserve <svg><use href="#i-arrow"/></svg>';
   }
@@ -447,7 +460,8 @@
     }
     if ((S && /q2b/i.test(S.get('Booking mode', 'demo')))) { window.open(S.get('Live availability (Q2B)'), '_blank', 'noopener'); return; }
     booking = { stand: current, ci: sel.ci, co: sel.co, g: { adults: state.adults, pens: state.pens, kids: state.kids }, over: sizeOf(current) === 'over' ? { people: guestsTotal(), usual: current.guests } : null };
-    extras = {}; shopQty = {}; extras.__shop = shopQty; credit = null; creditMsg('');
+    extras = {}; shopQty = {}; extras.__shop = shopQty; credit = null; creditMsg(''); gdPick = {}; extras.__drives = [];
+    var pbx = $('[data-promo-box]', modal); if (pbx) { pbx.hidden = !PROMOS.some(function (x) { return x.code; }); var pin = $('[name=promo]', modal), pms = $('[data-promo-msg]', modal); if (pin) pin.value = ''; if (pms) pms.innerHTML = ''; }
     var cin = $('[name=credit]', modal), cq = new URLSearchParams(location.search).get('credit'); if (cin && !cin.value && cq) cin.value = cq.toUpperCase();   // came from the link in the cancellation email
     var intl = $('[data-intl]', modal); if (intl && K.intlNote) intl.innerHTML = K.intlNote({ what: current.name + ', ' + nice(sel.ci, { day: 'numeric', month: 'long', year: 'numeric' }) + ' to ' + nice(sel.co, { day: 'numeric', month: 'long', year: 'numeric' }) });
     step = 1; renderSide(); renderExtras(); goStep(1);
@@ -483,7 +497,7 @@
       '<div class="ms-dates"><div><small>Arrive</small><b>' + nice(b.ci) + '</b></div><div><small>Depart</small><b>' + nice(b.co) + '</b></div></div>' +
       '<div class="muted" style="font-size:.88rem;font-weight:700">' + K.peopleText(b.g) + '</div>' +
       '<div class="breakdown">' + q.lines.map(function (l) { return '<div class="row"><span>' + l.t + '</span><span>' + (l.free ? 'Free' : K.money(l.c)) + '</span></div>'; }).join('') +
-      q.exLines.map(function (l) { return '<div class="row"><span>' + K.esc(l.t) + '</span><span>' + K.money(l.c) + '</span></div>'; }).join('') +
+      q.exLines.map(function (l) { return '<div class="row"><span>' + K.esc(l.t) + '</span><span>' + K.money(l.c) + '</span></div>'; }).join('') + promoRows(q) +
       (noFee(q) ? '<div class="row total"><span>Total</span><span>' + K.money(q.total) + '</span></div>' : card
         ? '<div class="row total"><span>Total (card)</span><span>' + K.money(q.cardTotal) + '</span></div><div class="row sub"><span>Includes the ' + q.fee + '% card fee. Choose EFT to save ' + K.money(q.cardTotal - q.total) + '.</span></div>'
         : '<div class="row"><span>Card price</span><span><s class="dual-card">' + K.money(q.cardTotal) + '</s></span></div><div class="row eft-row"><span>EFT discount</span><span>-' + K.money(q.cardTotal - q.total) + '</span></div><div class="row total"><span>Total with EFT</span><span>' + K.money(q.total) + '</span></div>') +
@@ -495,7 +509,7 @@
       '</div><p class="muted" style="font-size:.8rem;margin:0">Dinokeng Game Reserve charges its own entry fees, paid to the reserve. <a href="dinokeng.html#fees" target="_blank">Dinokeng fees</a></p></div>';
     // the same summary for phones (where the side panel is hidden) and on the "Check your booking" step
     var gTxt = K.peopleText(b.g), ev = eveNote(b.ci, b.co);
-    var bdRows = q.lines.map(function (l) { return '<div class="row"><span>' + l.t + '</span><span>' + (l.free ? 'Free' : K.money(card ? l.c : l.v)) + '</span></div>'; }).join('') + q.exLines.map(function (l) { return '<div class="row"><span>' + K.esc(l.t) + '</span><span>' + K.money(card ? l.c : l.v) + '</span></div>'; }).join('');
+    var bdRows = q.lines.map(function (l) { return '<div class="row"><span>' + l.t + '</span><span>' + (l.free ? 'Free' : K.money(card ? l.c : l.v)) + '</span></div>'; }).join('') + q.exLines.map(function (l) { return '<div class="row"><span>' + K.esc(l.t) + '</span><span>' + K.money(card ? l.c : l.v) + '</span></div>'; }).join('') + promoRows(q);
     var whenFull = q.fullDue <= today() ? ' as soon as you can' : ' by ' + nice(q.fullDue, { day: 'numeric', month: 'long' }), balBy = nice(q.balanceDue, { day: 'numeric', month: 'long' });
     var dueTxt = cu.all ? 'Your credit covers this booking in full, so there is nothing more to pay.'
       : q.payFull ? 'You arrive soon, so please pay the ' + (cu.cr ? 'remaining ' : 'full ') + K.money(cu.rest) + whenFull + '.'
@@ -510,7 +524,7 @@
     var cs = $('[data-check-sum]', modal);
     if (cs) cs.innerHTML = '<dl><div><dt>Stand</dt><dd>' + K.esc(b.stand.name) + ' <small>' + b.stand.areaInfo.short + '</small></dd></div><div><dt>Arrive</dt><dd>' + nice(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }) + '</dd></div><div><dt>Depart</dt><dd>' + nice(b.co, { weekday: 'long', day: 'numeric', month: 'long' }) + ' <small>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + '</small></dd></div><div><dt>Guests</dt><dd>' + gTxt + '</dd></div>' +
       '<div><dt>Price</dt><dd>' + q.lines.map(function (l) { return '<small>' + l.t + ' · ' + (l.free ? 'free' : K.money(card ? l.c : l.v)) + '</small>'; }).join('') + (ev ? '<small>' + ev + '</small>' : '') + '</dd></div>' +
-      (q.exLines.length ? '<div><dt>Extras</dt><dd>' + q.exLines.map(function (l) { return '<small>' + K.esc(l.t) + ' · ' + K.money(card ? l.c : l.v) + '</small>'; }).join('') + '</dd></div>' : '') + '<div class="tot"><dt>Total</dt><dd>' + K.money(tot) + '</dd></div>' + (cu.cr ? '<div><dt>Credit</dt><dd>-' + K.money(cu.cr) + ' <small>' + K.esc(credit.code) + '</small></dd></div><div class="tot"><dt>Still to pay</dt><dd>' + K.money(cu.rest) + '</dd></div>' : '') + '</dl>' +
+      (q.exLines.length ? '<div><dt>Extras</dt><dd>' + q.exLines.map(function (l) { return '<small>' + K.esc(l.t) + ' · ' + K.money(card ? l.c : l.v) + '</small>'; }).join('') + '</dd></div>' : '') + (q.promos.length ? '<div><dt>Promotion</dt><dd>' + q.promos.map(function (x) { return '<small>' + K.esc(x.name) + (x.amt ? ' · -' + K.money(x.amt) : '') + '</small>'; }).join('') + q.freeItems.map(function (f) { return '<small>' + f.qty + ' × ' + K.esc(f.label) + ' free</small>'; }).join('') + '</dd></div>' : '') + '<div class="tot"><dt>Total</dt><dd>' + K.money(tot) + '</dd></div>' + (cu.cr ? '<div><dt>Credit</dt><dd>-' + K.money(cu.cr) + ' <small>' + K.esc(credit.code) + '</small></dd></div><div class="tot"><dt>Still to pay</dt><dd>' + K.money(cu.rest) + '</dd></div>' : '') + '</dl>' +
       (b.over ? '<p class="size-warn"><b>' + b.over.people + ' people on a stand that usually takes ' + b.over.usual + '.</b> You can send your booking: we check that everyone will fit and confirm with you, or suggest a bigger stand.</p>' : '') +
       '<p>' + dueTxt + '</p><button type="button" class="link-btn" data-edit-stay>Change something</button>';
     var eb = cs && $('[data-edit-stay]', cs); if (eb) eb.onclick = function () { closeCheckout(); };
@@ -524,6 +538,36 @@
     });
     $('[data-pay-amount]', modal).textContent = K.money(amt[pay]);
     return q;
+  }
+  function driveList() { return DR && booking ? K.driveSlots(DR, iso(booking.ci), iso(booking.co)) : []; }
+  function drivesPicked() { return driveList().filter(function (s) { return gdPick[s.day + '|' + s.tid]; }).map(function (s) { return { day: s.day, tid: s.tid, label: s.label, at: s.at, people: gdPick[s.day + '|' + s.tid] }; }); }
+  function drawDrives() {
+    var box = $('[data-drives]', modal); if (!box) return;
+    if (!DR) { box.innerHTML = ''; return; }
+    var slots = driveList(), head = '<div class="bk-drives"><h3>Add a guided game drive? <span class="opt">(optional)</span></h3>';
+    if (!slots.length) { var nx = K.driveNext(DR, iso(today())); box.innerHTML = head + '<p class="muted small-note">There is no guided game drive on your dates' + (nx ? ': our guide is next out on ' + nice(parse(nx), LONG) : '') + '. You can still explore the reserve yourself with a self-drive permit.</p></div>'; return; }
+    box.innerHTML = head + '<p class="muted small-note">Our guide takes you through the reserve in the open game drive vehicle. ' + K.money(K.drivePrice(P, 3) / 3) + ' per person for 3 or more, ' + K.money(K.drivePrice(P, 2) / 2) + ' each for 2, ' + K.money(K.drivePrice(P, 1)) + ' for 1. Children over ' + (DR.minAge || 5) + ' are welcome. It goes on this quotation.</p>' +
+      slots.map(function (s) {
+        var k = s.day + '|' + s.tid, n = gdPick[k] || 0;
+        return '<div class="addon shop-row gd-row' + (n ? ' on' : '') + '"><img src="assets/img/photos/game-drive-vehicle.jpg" alt="" loading="lazy"><div class="ad-txt"><b>' + nice(parse(s.day), LONG) + ' · ' + K.esc(s.label) + ' ' + K.esc(s.at) + '</b><small>' + (s.left ? s.left + ' seat' + (s.left === 1 ? '' : 's') + ' left' : 'Fully booked') + '</small>' + (n ? '<small class="shop-sum">' + n + (n === 1 ? ' person' : ' people') + ' = <b>' + K.money(K.drivePrice(P, n)) + '</b></small>' : '') + '</div>' +
+          '<div class="sb-guests"><button type="button" data-gdm="' + k + '" aria-label="One person less on this drive"' + (n ? '' : ' disabled') + '>&minus;</button><output>' + n + '</output><button type="button" data-gdp="' + k + '" aria-label="One more person on this drive"' + (n >= s.left ? ' disabled' : '') + '>+</button></div></div>';
+      }).join('') + '</div>';
+    box.onclick = function (e) {
+      var b = e.target.closest('[data-gdp],[data-gdm]'); if (!b || b.disabled) return;
+      var k = b.dataset.gdp || b.dataset.gdm, s = driveList().filter(function (x) { return x.day + '|' + x.tid === k; })[0]; if (!s) return;
+      var n = Math.max(0, Math.min(s.left, (gdPick[k] || 0) + (b.dataset.gdp ? 1 : -1))); if (n) gdPick[k] = n; else delete gdPick[k];
+      extras.__drives = drivesPicked(); drawDrives(); renderSide();
+    };
+  }
+  // a promo code typed on "Check your booking" (only shown when a promotion needs one)
+  function applyPromo() {
+    var inp = $('[name=promo]', modal), msg = $('[data-promo-msg]', modal), code = inp ? inp.value.trim() : ''; extras.__code = code;
+    var q = renderSide(), hit = PROMOS.filter(function (x) { return x.code && String(x.code).toUpperCase().replace(/[^A-Z0-9]/g, '') === code.toUpperCase().replace(/[^A-Z0-9]/g, ''); })[0];
+    if (!msg) return;
+    if (!code) { msg.className = 'bk-credit-msg'; msg.innerHTML = ''; return; }
+    var on = hit && q.promos.some(function (x) { return x.id === hit.id; });
+    msg.className = 'bk-credit-msg ' + (on ? 'ok' : 'bad');
+    msg.innerHTML = '<svg><use href="#' + (on ? 'i-check' : 'i-info') + '"/></svg><span>' + (on ? '<b>' + K.esc(hit.name) + '</b> is on your booking.' : hit ? 'That code is right, but this booking does not meet its conditions' + (hit.blurb ? ': ' + K.esc(hit.blurb) : '.') : 'We do not know the code <b>' + K.esc(code.toUpperCase()) + '</b>. Please check it.') + '</span>';
   }
   function renderExtras() {
     var box = $('[data-extras]', modal); if (!box) return;   // camp shop and porta potty, on the "Check your booking" step, so it is all on one quotation
@@ -541,6 +585,7 @@
     });
     $$('[data-x]', box).forEach(function (c) { c.onchange = function () { extras[c.dataset.x] = c.checked ? 1 : 0; renderSide(); }; });
     K.shopPicker($('[data-shop]', modal), SHOP, shopQty, renderSide);
+    drawDrives();
   }
   // "Anything we should know?" sits after the camp shop on the "Check your booking" step,
   // because guests write things like "one bag of ice per day" about what they just ordered
@@ -609,6 +654,8 @@
       var saved = JSON.parse(localStorage.getItem('kyleu-web-bookings') || '[]'), now = new Date();
       saved.push({ ref: ref, created: iso(now) + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'), stand: booking.stand.id, ci: iso(booking.ci), co: iso(booking.co),
         adults: booking.g.adults, pens: booking.g.pens, kids: booking.g.kids, extras: {}, first: f('first'), last: f('last'), email: f('email'), phone: f('phone'), eta: '', notes: f('notes'), key: bkey, overCap: booking.over || undefined,
+        drives: (extras.__drives || []).filter(function (x) { return x.people > 0; }).map(function (x) { return { day: x.day, tid: x.tid, label: x.label, at: x.at, people: x.people, amt: K.drivePrice(P, x.people) }; }),
+        promos: q.promos.map(function (x) { return { id: x.id, name: x.name, amt: x.amt }; }), freeItems: q.freeItems,
         vehicles: cv.count, vehTbc: !cv.count, cars: cv.cars,
         shop: SHOP.filter(function (it) { return shopQty[it.label]; }).map(function (it) { return { label: it.label, qty: shopQty[it.label], each: it.each }; })
           .concat(extras.pp && booking.stand.area === 'self-sufficient' ? [(function () { var n = nightsOf(booking.ci, booking.co).length; return { label: 'Porta potty hire, cleaning included (' + n + ' night' + (n === 1 ? '' : 's') + ')', qty: 1, each: n * P.num('Self-sufficient', 'Porta potty hire per night', 100) }; })()] : []),
@@ -675,10 +722,13 @@
     if ((isCard && q.fee) || Math.round(stayL.reduce(function (x, l) { return x + l.amt; }, 0)) !== Math.round(q.stay)) stayL = q.lines.map(function (l) { return { t: booking.stand.name + ' · ' + l.t, amt: isCard ? l.c : l.v, free: !!l.free, tag: 'stay' }; });
     var lines = stayL.concat(q.exLines.map(function (l) {
       var amt = isCard ? l.c : l.v, m = l.t.match(/^(\d+) × (.+)$/), pp = l.t.match(/^Porta potty · (\d+) night/);
+      if (l.drive) return { t: l.t, q: l.drive.people, u: Math.round(amt / l.drive.people), amt: amt, tag: 'drive' };
       if (m) return { t: m[2], q: +m[1], u: Math.round(amt / +m[1]), amt: amt, tag: 'shop' };
       if (pp) return { t: 'Porta potty hire, cleaning included (per night)', q: +pp[1], u: Math.round(amt / +pp[1]), amt: amt, tag: 'extra' };
       return { t: l.t, amt: amt, tag: l.shop ? 'shop' : 'extra' };
     }));
+    q.promos.forEach(function (x) { if (x.amt) lines.push({ t: 'Promotion: ' + x.name, amt: -x.amt, tag: 'promo' }); });
+    q.freeItems.forEach(function (f) { lines.push({ t: f.label + ' (free: ' + f.name + ')', q: f.qty, amt: 0, free: true, tag: 'promo' }); });
     var isQuote = !paid;
     return { id: K.docId ? K.docId() : '', kind: isQuote ? 'Quote' : 'Invoice', no: K.takeNo ? K.takeNo(isQuote ? 'Quote' : 'Invoice', ref) : K.invoiceNo(ref, 'Invoice', 1), date: iso(t), ref: ref, validTo: isQuote ? iso(q.payFull ? q.fullDue : due) : '',
       guest: { name: (fv('first') + ' ' + fv('last')).trim(), email: fv('email'), phone: fv('phone') },
@@ -726,7 +776,7 @@
     if (ds) {
       if (state.ci && state.co) {
         n = nightsOf(state.ci, state.co).length; var ev = eveNote(state.ci, state.co);
-        ds.innerHTML = '<svg><use href="#i-check"/></svg><span>Arrival <b>' + nice(state.ci, LONG) + '</b>, departure <b>' + nice(state.co, LONG) + '</b>. That is <b>' + n + ' night' + (n > 1 ? 's' : '') + '</b>.' + (ev ? ' ' + ev : '') + (+state.ci === +today() ? ' <b>Arriving today?</b> Please WhatsApp us first on 060 458 4478, so we can get your stand ready.' : '') + '</span>'; ds.className = 'bw-sum ok';
+        ds.innerHTML = '<svg><use href="#i-check"/></svg><span>Arrival <b>' + nice(state.ci, LONG) + '</b>, departure <b>' + nice(state.co, LONG) + '</b>. That is <b>' + n + ' night' + (n > 1 ? 's' : '') + '</b>.' + (ev ? ' ' + ev : '') + (function () { var sl = DR ? K.driveSlots(DR, iso(state.ci), iso(state.co)).filter(function (s) { return s.left > 0; }) : []; if (!sl.length) return ''; var days = {}; sl.forEach(function (s) { (days[s.day] = days[s.day] || []).push(String(s.label).toLowerCase()); }); return ' <b>Guided game drives on your dates:</b> ' + Object.keys(days).map(function (d) { return nice(parse(d)) + ' (' + days[d].join(', ') + ')'; }).join('; ') + '. You can add one when you check your booking.'; })() + (+state.ci === +today() ? ' <b>Arriving today?</b> Please WhatsApp us first on 060 458 4478, so we can get your stand ready.' : '') + '</span>'; ds.className = 'bw-sum ok';
       }
       else { ds.innerHTML = '<svg><use href="#i-cal"/></svg><span>' + (state.ci ? 'Now choose your <b>departure</b> date.' : 'No dates chosen yet.') + '</span>'; ds.className = 'bw-sum'; }
     }
@@ -777,6 +827,10 @@
 
     Promise.all([K.stands(), K.prices(), K.settings().catch(function () { return null; })]).then(function (r) {
       STANDS = r[0]; P = r[1]; S = r[2]; buildExtras(); SHOP = K.shopItems(P);
+      PROMOS = K.promoList ? K.promoList() : []; DR = K.driveInfo ? K.driveInfo() : null;
+      // promotions running now are shown before the guest starts
+      var shown = K.promoShown ? K.promoShown(PROMOS, iso(today())) : [], bwp = $('.bw');
+      if (shown.length && bwp && !$('.bw-promos', bwp)) { var pb = document.createElement('div'); pb.className = 'bw-sum ok bw-promos'; pb.innerHTML = '<svg><use href="#i-gift"/></svg><span><b>' + (shown.length === 1 ? 'Special on now:' : 'Specials on now:') + '</b> ' + shown.map(function (x) { return '<b>' + K.esc(x.name) + '</b>' + (x.blurb ? ' (' + K.esc(x.blurb) + ')' : ''); }).join(' · ') + '. It comes off by itself when your booking qualifies.</span>'; bwp.insertBefore(pb, bwp.firstChild); }
       syncSearch(); setView(location.hash === '#map' ? 'map' : 'grid');
       var deep = /^#(map|stand=)/.test(location.hash);
       if (state.ci && state.co && (qs.get('in') || deep)) { reached = PICK; wGo(PICK); } else wGo(1);
@@ -829,6 +883,9 @@
     $$('[name=pay]', modal).forEach(function (r) { r.addEventListener('change', payChanged); });
     var cap = $('[data-credit-apply]', modal), cinp = $('[name=credit]', modal);
     if (cap) cap.addEventListener('click', applyCredit);
+    var pap = $('[data-promo-apply]', modal), ppi = $('[name=promo]', modal);
+    if (pap) pap.addEventListener('click', applyPromo);
+    if (ppi) ppi.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); applyPromo(); } });
     if (cinp) cinp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); applyCredit(); } });
     // opened from the link in a cancellation email (stay.html?credit=CODE): say what the credit is worth before they start
     var cq0 = qs.get('credit'), c0 = cq0 && K.creditFind ? K.creditFind(cq0) : null, bw0 = $('.bw');

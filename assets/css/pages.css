@@ -1511,3 +1511,14 @@ a.yt-lite { text-decoration: none; }
 .bw-times { display: flex; align-items: flex-start; gap: 8px; margin: -4px 0 14px; color: var(--ink-soft); font-size: .95rem; }
 .bw-times svg { width: 18px; height: 18px; flex: none; margin-top: 3px; color: var(--sun); }
 @media (max-width: 380px) { .tc-h { font-size: .74rem; } }
+
+/* ---------- promotions and game drives when booking ---------- */
+.badge.promo { background: var(--sun); color: #fff; max-width: 70%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.promo-row span:last-child { color: var(--ok); font-weight: 800; }
+.promo-row small { color: var(--ink-soft); font-weight: 500; }
+.bk-drives { margin: 6px 0 18px; }
+.bk-drives h3 { margin: 0 0 4px; font-size: 1.05rem; }
+.gd-row.on { border-color: var(--sun); }
+.gd-row .sb-guests button:disabled { opacity: .35; cursor: not-allowed; }
+.bw-promos { margin-bottom: 16px; }
+.bw-promos svg { color: var(--sun); }
