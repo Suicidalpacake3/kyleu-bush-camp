@@ -273,7 +273,7 @@
   }
   function bookingCard(v) {
     var st = stand(v.stand), bal = Math.max(0, v.total - v.paid), hold = holdOf(v);
-    var pct = P ? P.num('Booking rules', 'Deposit percentage', 50) : 50, dep = (v.invoice && v.invoice.deposit) || Math.round(v.total * pct / 100), inFull = !!(v.invoice && v.invoice.payFull), balDue = addD(v.ci, -balDays());
+    var pct = P ? P.num('Booking rules', 'Deposit percentage', 50) : 50, dep = (v.invoice && v.invoice.deposit) || Math.round(v.total * pct / 100), inFull = v.invoice ? !!v.invoice.payFull : nights(v.created || today(), v.ci) <= balDays() + depDays(), balDue = addD(v.ci, -balDays());
     var stt = v.status === 'cancelled' ? ['bad', 'Cancelled'] : v.status === 'in' ? ['ok', 'In camp now'] : paidFull(v) ? ['ok', v.finalised ? 'Paid in full · finalised' : 'Paid in full'] : v.onArrival ? ['ok', 'Confirmed · pay on arrival']
       : stayPaid(v) ? ['ok', 'Stay paid · ' + K.money(bal) + ' owing for the camp shop'] : v.paid >= dep ? ['ok', 'Deposit paid · your stand is secured'] : v.paid ? ['warn', 'Part paid · ' + K.money(bal) + ' owing'] : v.noRelease ? ['ok', 'Reserved for you · not paid yet'] : ['warn', 'Waiting for payment'];
     // once something is paid: what is still owing, and by when

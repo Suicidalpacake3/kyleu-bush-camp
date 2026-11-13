@@ -386,6 +386,7 @@
   // ---------- wording and homepage details changed in the admin ----------
   (function () {
     var W = webContent(), ws = W.settings || {};
+    var wsn = {}; Object.keys(ws).forEach(function (k) { wsn[norm(k)] = ws[k]; });   // the same settings, found by name however the name was typed
     applyEdits(document);
     if (W.text && window.MutationObserver) new MutationObserver(function (ms) { ms.forEach(function (m) { Array.prototype.forEach.call(m.addedNodes, function (n) { if (n.nodeType === 1) applyEdits(n); }); }); }).observe(document.documentElement, { childList: true, subtree: true });
     // the home page's header photo picked in the admin (one of Kyleu's own, or an uploaded one)
@@ -393,8 +394,8 @@
     if (hs && hh && HERO[hh]) { hs.setAttribute('data-bg', HERO[hh][0]); hs.setAttribute('data-bg-m', HERO[hh][1]); hs.style.setProperty('--pos', HERO[hh][2]); hs.style.setProperty('--pos-m', HERO[hh][3]); }
     if (hs && hh === 'own') { var hd = [hs.getAttribute('data-bg'), hs.getAttribute('data-bg-m')]; hs.removeAttribute('data-bg-m'); hs.setAttribute('data-bg', ''); K.files.get('home-hero').then(function (b) { if (!b) { hs.style.backgroundImage = "url('" + (window.matchMedia('(max-aspect-ratio: 1/1)').matches ? hd[1] : hd[0]) + "')"; return; } hs.style.setProperty('--pos', 'center'); hs.style.setProperty('--pos-m', 'center'); hs.style.backgroundImage = "url('" + URL.createObjectURL(b) + "')"; hs.setAttribute('data-own', ''); }); }
     // numbers in the "at a glance" strip that come from the contact details
-    Array.prototype.forEach.call(document.querySelectorAll('[data-setting-count]'), function (el) { var v = ws[norm(el.getAttribute('data-setting-count'))]; if (v && !isNaN(parseFloat(v))) { el.setAttribute('data-count', parseFloat(v)); el.textContent = parseFloat(v); } });
-    Array.prototype.forEach.call(document.querySelectorAll('[data-setting-now]'), function (el) { var v = ws[norm(el.getAttribute('data-setting-now'))]; if (v) el.textContent = v; });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-setting-count]'), function (el) { var v = wsn[norm(el.getAttribute('data-setting-count'))]; if (v && !isNaN(parseFloat(v))) { el.setAttribute('data-count', parseFloat(v)); el.textContent = parseFloat(v); } });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-setting-now]'), function (el) { var v = wsn[norm(el.getAttribute('data-setting-now'))]; if (v) el.textContent = v; });
   })();
 
   // ---------- auto-bind data-* attributes ----------

@@ -345,7 +345,7 @@
   function clean(s) { return String(s == null ? '' : s).replace(/[   ]/g, ' ').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—−]/g, '-').replace(/•/g, '*').replace(/[^\x09\x0a\x0d\x20-\xff]/g, ''); }
   var C = { bark: [42, 27, 18], sun: [232, 115, 28], soft: [110, 95, 80], line: [230, 217, 195], sand: [248, 241, 229], ok: [63, 125, 58], white: [255, 255, 255] };
   function when(r) { return nice(r.at.slice(0, 10)) + ' at ' + r.at.slice(11, 16); }
-  function viaText(r) { return /reception/i.test(r.via) ? 'At Kyleu reception' + (r.by ? ', with ' + r.by : '') : /link/i.test(r.via) ? 'Online, with the signing link sent to the guest' : 'Online, while finalising the booking (kyleu.co.za)'; }
+  function viaText(r) { return r.paper ? 'On a paper form at Kyleu reception' + (r.by ? ', with ' + r.by : '') : /reception/i.test(r.via) ? 'At Kyleu reception' + (r.by ? ', with ' + r.by : '') : /link/i.test(r.via) ? 'Online, with the signing link sent to the guest' : 'Online, while finalising the booking (kyleu.co.za)'; }
   function draw(doc, r, L0) {
     var L = 14, R = 196, W = R - L, y = 0, BIZ = K.BIZ || { name: 'Kyleu Bush Camp', web: 'www.kyleu.co.za', reg: '', addr: '' };
     var font = function (size, bold, c) { doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(size); c = c || C.bark; doc.setTextColor(c[0], c[1], c[2]); };
@@ -385,13 +385,14 @@
     y += 5; need(bh); doc.setDrawColor(C.line[0], C.line[1], C.line[2]); doc.setLineWidth(.4); doc.roundedRect(L, y, W, bh, 2, 2, 'S');
     font(7.3, true, C.soft); tx('DECLARATION', L + 4, y + 6); font(9, true); tx(dl, L + 4, y + 11.5);
     var sy = y + 13 + dl.length * 4.3;
-    if (r.sig) try { doc.addImage(r.sig, 'PNG', L + 4, sy, Math.min(80, sh * (r.sigW / r.sigH)), sh); } catch (e) {}
+    if (r.paper) { font(9.5, true, C.soft); tx('Signed on the paper form', L + 4, sy + sh / 2 + 1); }   // a paper form has no signature picture: the scan of the form is kept with the record
+    else if (r.sig) try { doc.addImage(r.sig, 'PNG', L + 4, sy, Math.min(80, sh * (r.sigW / r.sigH)), sh); } catch (e) {}
     doc.setDrawColor(C.soft[0], C.soft[1], C.soft[2]); doc.setLineWidth(.3); doc.line(L + 4, sy + sh + 1.5, L + 80, sy + sh + 1.5);
-    font(7.8, false, C.soft); tx('Signature of ' + r.name + (r.typed ? ' (typed)' : ''), L + 4, sy + sh + 5.5);
+    font(7.8, false, C.soft); tx('Signature of ' + r.name + (r.paper ? (r.scan ? ' (paper form, scan on file)' : ' (paper form, scan not uploaded yet)') : r.typed ? ' (typed)' : ''), L + 4, sy + sh + 5.5);
     var info = [['Signed', when(r)], ['How', viaText(r)], ['Form number', r.no], ['Wording reference', r.textV || '']];
     var iy = sy + 2; info.forEach(function (x) { font(7.8, false, C.soft); tx(x[0], 104, iy); font(8.4, true); var ls = doc.splitTextToSize(clean(x[1]), 62); tx(ls, 130, iy); iy += ls.length * 3.9 + .8; });
     y += bh + 4;
-    font(7.4, false, C.soft); var el = doc.splitTextToSize('Signed electronically. The signature, the date and time, and the wording above were saved together when ' + r.name + ' signed. Kyleu Bush Camp keeps this form for its records and its insurer.', W); need(el.length * 3.4); tx(el, L, y);
+    font(7.4, false, C.soft); var el = doc.splitTextToSize(r.paper ? 'Signed by hand on a paper form at Kyleu reception. ' + (r.scan ? 'A scan of the signed form is kept with this record.' : 'The scan of the signed form has not been uploaded yet: the paper form is kept at reception.') + ' Kyleu Bush Camp keeps this form for its records and its insurer.' : 'Signed electronically. The signature, the date and time, and the wording above were saved together when ' + r.name + ' signed. Kyleu Bush Camp keeps this form for its records and its insurer.', W); need(el.length * 3.4); tx(el, L, y);
   }
   function foot(doc, from, label) {
     var n = doc.getNumberOfPages(), BIZ = K.BIZ || { name: 'Kyleu Bush Camp', web: 'www.kyleu.co.za', reg: '' };

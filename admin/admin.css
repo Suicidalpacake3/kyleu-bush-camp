@@ -1730,3 +1730,72 @@ button.site-tick:focus-visible { outline: 3px solid #f4b740; outline-offset: 2px
 .paper-row-i { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line-2); }
 .paper-row-i:last-child { border-bottom: 0; }
 .paper-row-i > .ic { flex: none; width: 18px; height: 18px; color: var(--warn); }
+
+/* ---------- New booking, step by step (the bar at the top, one step shown at a time) ---------- */
+.nb-bar { list-style: none; display: flex; gap: 4px; margin: 0 0 14px; padding: 0; }
+.nb-bar li { flex: 1; min-width: 0; }
+.nb-bar button { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 4px; border: 0; border-bottom: 3px solid var(--line); background: none; padding: 2px 2px 8px; font: inherit; font-size: .74rem; font-weight: 800; color: var(--muted); cursor: pointer; }
+.nb-bar button i { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--line-2); color: var(--ink-2); font-style: normal; font-size: .78rem; }
+.nb-bar button i .ic { width: 13px; height: 13px; }
+.nb-bar button.on { color: var(--ink); border-bottom-color: var(--sun); }
+.nb-bar button.on i { background: var(--sun); color: #fff; }
+.nb-bar button.done { color: var(--ok); border-bottom-color: var(--ok); }
+.nb-bar button.done i { background: var(--ok-bg); color: var(--ok); }
+.nb-bar button:focus-visible { outline: 3px solid #f4b740; outline-offset: 2px; border-radius: 6px; }
+.nb-h { margin: 0 0 12px; font: 700 1.12rem var(--display); letter-spacing: 0; text-transform: none; color: var(--ink); display: flex; flex-direction: column; gap: 2px; }
+.nb-h span { font: 800 .7rem var(--font); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.m-card.nb .m-body { min-height: min(430px, 58vh); }
+.nb-foot [data-close] { margin-right: auto; }
+.nb-foot .btn .ic { width: 16px; height: 16px; }
+.nb-pay { margin-bottom: 10px; }
+.nb-sub { margin: -2px 0 6px 8px; padding-bottom: 4px; }
+.nb-sub .hint { margin: 6px 0; }
+.nb-sub .check { margin: 8px 0 4px; }
+.nb-sub .seg { margin: 6px 0 4px; }
+.nb-sub .muted .ic { width: 14px; height: 14px; vertical-align: -2px; }
+.nb-ticks .check { margin: 9px 0; }
+.nb-ticks small { display: block; }
+.nb-codes { margin: 0 0 6px 27px; padding: 2px 0 2px 12px; border-left: 3px solid var(--line); }
+.nb-codes p { margin: 0 0 8px; }
+.nb-code-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.nb-code-row .dgr-code { flex: 1 1 150px; width: auto; }
+.nb-code-row .dgr-code::placeholder { text-transform: none; letter-spacing: 0; font-weight: 600; }
+.nb-sum { row-gap: 10px; margin-bottom: 12px; }
+.nb-sum dd { line-height: 1.5; }
+.nb-sum dd .ic { width: 15px; height: 15px; vertical-align: -3px; }
+@media (max-width: 480px) {
+  .nb-bar button { font-size: .66rem; }
+  .nb-sub, .nb-codes { margin-left: 0; }
+}
+
+/* ---------- "Where this booking is": the steps of a booking, at the top of its Overview ---------- */
+.bk-prog { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; padding: 0; }
+.bp-s { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: #fff; border-radius: 30px; padding: 4px 11px 4px 5px; font: inherit; font-size: .78rem; font-weight: 800; color: var(--ink-2); cursor: pointer; white-space: nowrap; }
+.bp-s i { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; font-style: normal; font-size: .7rem; background: var(--line-2); color: var(--ink-2); }
+.bp-s i .ic { width: 12px; height: 12px; }
+.bp-s.done { color: var(--ok); border-color: #cfe6cb; background: #f4faf2; }
+.bp-s.done i { background: var(--ok); color: #fff; }
+.bp-s.part { color: var(--info); border-color: #c9dff0; background: #f3f8fc; }
+.bp-s.part i { background: linear-gradient(90deg, var(--info) 50%, var(--info-bg) 50%); color: transparent; }
+.bp-s.todo { color: var(--warn); border-color: #f0d9ad; background: #fffaf0; }
+.bp-s.todo i { background: var(--warn-bg); color: var(--warn); box-shadow: inset 0 0 0 2px currentColor; }
+.bp-s.todo.later, .bp-s.na { color: var(--muted); border-color: var(--line); background: #fff; }
+.bp-s.todo.later i, .bp-s.na i { background: var(--line-2); color: var(--muted); box-shadow: none; }
+.bp-s.na span { text-decoration: line-through; }
+.bp-s.on { box-shadow: 0 0 0 2px var(--ink); }
+.bp-s:focus-visible { outline: 3px solid #f4b740; outline-offset: 2px; }
+.bp-d { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--line-2); font-size: .88rem; line-height: 1.5; }
+.bp-d p { margin: 0; }
+.bp-d.done { background: var(--ok-bg); }
+.bp-d.part { background: var(--info-bg); }
+.bp-d.todo { background: var(--warn-bg); }
+.bp-d.todo.later, .bp-d.na { background: var(--line-2); }
+.bp-dl { display: block; font-size: .7rem; font-weight: 900; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-2); margin-bottom: 2px; }
+.bp-d .row-btns { margin-top: 8px; }
+
+/* "Keep the stand: do not release it" on an unpaid booking, and the tag in the bookings list */
+.keep-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0 0 10px; }
+.keep-row .switch { position: relative; }
+.keep-row small { font-size: .8rem; }
+.tag-kept { display: inline-flex; align-items: center; gap: 3px; font-size: .66rem; font-weight: 900; text-transform: uppercase; letter-spacing: .05em; background: var(--info-bg); color: var(--info); padding: 1px 6px; border-radius: 5px; vertical-align: 2px; }
+.tag-kept .ic { width: 10px; height: 10px; }
