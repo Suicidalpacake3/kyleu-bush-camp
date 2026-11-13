@@ -1403,7 +1403,7 @@
 
   /* ---------- credits: money kept from a cancelled booking (no refunds), used on the guest's next stay ----------
      DB.credits[i] = { id, code, email, name, amt, used, from, d, until, note, void }. The website reads the same list:
-     the guest types the code under "Have a credit?" (or opens stay.html?credit=CODE), with the email it was given to. */
+     the guest types the code under "Have a Kyleu code?" (or opens stay.html?credit=CODE), with the email it was given to. */
   function randOf(v) { var n = parseFloat(String(v).replace(/[^\d.]/g, '')); return isNaN(n) ? NaN : Math.round(n * 100) / 100; }
   function fdy(s) { return fd(s, { day: 'numeric', month: 'short', year: 'numeric' }); }
   // the code a guest types: "KC-" and 6 characters (no 0, O, 1, I or L: they look alike). With a seed it is the same every time (demo data).
@@ -1460,7 +1460,7 @@
         'Your credit code: ' + c.code + '\n' +
         'Credit: ' + money(c.amt) + (c.used ? ' (' + money(creditRest(c)) + ' still to use)' : '') + '\n' +
         (c.until ? 'Use by: ' + fd(c.until, { day: 'numeric', month: 'long', year: 'numeric' }) : 'Your credit does not run out: use it whenever it suits you.') + '\n\n' +
-        'Book your next stay on our website and type this code under \'Have a credit?\' when you check your booking, or open this link:\n' + creditLink(c) + '\n\n' +
+        'Book your next stay on our website and type this code under \'Have a Kyleu code?\' when you check your booking, or open this link:\n' + creditLink(c) + '\n\n' +
         'You can also tell us the code when you book by WhatsApp or phone.\n\n' +
         'The credit must be used with the same email address as ' + (c.from ? 'the cancelled booking' : 'this email') + ': ' + c.email + '\n\n' +
         'The Kyleu team' };

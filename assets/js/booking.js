@@ -431,18 +431,26 @@
   function creditMsg(html, cls) { var m = $('[data-credit-msg]', modal); if (m) { m.className = 'bk-credit-msg' + (cls ? ' ' + cls : ''); m.innerHTML = html; } }
   function applyCredit() {
     var inp = $('[name=credit]', modal), code = inp ? inp.value.trim() : '', bad = function (t) { creditMsg('<svg><use href="#i-info"/></svg><span>' + t + '</span>', 'bad'); };
-    credit = null;
+    credit = null; extras.__code = '';
     if (!code) creditMsg('');
     else {
       var c = K.creditFind(code), email = (($('[name=email]', modal) || {}).value || '').trim().toLowerCase(), wa = ' <a href="https://wa.me/27604584478" target="_blank" rel="noopener">WhatsApp us</a> and we will help.';
-      if (!c) bad('We can\'t find the credit code <b>' + K.esc(code.toUpperCase()) + '</b>. Check it in your cancellation email.' + wa);
-      else if (c.state === 'void') bad('This credit is no longer valid.' + wa);
-      else if (c.state === 'expired') bad('This credit could be used until ' + nice(parse(c.until), { day: 'numeric', month: 'long', year: 'numeric' }) + '.' + wa);
-      else if (c.state === 'used') bad('This credit has already been used up.');
-      else if (c.email && c.email !== email) bad('This credit belongs to another email address. Book with the email address of the cancelled booking (press <b>Back</b> to change it).' + wa);
+      if (!c) extras.__code = code;   // not a code Kyleu gave this guest: it may be a promotion's code (codeNote says which)
+      else if (c.state === 'void') bad('This code is no longer valid.' + wa);
+      else if (c.state === 'expired') bad('This code could be used until ' + nice(parse(c.until), { day: 'numeric', month: 'long', year: 'numeric' }) + '.' + wa);
+      else if (c.state === 'used') bad('This code has already been used up.');
+      else if (c.email && c.email !== email) bad('This code belongs to another email address. Book with the email address it was sent to (press <b>Back</b> to change it).' + wa);
       else credit = c;
     }
     if (booking) renderSide();
+  }
+  // what a typed code that is not a credit turned out to be: a promotion's code that applies, one that does not, or unknown
+  function codeNote(q) {
+    var code = extras.__code; if (!code || credit) return;
+    var k = function (s) { return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }, hit = PROMOS.filter(function (x) { return x.code && k(x.code) === k(code); })[0], on = hit && q.promos.some(function (x) { return x.id === hit.id; });
+    creditMsg('<svg><use href="#' + (on ? 'i-check' : 'i-info') + '"/></svg><span>' + (on ? '<b>' + K.esc(hit.name) + '</b> is on your booking. <button type="button" class="link-btn" data-credit-clear>Remove</button>'
+      : hit ? 'That code is right, but this booking does not meet its conditions' + (hit.blurb ? ': ' + K.esc(hit.blurb) : '.')
+      : 'We do not know the code <b>' + K.esc(code.toUpperCase()) + '</b>. Please check it in the message we sent you, or <a href="https://wa.me/27604584478" target="_blank" rel="noopener">WhatsApp us</a>.') + '</span>', on ? 'ok' : 'bad');
   }
   // how much of the credit this booking uses, and what is then still due first
   function creditUse(q, card) {
@@ -501,30 +509,31 @@
       (noFee(q) ? '<div class="row total"><span>Total</span><span>' + K.money(q.total) + '</span></div>' : card
         ? '<div class="row total"><span>Total (card)</span><span>' + K.money(q.cardTotal) + '</span></div><div class="row sub"><span>Includes the ' + q.fee + '% card fee. Choose EFT to save ' + K.money(q.cardTotal - q.total) + '.</span></div>'
         : '<div class="row"><span>Card price</span><span><s class="dual-card">' + K.money(q.cardTotal) + '</s></span></div><div class="row eft-row"><span>EFT discount</span><span>-' + K.money(q.cardTotal - q.total) + '</span></div><div class="row total"><span>Total with EFT</span><span>' + K.money(q.total) + '</span></div>') +
-      (cu.cr ? '<div class="row eft-row"><span>Credit ' + K.esc(credit.code) + '</span><span>-' + K.money(cu.cr) + '</span></div><div class="row total"><span>Still to pay</span><span>' + K.money(cu.rest) + '</span></div>' : '') +
-      (cu.all ? '<div class="row sub"><span>Your credit covers this booking. Nothing more to pay.</span></div>'
+      (cu.cr ? '<div class="row eft-row"><span>Kyleu code ' + K.esc(credit.code) + '</span><span>-' + K.money(cu.cr) + '</span></div><div class="row total"><span>Still to pay</span><span>' + K.money(cu.rest) + '</span></div>' : '') +
+      (cu.all ? '<div class="row sub"><span>Your Kyleu code covers this booking. Nothing more to pay.</span></div>'
         : q.payFull ? '<div class="row sub"><span>You arrive soon, so the ' + (cu.cr ? 'remaining ' + K.money(cu.rest) : 'full amount') + ' is due ' + (q.fullDue <= today() ? 'now' : 'by ' + nice(q.fullDue, { day: 'numeric', month: 'short' })) + '</span></div>'
-        : cu.secured ? '<div class="row sub"><span>Your credit covers the deposit</span></div><div class="row sub"><span>Balance due by ' + nice(q.balanceDue, { day: 'numeric', month: 'short' }) + '</span><span>' + K.money(cu.rest) + '</span></div>'
+        : cu.secured ? '<div class="row sub"><span>Your Kyleu code covers the deposit</span></div><div class="row sub"><span>Balance due by ' + nice(q.balanceDue, { day: 'numeric', month: 'short' }) + '</span><span>' + K.money(cu.rest) + '</span></div>'
         : '<div class="row sub"><span>' + (cu.cr ? 'Rest of the ' + q.depPct + '% deposit to secure' : q.depPct + '% deposit to secure') + '</span><span>' + K.money(cu.now) + '</span></div><div class="row sub"><span>Balance due by ' + nice(q.balanceDue, { day: 'numeric', month: 'short' }) + '</span><span>' + K.money(tot - dep) + '</span></div>') +
       '</div><p class="muted" style="font-size:.8rem;margin:0">Dinokeng Game Reserve charges its own entry fees, paid to the reserve. <a href="dinokeng.html#fees" target="_blank">Dinokeng fees</a></p></div>';
     // the same summary for phones (where the side panel is hidden) and on the "Check your booking" step
     var gTxt = K.peopleText(b.g), ev = eveNote(b.ci, b.co);
     var bdRows = q.lines.map(function (l) { return '<div class="row"><span>' + l.t + '</span><span>' + (l.free ? 'Free' : K.money(card ? l.c : l.v)) + '</span></div>'; }).join('') + q.exLines.map(function (l) { return '<div class="row"><span>' + K.esc(l.t) + '</span><span>' + K.money(card ? l.c : l.v) + '</span></div>'; }).join('') + promoRows(q);
     var whenFull = q.fullDue <= today() ? ' as soon as you can' : ' by ' + nice(q.fullDue, { day: 'numeric', month: 'long' }), balBy = nice(q.balanceDue, { day: 'numeric', month: 'long' });
-    var dueTxt = cu.all ? 'Your credit covers this booking in full, so there is nothing more to pay.'
+    var dueTxt = cu.all ? 'Your Kyleu code covers this booking in full, so there is nothing more to pay.'
       : q.payFull ? 'You arrive soon, so please pay the ' + (cu.cr ? 'remaining ' : 'full ') + K.money(cu.rest) + whenFull + '.'
-      : cu.secured ? 'Your credit covers the deposit, so your stand is secured. The balance of ' + K.money(cu.rest) + ' is due by ' + balBy + '.'
+      : cu.secured ? 'Your Kyleu code covers the deposit, so your stand is secured. The balance of ' + K.money(cu.rest) + ' is due by ' + balBy + '.'
       : cu.cr ? 'Pay the rest of the ' + q.depPct + '% deposit, ' + K.money(cu.now) + ', within ' + depDays() + ' days to secure your stand. The balance of ' + K.money(tot - dep) + ' is due by ' + balBy + '.'
       : 'Pay the ' + q.depPct + '% deposit of ' + K.money(dep) + ' within ' + depDays() + ' days to secure your stand. The balance of ' + K.money(tot - dep) + ' is due by ' + balBy + '.';
-    var crRow = cu.cr ? '<div class="row eft-row"><span>Credit ' + K.esc(credit.code) + '</span><span>-' + K.money(cu.cr) + '</span></div><div class="row total"><span>Still to pay</span><span>' + K.money(cu.rest) + '</span></div>' : '';
-    if (credit) creditMsg('<svg><use href="#i-check"/></svg><span><b>Credit ' + K.esc(credit.code) + ': ' + K.money(credit.left) + ' available.</b> ' + K.money(cu.cr) + ' comes off this booking' + (credit.left > cu.cr ? ', and ' + K.money(credit.left - cu.cr) + ' stays as credit for next time' : '') + '. <button type="button" class="link-btn" data-credit-clear>Remove</button></span>', 'ok');
+    var crRow = cu.cr ? '<div class="row eft-row"><span>Kyleu code ' + K.esc(credit.code) + '</span><span>-' + K.money(cu.cr) + '</span></div><div class="row total"><span>Still to pay</span><span>' + K.money(cu.rest) + '</span></div>' : '';
+    if (credit) creditMsg('<svg><use href="#i-check"/></svg><span><b>Kyleu code ' + K.esc(credit.code) + ': ' + K.money(credit.left) + ' available.</b> ' + K.money(cu.cr) + ' comes off this booking' + (credit.left > cu.cr ? ', and ' + K.money(credit.left - cu.cr) + ' stays on your code for next time' : '') + '. <button type="button" class="link-btn" data-credit-clear>Remove</button></span>', 'ok');
+    codeNote(q);
     var ccl = $('[data-credit-clear]', modal); if (ccl) ccl.onclick = function () { var ci0 = $('[name=credit]', modal); if (ci0) ci0.value = ''; applyCredit(); };
     var mini = $('[data-mini]', modal);
     if (mini) { var wasOpen = !!($('details', mini) || {}).open; mini.innerHTML = '<b>' + K.esc(b.stand.name) + '</b><span>' + nice(b.ci) + ' to ' + nice(b.co) + ' · ' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + '</span><span>' + gTxt + ' · <b>' + (cu.cr ? 'Still to pay ' + K.money(cu.rest) : 'Total ' + K.money(tot)) + '</b></span><details class="mini-bd"' + (wasOpen ? ' open' : '') + '><summary>See how the price is made up</summary><div class="breakdown">' + bdRows + '<div class="row total"><span>Total</span><span>' + K.money(tot) + '</span></div>' + crRow + '</div></details>'; }
     var cs = $('[data-check-sum]', modal);
     if (cs) cs.innerHTML = '<dl><div><dt>Stand</dt><dd>' + K.esc(b.stand.name) + ' <small>' + b.stand.areaInfo.short + '</small></dd></div><div><dt>Arrive</dt><dd>' + nice(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }) + '</dd></div><div><dt>Depart</dt><dd>' + nice(b.co, { weekday: 'long', day: 'numeric', month: 'long' }) + ' <small>' + q.nights + ' night' + (q.nights > 1 ? 's' : '') + '</small></dd></div><div><dt>Guests</dt><dd>' + gTxt + '</dd></div>' +
       '<div><dt>Price</dt><dd>' + q.lines.map(function (l) { return '<small>' + l.t + ' · ' + (l.free ? 'free' : K.money(card ? l.c : l.v)) + '</small>'; }).join('') + (ev ? '<small>' + ev + '</small>' : '') + '</dd></div>' +
-      (q.exLines.length ? '<div><dt>Extras</dt><dd>' + q.exLines.map(function (l) { return '<small>' + K.esc(l.t) + ' · ' + K.money(card ? l.c : l.v) + '</small>'; }).join('') + '</dd></div>' : '') + (q.promos.length ? '<div><dt>Promotion</dt><dd>' + q.promos.map(function (x) { return '<small>' + K.esc(x.name) + (x.amt ? ' · -' + K.money(x.amt) : '') + '</small>'; }).join('') + q.freeItems.map(function (f) { return '<small>' + f.qty + ' × ' + K.esc(f.label) + ' free</small>'; }).join('') + '</dd></div>' : '') + '<div class="tot"><dt>Total</dt><dd>' + K.money(tot) + '</dd></div>' + (cu.cr ? '<div><dt>Credit</dt><dd>-' + K.money(cu.cr) + ' <small>' + K.esc(credit.code) + '</small></dd></div><div class="tot"><dt>Still to pay</dt><dd>' + K.money(cu.rest) + '</dd></div>' : '') + '</dl>' +
+      (q.exLines.length ? '<div><dt>Extras</dt><dd>' + q.exLines.map(function (l) { return '<small>' + K.esc(l.t) + ' · ' + K.money(card ? l.c : l.v) + '</small>'; }).join('') + '</dd></div>' : '') + (q.promos.length ? '<div><dt>Promotion</dt><dd>' + q.promos.map(function (x) { return '<small>' + K.esc(x.name) + (x.amt ? ' · -' + K.money(x.amt) : '') + '</small>'; }).join('') + q.freeItems.map(function (f) { return '<small>' + f.qty + ' × ' + K.esc(f.label) + ' free</small>'; }).join('') + '</dd></div>' : '') + '<div class="tot"><dt>Total</dt><dd>' + K.money(tot) + '</dd></div>' + (cu.cr ? '<div><dt>Kyleu code</dt><dd>-' + K.money(cu.cr) + ' <small>' + K.esc(credit.code) + '</small></dd></div><div class="tot"><dt>Still to pay</dt><dd>' + K.money(cu.rest) + '</dd></div>' : '') + '</dl>' +
       (b.over ? '<p class="size-warn"><b>' + b.over.people + ' people on a stand that usually takes ' + b.over.usual + '.</b> You can send your booking: we check that everyone will fit and confirm with you, or suggest a bigger stand.</p>' : '') +
       '<p>' + dueTxt + '</p><button type="button" class="link-btn" data-edit-stay>Change something</button>';
     var eb = cs && $('[data-edit-stay]', cs); if (eb) eb.onclick = function () { closeCheckout(); };
@@ -648,7 +657,7 @@
     var paid = cr + (pay === 'full' ? q.cardTotal - cr : pay === 'deposit' || pay === 'eft' ? cu.now : 0), secured = paid >= cu.need && paid > 0;
     // guests see one word, "reservation", whether the document is still a quotation or already an invoice
     var inv = makeInvoice(ref, q, isCard, paid, cv), docW = 'reservation', DocW = 'Reservation';
-    if (cr) inv.note = 'Paid with credit ' + crCode + (credit.from ? ' from booking ' + credit.from : '') + ': ' + K.money(cr) + '.';
+    if (cr) inv.note = 'Paid with Kyleu code ' + crCode + ': ' + K.money(cr) + '.';
     // Demo only: keep a copy in THIS browser so it shows up in the admin mock-up (/admin). Never any card details.
     try {
       var saved = JSON.parse(localStorage.getItem('kyleu-web-bookings') || '[]'), now = new Date();
@@ -669,7 +678,7 @@
       '<p class="muted">' + K.esc(booking.stand.name) + ' · ' + nice(booking.ci, { weekday: 'long', day: 'numeric', month: 'long' }) + ' to ' + nice(booking.co, { weekday: 'long', day: 'numeric', month: 'long' }) + '</p>' +
       '<div class="ref">' + ref + '</div>' +
       (booking.over ? '<p class="muted bk-said">You booked for ' + booking.over.people + ' people on a stand that usually takes ' + booking.over.usual + '. We will check that everyone fits and confirm with you.</p>' : '') +
-      (cr ? '<p class="muted bk-said"><b>' + K.money(cr) + ' paid with your credit ' + K.esc(crCode) + '.</b>' + (paid > cr ? ' ' + K.money(paid - cr) + ' received' + (isCard ? '' : ' by instant EFT') + '.' : '') + (crLeft > 0 ? ' ' + K.money(crLeft) + ' stays as credit for your next stay.' : '') + '</p>'
+      (cr ? '<p class="muted bk-said"><b>' + K.money(cr) + ' paid with your Kyleu code ' + K.esc(crCode) + '.</b>' + (paid > cr ? ' ' + K.money(paid - cr) + ' received' + (isCard ? '' : ' by instant EFT') + '.' : '') + (crLeft > 0 ? ' ' + K.money(crLeft) + ' stays on your code for your next stay.' : '') + '</p>'
         : paid ? '<p class="muted" style="font-size:.9rem">' + K.money(paid) + ' received' + (isCard ? '' : ' by instant EFT') + '.</p>' : '') +
       (f('notes') ? '<p class="muted bk-said">Your note for us: "' + K.esc(f('notes')) + '"</p>' : '') +
       // the quotation (or invoice, once something is paid) is emailed straight away, then shown here too
@@ -679,9 +688,9 @@
         var st = K.invoiceState(inv);
         var fullWhen = q.fullDue <= today() ? 'as soon as you can' : 'by ' + nice(q.fullDue, { weekday: 'long', day: 'numeric', month: 'long' }), depWhen = nice(parse(inv.depositDue), { weekday: 'long', day: 'numeric', month: 'long' }), balWhen = nice(q.balanceDue, { day: 'numeric', month: 'long' });
         return '<div class="pay-now"><h3>Pay ' + K.money(st.now) + ' by EFT</h3><p>' +
-          (cr && q.payFull ? 'The rest after your credit, ' + fullWhen + ', because you arrive soon.'
-            : cr && secured ? 'Your credit covers the deposit, so your stand is secured. This is the balance, due by ' + balWhen + '.'
-            : cr ? 'This is the rest of the ' + q.depPct + '% deposit after your credit. Please pay it by ' + depWhen + ' to secure your stand. The balance of ' + K.money(inv.total - inv.deposit) + ' is due by ' + balWhen + '.'
+          (cr && q.payFull ? 'The rest after your Kyleu code, ' + fullWhen + ', because you arrive soon.'
+            : cr && secured ? 'Your Kyleu code covers the deposit, so your stand is secured. This is the balance, due by ' + balWhen + '.'
+            : cr ? 'This is the rest of the ' + q.depPct + '% deposit after your Kyleu code. Please pay it by ' + depWhen + ' to secure your stand. The balance of ' + K.money(inv.total - inv.deposit) + ' is due by ' + balWhen + '.'
             : q.payFull ? 'The full amount, ' + fullWhen + ', because you arrive soon.'
             : 'This is the ' + q.depPct + '% deposit. Your quotation is valid for ' + depDays() + ' days, until ' + depWhen + ', and your stand is held until then. The balance of ' + K.money(inv.total - inv.deposit) + ' is due by ' + balWhen + '.') + '</p>' +
           '<dl>' + K.bankRows().map(function (r) { return '<div><dt>' + r[0] + '</dt><dd>' + K.esc(r[1]) + '</dd></div>'; }).join('') + '<div class="ref-row"><dt>Payment reference</dt><dd>' + ref + '</dd></div></dl>' +
@@ -889,7 +898,7 @@
     if (cinp) cinp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); applyCredit(); } });
     // opened from the link in a cancellation email (stay.html?credit=CODE): say what the credit is worth before they start
     var cq0 = qs.get('credit'), c0 = cq0 && K.creditFind ? K.creditFind(cq0) : null, bw0 = $('.bw');
-    if (c0 && c0.state === 'open' && bw0) { var cb = document.createElement('div'); cb.className = 'bw-sum ok bw-credit'; cb.innerHTML = '<svg><use href="#i-check"/></svg><span>You have a credit of <b>' + K.money(c0.left) + '</b> (code <b>' + K.esc(c0.code) + '</b>). Choose your dates and stand, and it comes off the price when you check your booking.</span>'; bw0.insertBefore(cb, bw0.firstChild); }
+    if (c0 && c0.state === 'open' && bw0) { var cb = document.createElement('div'); cb.className = 'bw-sum ok bw-credit'; cb.innerHTML = '<svg><use href="#i-check"/></svg><span>Your Kyleu code <b>' + K.esc(c0.code) + '</b> is worth <b>' + K.money(c0.left) + '</b>. Choose your dates and stand, and it comes off the price when you check your booking.</span>'; bw0.insertBefore(cb, bw0.firstChild); }
 
     $('[data-pay-now]', modal).addEventListener('click', function () {
       var cur = $('.mc-step.on', modal); if (!validate(cur)) return;

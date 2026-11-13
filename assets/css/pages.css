@@ -1522,3 +1522,10 @@ a.yt-lite { text-decoration: none; }
 .gd-row .sb-guests button:disabled { opacity: .35; cursor: not-allowed; }
 .bw-promos { margin-bottom: 16px; }
 .bw-promos svg { color: var(--sun); }
+
+/* ---------- booking page: room between the notices and the buttons ---------- */
+.mg-callout + .mg-callus { margin-top: 14px; }
+.mg-callus + .mg-callout, .mg-callus + .mg-claim { margin-top: 18px; }
+.mg-callout + .mg-callout { margin-top: 14px; }
+.mg-callus + .bw-nav { margin-top: 22px; }
+[data-pane="2"] > h2 + .mg-booking { margin-top: 14px; }
