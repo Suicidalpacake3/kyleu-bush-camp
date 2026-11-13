@@ -1711,3 +1711,22 @@ button.site-tick:focus-visible { outline: 3px solid #f4b740; outline-offset: 2px
   .tbl.credits td.row-btn .btn { margin: 0 6px 6px 0; }
 }
 .timeline .dot.pm-credit { background: #8a5cb8; }
+
+/* a callout with a button at the end (thank-you, review link missing) */
+.callout.cbtn { align-items: center; flex-wrap: wrap; }
+.callout.cbtn > span { flex: 1; min-width: 200px; }
+.th-acts { align-items: center; margin-top: 12px; }
+@media (max-width: 560px) { .th-acts .btn { flex: 1 1 100%; justify-content: center; } }
+/* paper indemnity forms and their scans */
+.ind-rec.paper .ind-rec-i { background: var(--warn-bg); color: var(--warn); }
+.ind-rec.paper.has .ind-rec-i { background: var(--ok-bg); color: var(--ok); }
+.ind-rec { flex-wrap: wrap; }
+.ind-rec .file-btn, .paper-row-i .file-btn, .paper-grp-h .file-btn { flex: none; }
+.file-btn.busy { opacity: .55; pointer-events: none; }
+.scan-who { display: grid; gap: 2px; margin: 4px 0 10px; }
+.scan-view { margin: 4px 0 6px; }
+.paper-grp { border: 1px solid var(--line); border-radius: 12px; padding: 4px 12px; margin-top: 10px; background: #fff; }
+.paper-grp-h { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line-2); }
+.paper-row-i { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line-2); }
+.paper-row-i:last-child { border-bottom: 0; }
+.paper-row-i > .ic { flex: none; width: 18px; height: 18px; color: var(--warn); }

@@ -50,7 +50,7 @@
     if (db && db.bookings) {
       db.bookings.forEach(function (b) {
         if (b.status === 'cancelled') return;
-        if (b.status === 'pending' && released(dueOf(b.created, b.ci), (b.payments || []).reduce(function (a, p) { return a + (p.amt || 0); }, 0), !!(b.paidClaim || b.pop || claimed[rk(b.ref)]), popOf(b))) return;
+        if (b.status === 'pending' && !b.noRelease && !b.onArrival && released(dueOf(b.created, b.ci), (b.payments || []).reduce(function (a, p) { return a + (p.amt || 0); }, 0), !!(b.paidClaim || b.pop || claimed[rk(b.ref)]), popOf(b))) return;
         TAKEN.push({ stand: b.stand, from: b.ci, to: b.co });
       });
       (db.blocks || []).forEach(function (k) { TAKEN.push({ stand: k.stand, from: k.from, to: k.to }); });

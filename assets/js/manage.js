@@ -18,7 +18,11 @@
   var WEB = 'kyleu-web-bookings', ADMIN = 'kyleu-admin-demo-v1', AMEND = 'kyleu-web-amend';
   var STANDS = [], P = null, SHOP = [];
   var base = null, draft = null, openSec = '', carsEd = null, shopQty = null, step = 1;
-  var ETAS = ['Before 13:00', '13:00-15:00', '15:00-18:00', 'After 18:00', 'Not sure yet'], ETA_HINT = { '13:00-15:00': '13:00 to 15:00 (most guests arrive then)', '15:00-18:00': '15:00 to 18:00' };
+  var S = null, LATE = 18;   // the clock offers arrival hours from the earliest check-in to 18:00; later than that is "After 18:00"
+  // check-in and check-out times are set in the admin (Settings) and handed to the website with the other settings
+  function timeOf(k, d) { var v = S ? String(S.get(k, '') || '').trim() : ''; return /^\d{1,2}:\d{2}$/.test(v) ? (v.length < 5 ? '0' + v : v) : d; }
+  function firstHour() { var t = timeOf('Check-in time', '13:00').split(':'); return Math.min(LATE, +t[0] + (+t[1] > 0 ? 1 : 0)); }
+  function etaText(v) { return !v ? '' : /^\d{1,2}:\d{2}$/.test(v) ? 'Arriving around ' + v : /^(After|Before) /.test(v) ? 'Arriving ' + v.charAt(0).toLowerCase() + v.slice(1) : /not sure/i.test(v) ? 'Not sure yet when you arrive' : 'Arriving ' + v; }
 
   function read(k, d) { try { var v = JSON.parse(localStorage.getItem(k) || 'null'); return v == null ? d : v; } catch (e) { return d; } }
   function key(s) { return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
@@ -72,7 +76,7 @@
       eta: b.eta || '', shop: pre && pre.items ? clone(pre.items) : {}, total: b.total || 0, paid: (b.payments || []).reduce(function (a, p) { return a + p.amt; }, 0), method: b.method || 'eft',
       request: b.changeReq && !b.changeReq.done ? b.changeReq : null, invoice: (b.invoices || []).slice(-1)[0] || null,
       claim: b.paidClaim && !b.paidClaim.done ? b.paidClaim : null, popAt: ((b.pops || []).map(function (p) { return p.at || ''; }).filter(Boolean).sort()[0] || '').slice(0, 10), created: (b.created || '').slice(0, 10), key: b.key || '', finalised: b.finalised || null, onArrival: b.onArrival || null,
-      cancelReq: b.cancelReq && !b.cancelReq.done ? b.cancelReq : null, sizeCheck: b.sizeCheck && !b.sizeCheck.done ? b.sizeCheck : null,
+      noRelease: !!b.noRelease, cancelReq: b.cancelReq && !b.cancelReq.done ? b.cancelReq : null, sizeCheck: b.sizeCheck && !b.sizeCheck.done ? b.sizeCheck : null,
       note0: ((b.notes || []).filter(function (n) { return n.by === 'Guest' && n.at === b.created && !/^Changed on the website/.test(n.text || ''); })[0] || {}).text || '' };
   }
   function fromWeb(w) {
@@ -230,7 +234,7 @@
   function summary(id, v) {
     if (id === 'details') return esc(v.first + ' ' + v.last) + ' · ' + esc(v.email || 'no email') + ' · ' + esc(v.phone || 'no mobile');
     if (id === 'cars') return esc(openSec === 'cars' && !v.vehicles ? 'Fill in your vehicles below' : carsText(v));
-    if (id === 'eta') return v.eta ? 'Arriving around ' + esc(v.eta) : 'Not given yet';
+    if (id === 'eta') return v.eta ? esc(etaText(v.eta)) : 'Not given yet';
     if (id === 'shop') { var l = shopList(v.shop); return l.length ? esc(l.map(function (x) { return x.qty + ' × ' + x.label; }).join(', ')) + ' · ' + K.money(price(v, shopSum(v.shop))) : 'Nothing ordered yet'; }
     if (id === 'guests') return esc(peopleText(draftG())) + (draft.guests ? ' · <b class="mg-asked">' + (plan(draft.guests).mode === 'direct' ? 'Changed' : 'You are asking for a change') + '</b>' : '') + (locked(base) ? ' · <b class="mg-asked">Call or WhatsApp us to change</b>' : '');
     if (id === 'dates') return esc(nice(v.ci) + ' to ' + nice(v.co) + ' · ' + stand(v.stand).name) + (draft.request ? ' · <b class="mg-asked">You are asking for a change</b>' : base.request ? ' · <b class="mg-asked">Change asked for, waiting for Kyleu</b>' : '') + (locked(base) ? ' · <b class="mg-asked">Call or WhatsApp us to change</b>' : '');
@@ -258,7 +262,7 @@
   // an unpaid quotation holds the stand for 5 days. While Kyleu checks a payment the guest told us about, the stand is kept
   // longer, but the guest is not told for how long: only that we are checking and keeping it.
   function holdOf(v) {
-    if (v.paid || v.onArrival || !K.quoteHold) return { state: 'paid' };   // paid, or paying on arrival as arranged with Kyleu: the stand is not on hold
+    if (v.paid || v.onArrival || v.noRelease || !K.quoteHold) return { state: 'paid' };   // paid, or paying on arrival as arranged with Kyleu: the stand is not on hold
     var pops = []; try { pops = JSON.parse(localStorage.getItem('kyleu-web-pop') || '[]'); } catch (e) {}
     var mine = pops.filter(function (x) { return key(x.ref) === key(v.ref) && x.at; }).map(function (x) { return String(x.at).slice(0, 10); }).concat(v.popAt ? [v.popAt] : []).sort();
     var claimed = !!v.claim || !!mine.length;
@@ -271,7 +275,7 @@
     var st = stand(v.stand), bal = Math.max(0, v.total - v.paid), hold = holdOf(v);
     var pct = P ? P.num('Booking rules', 'Deposit percentage', 50) : 50, dep = (v.invoice && v.invoice.deposit) || Math.round(v.total * pct / 100), inFull = !!(v.invoice && v.invoice.payFull), balDue = addD(v.ci, -balDays());
     var stt = v.status === 'cancelled' ? ['bad', 'Cancelled'] : v.status === 'in' ? ['ok', 'In camp now'] : paidFull(v) ? ['ok', v.finalised ? 'Paid in full · finalised' : 'Paid in full'] : v.onArrival ? ['ok', 'Confirmed · pay on arrival']
-      : stayPaid(v) ? ['ok', 'Stay paid · ' + K.money(bal) + ' owing for the camp shop'] : v.paid >= dep ? ['ok', 'Deposit paid · your stand is secured'] : v.paid ? ['warn', 'Part paid · ' + K.money(bal) + ' owing'] : ['warn', 'Waiting for payment'];
+      : stayPaid(v) ? ['ok', 'Stay paid · ' + K.money(bal) + ' owing for the camp shop'] : v.paid >= dep ? ['ok', 'Deposit paid · your stand is secured'] : v.paid ? ['warn', 'Part paid · ' + K.money(bal) + ' owing'] : v.noRelease ? ['ok', 'Reserved for you · not paid yet'] : ['warn', 'Waiting for payment'];
     // once something is paid: what is still owing, and by when
     var owing = !v.paid || !bal || v.onArrival || v.status === 'cancelled' ? '' : '<p class="mg-claim">' + svg(stayPaid(v) || v.paid >= dep ? 'i-check' : 'i-clock') + '<span>' +
       (stayPaid(v) ? 'Your stay is paid, thank you. The <b>' + K.money(bal) + '</b> for your camp shop order can be paid by EFT with reference <b>' + esc(v.ref) + '</b> before you arrive.'
@@ -288,7 +292,8 @@
         : v.claim ? '<p class="mg-claim">' + svg('i-clock') + '<span>You told us you paid <b>' + K.money(v.claim.amt) + '</b> on ' + esc(nice(v.claim.date)) + '. We are checking the bank, and we are keeping your stand for you.</span></p>'
         : hold.pop && (hold.state === 'held' || hold.state === 'soft') ? '<p class="mg-claim">' + svg('i-clock') + '<span>We have your proof of payment and are checking it. Your stand is kept for you in the meantime.</span></p>'
         : hold.state === 'held' ? '<p class="mg-claim">' + svg('i-clock') + '<span>Your quotation is valid until <b>' + esc(nice(hold.due, true)) + '</b>. Your stand is held until then.' + toSecure + '</span></p>'
-        : hold.state === 'grace' ? '<p class="mg-claim">' + svg('i-clock') + '<span>Your quotation was valid until <b>' + esc(nice(hold.due, true)) + '</b>. If you have paid, press <b>I have paid</b> so we can check it.</span></p>' : owing) +
+        : hold.state === 'grace' ? '<p class="mg-claim">' + svg('i-clock') + '<span>Your quotation was valid until <b>' + esc(nice(hold.due, true)) + '</b>. If you have paid, press <b>I have paid</b> so we can check it.</span></p>'
+        : v.noRelease && !v.paid && !v.onArrival && bal > 0 && v.status !== 'cancelled' ? '<p class="mg-claim">' + svg('i-check') + '<span><b>Kyleu has reserved this stand for you.</b> ' + (inFull ? 'The full <b>' + K.money(bal) + '</b>' : 'The ' + pct + '% deposit of <b>' + K.money(dep) + '</b>') + ' can be paid by EFT with reference <b>' + esc(v.ref) + '</b>.</span></p>' : owing) +
       (v.sizeCheck && v.status !== 'cancelled' ? '<p class="mg-claim">' + svg('i-clock') + '<span>You booked for <b>' + (+v.sizeCheck.people || people(v)) + ' people</b> on a stand that usually takes ' + (+v.sizeCheck.usual || st.guests || 8) + '. We are checking that everyone fits and will confirm with you.</span></p>' : '') +
       (v.cancelReq && v.status !== 'cancelled' ? '<p class="mg-claim">' + svg('i-clock') + '<span>You asked us to <b>cancel this booking</b>' + (v.cancelReq.at ? ' on ' + esc(nice(String(v.cancelReq.at).slice(0, 10))) : '') + '. We will confirm by email or WhatsApp. Your booking stays as it is until then.</span></p>' : '') +
       '<div class="mg-bk-acts"><button type="button" class="btn btn-light btn-sm" data-inv-open>' + svg('i-doc') + 'See your reservation</button>' + (bal > (v.claim ? v.claim.amt : 0) && !v.onArrival && v.status !== 'cancelled' && hold.state !== 'released' ? '<button type="button" class="btn btn-green btn-sm" data-inv-open="paid">' + svg('i-check') + (v.claim ? 'I have paid more' : 'I have paid') + '</button>' : '') + '</div></div>' +
@@ -306,8 +311,8 @@
       return '<p class="mg-help-t">For each vehicle, give the <b>registration</b>, the <b>driver</b> and <b>everyone else in it</b>. Everyone then signs the Kyleu indemnity online (the next part), and we send one Dinokeng Conservation Fee Discount Voucher per vehicle, so this makes your arrival much quicker. Fill in what you know; you can come back and add the rest later.</p>' +
         '<div class="field"><label for="e-veh">How many vehicles are coming?</label><select id="e-veh" name="veh">' + opts + '<option value="0"' + (!d.vehicles ? ' selected' : '') + '>Not sure yet, I\'ll tell you later</option></select></div><div class="cars-list" data-cars></div>';
     }
-    if (id === 'eta') return '<p class="mg-help-t">Arrival times are flexible, so come when it suits you. <b>Most guests arrive between 13:00 and 15:00.</b> Knowing roughly when you arrive helps us have your stand, firewood and ice ready.</p>' +
-      '<div class="field"><label for="e-eta">Roughly when will you arrive?</label><select id="e-eta" name="eta">' + (d.eta ? '' : '<option value="">Choose a time</option>') + ETAS.map(function (t) { return '<option value="' + t + '"' + (t === d.eta ? ' selected' : '') + '>' + (ETA_HINT[t] || t) + '</option>'; }).join('') + '</select></div>';
+    if (id === 'eta') return '<p class="mg-help-t">Check-in is from <b>' + timeOf('Check-in time', '13:00') + '</b>, and check-out is by <b>' + timeOf('Check-out time', '11:30') + '</b> on the day you leave. In between, we get the stands ready. <b>Tap the hour you expect to arrive:</b> the hours with an orange ring are open. Knowing roughly when helps us have your stand, firewood and ice ready.</p>' +
+      '<div class="tc-wrap"><div data-clock></div><p class="tc-now" data-clock-now role="status"></p><div class="tc-alt"><button type="button" class="pill" data-eta-alt="After ' + LATE + ':00">After ' + LATE + ':00</button><button type="button" class="pill" data-eta-alt="Not sure yet">Not sure yet</button></div></div><input type="hidden" name="eta" value="' + esc(d.eta || '') + '">';
     if (id === 'shop') return '<p class="mg-help-t">Tap <b>+</b> to add and <b>&minus;</b> to remove. What you order is waiting for you when you arrive and goes on your ' + docWord(base) + '. Anything else you can buy at the camp shop.</p><div data-shop></div><div class="mg-shop-tot" data-shop-tot></div>';
     if (id === 'guests') {
       if (locked(base)) return '<div class="mg-callout">' + svg('i-info') + '<p><b>Your stay starts on ' + esc(nice(base.ci, true)) + ', so the number of guests can\'t be changed online any more</b> (that closed on ' + esc(nice(lockDate(base))) + ', when everything has to be paid). Please call or WhatsApp us and we will help you.</p></div>' + callUs(base, 'the number of guests');
@@ -391,6 +396,13 @@
       $('[name=veh]', ed).addEventListener('change', function () { carsEd.setCount(+this.value); });
     }
     if (openSec === 'indemnity') wireInd($('[data-ind-form]', ed));
+    if (openSec === 'eta') {
+      var einp = $('[name=eta]', ed), enow = $('[data-clock-now]', ed);
+      var eshow = function () { var v = einp.value; enow.innerHTML = v ? svg('i-check') + '<span>' + esc(etaText(v)) + '</span>' : '<span>No time chosen yet.</span>'; enow.className = 'tc-now' + (v ? ' ok' : ''); $$('[data-eta-alt]', ed).forEach(function (b) { b.classList.toggle('on', b.dataset.etaAlt === v); b.setAttribute('aria-pressed', b.dataset.etaAlt === v); }); };
+      var clk = K.timeClock($('[data-clock]', ed), { from: firstHour(), to: LATE, value: einp.value, label: 'Arrival time', onChange: function (v) { einp.value = v; eshow(); } });
+      $$('[data-eta-alt]', ed).forEach(function (b) { b.onclick = function () { einp.value = b.dataset.etaAlt; clk.set(''); eshow(); }; });
+      eshow();
+    }
     if (openSec === 'shop') {
       shopQty = clone(draft.shop);
       var tot = function () { var was = shopSum(base.shop), now = shopSum(shopQty), d = price(base, now - was); $('[data-shop-tot]', ed).innerHTML = 'Your shop order: <b>' + K.money(price(base, now)) + '</b>' + (d ? ' <span class="' + (d > 0 ? 'up' : 'down') + '">(' + (d > 0 ? '+' : '&minus;') + K.money(Math.abs(d)) + ' on your ' + docWord(base) + ')</span>' : ''); };
@@ -530,7 +542,7 @@
     var d = draft, b = base, blocks = [], shopDiff = price(b, shopSum(d.shop) - shopSum(b.shop));
     if (changed('details')) blocks.push(['i-users', 'Your contact details', [['First name', 'first'], ['Surname', 'last'], ['Email', 'email'], ['Mobile', 'phone']].filter(function (f) { return d[f[1]] !== b[f[1]]; }).map(function (f) { return row(f[0], esc(b[f[1]]), esc(d[f[1]])); }).join('')]);
     if (changed('cars')) blocks.push(['i-car', 'Vehicles and who is in each one', carsList(d)]);
-    if (changed('eta')) blocks.push(['i-clock', 'Arrival time', row('Arriving around', esc(b.eta), esc(d.eta))]);
+    if (changed('eta')) blocks.push(['i-clock', 'Arrival time', row('Arrival time', esc(b.eta), esc(d.eta))]);
     if (changed('shop')) { var l = shopList(d.shop); blocks.push(['i-bag', 'Camp shop order', (l.length ? '<ul class="mg-shop">' + l.map(function (x) { return '<li><span>' + x.qty + ' × ' + esc(x.label) + '</span><b>' + K.money(price(b, x.qty * x.each)) + '</b></li>'; }).join('') + '</ul>' : '<p>No shop items. Everything you had ordered is taken off.</p>')]); }
     var gp = d.guests ? plan(d.guests) : null, gDiff = gp && gp.mode === 'direct' ? gp.diff : 0;
     if (gp) blocks.push(['i-users', gp.mode === 'direct' ? 'Number of guests' : 'You are asking us to change the number of guests', row('Guests', esc(peopleText(b)), esc(peopleText(d.guests))) +
@@ -624,8 +636,8 @@
     var f = $('[data-find]'), err = $('[data-find-err]');
     try { var q = new URLSearchParams(location.search); if (q.get('ref')) f.elements.ref.value = q.get('ref').toUpperCase(); } catch (e) {}
     go(1); window.scrollTo(0, 0);
-    Promise.all([K.stands().catch(function () { return []; }), K.prices()]).then(function (r) {
-      STANDS = r[0]; P = r[1]; SHOP = K.shopItems(P); demoChips();
+    Promise.all([K.stands().catch(function () { return []; }), K.prices(), K.settings().catch(function () { return null; })]).then(function (r) {
+      STANDS = r[0]; P = r[1]; S = r[2]; SHOP = K.shopItems(P); demoChips();
       var q = new URLSearchParams(location.search), b = q.get('b'), k = q.get('k'), sg = q.get('sign');
       if (sg && K.ind) {
         var sv = allBookings()[key(sg)], le0 = $('[data-link-err]');

@@ -45,7 +45,7 @@
 - Company registration: 2017/102130/07
 - Postal address: PO Box 1186, Faerie Glen, Pretoria, 0043
 - Check-in time: 13:00
-- Check-out time: 11:00
+- Check-out time: 11:30
 - Invoices signed by: Sherri Symons
 
 ## Booking

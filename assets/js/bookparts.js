@@ -139,6 +139,30 @@
     return out;
   };
 
+  /* ---------- a clock to choose a time ----------
+     Twelve hours on a clock face. The hours the camp allows have an orange ring, the others are grey and cannot be chosen.
+     o: { from: first hour allowed (13), to: last hour allowed (18), value: '14:00', label, onChange: function (value) {} } */
+  K.timeClock = function (box, o) {
+    o = o || {};
+    var from = o.from == null ? 13 : o.from, to = o.to == null ? 18 : o.to, base = from >= 12 ? 12 : 0, isTime = function (v) { return /^\d{1,2}:\d{2}$/.test(v || ''); }, val = isTime(o.value) ? o.value : '';
+    var pad = function (h) { return (h < 10 ? '0' : '') + h + ':00'; };
+    function draw() {
+      var h = '', sel = val ? parseInt(val, 10) : null;
+      for (var i = 0; i < 12; i++) {
+        var hour = base + i, ok = hour >= from && hour <= to, a = i * 30 * Math.PI / 180, on = sel === hour;
+        h += '<button type="button" class="tc-h' + (ok ? '' : ' off') + (on ? ' on' : '') + '" style="left:' + (50 + 39 * Math.sin(a)).toFixed(2) + '%;top:' + (50 - 39 * Math.cos(a)).toFixed(2) + '%" data-h="' + hour + '" role="radio" aria-checked="' + on + '"' + (ok ? '' : ' disabled') + ' aria-label="' + pad(hour) + (ok ? '' : ', not available') + '">' + pad(hour) + '</button>';
+      }
+      box.innerHTML = '<div class="tclock" role="radiogroup" aria-label="' + esc(o.label || 'Choose a time') + '">' + (sel != null ? '<span class="tc-hand" style="transform:rotate(' + ((sel - base) * 30) + 'deg)"></span>' : '') + '<span class="tc-hub"></span>' + h + '</div>';
+    }
+    box.onclick = function (e) {
+      var b = e.target.closest('.tc-h'); if (!b || b.disabled) return;
+      val = pad(+b.dataset.h); draw(); var again = box.querySelector('.tc-h.on'); if (again) try { again.focus({ preventScroll: true }); } catch (er) {}
+      if (o.onChange) o.onChange(val);
+    };
+    draw();
+    return { set: function (v) { val = isTime(v) ? v : ''; draw(); }, get: function () { return val; } };
+  };
+
   /* ---------- credit from a cancelled booking ----------
      Kyleu gives no refunds. When a cancellation is approved in the admin, what the guest paid can be kept as a credit
      with a code (KC-XXXXXX). The guest types the code when booking again, with the same email address, and it comes off the price.

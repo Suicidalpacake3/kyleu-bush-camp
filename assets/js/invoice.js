@@ -24,7 +24,7 @@
     addr: 'Plot 77 Klipdrift 90-JR, Kaallaagte Road, Dinokeng Game Reserve', postal: 'PO Box 1186, Faerie Glen, Pretoria, 0043',
     phone: '060 458 4478', email: 'info@kyleu.co.za', web: 'www.kyleu.co.za',
     bank: 'FNB (First National Bank)', accName: 'Kyleu Bush Camp', accNo: '62699453868', branch: '250655', accType: 'Current', swift: 'FIRNZAJJ',
-    checkIn: '13:00', checkOut: '11:00', signer: 'Sherri Symons' };
+    checkIn: '13:00', checkOut: '11:30', signer: 'Sherri Symons' };
   K.BIZ = BIZ;
   if (K.settings) K.settings().then(function (S) {
     if (!S) return;

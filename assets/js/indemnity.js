@@ -33,7 +33,7 @@
   var DEFAULT = [
     'KYLEU Bush Camp is situated in the Dinokeng Big 5 Game Reserve. Dangerous animals walk around freely. Please take the time to read through the terms and conditions of KYLEU Bush Camp. It is your responsibility to familiarise yourself with the rules and regulations of the camp in order to ensure a pleasant stay.',
     '## Visitor\'s responsibility\n- Insurance of personal items\n- Supervise children and minors staying with you\n- Respect the privacy of other guests\n- Report any irregular deeds by fellow guests to KYLEU management\n- Use the available facilities with responsibility and accountability',
-    '## Check-in times\n- Arrival from 13:00 (flexible: most guests arrive between 13:00 and 15:00), departure by 11:00',
+    '## Check-in times\n- Arrival from 13:00 (flexible: most guests arrive between 13:00 and 15:00), departure by 11:30',
     '## Open (unfenced) bush camp\nEach stand is spacious and surrounded by bushveld where the Big 5 and other animals are free to roam. This area of KYLEU Bush Camp is **not fenced**. Each stand has a private ablution, but no electricity.\n**Camping at the KYLEU open bush camp is ENTIRELY AT YOUR OWN RISK.**',
     '## Fenced bush camp\nEach stand is spacious, positioned near the fence for animal viewing, and surrounded by bushveld. You are welcome to stroll through the camp at your leisure. Each stand has a private ablution, but no electricity.',
     '## Self-sufficient sites on the spruit\nThese campsites are **UNFENCED** and have **NO FACILITIES**: no ablution, which means no water and no electricity, and no braai stand (only a small fire boma with a grill). You need to be completely self-sufficient.',

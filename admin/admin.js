@@ -232,13 +232,15 @@
         if (c.code) { x.dgr = code(); var sent = add(o.ci, -5); if (sent > TODAY) sent = TODAY; if (sent < cday) sent = cday; x.dgrSent = { at: sent + ' 09:10', by: 'Sherri', code: x.dgr }; }
         return x;
       });
-      if (b.cars) b.vehicles = b.cars.length;
+      if (b.cars) { b.vehicles = b.cars.length; b.vehSaid = { at: b.created, by: 'Guest' }; }
+      else if (b.status !== 'in' && b.status !== 'out') b.vehTbc = true;   // no vehicles in this story: not given yet
       // bought at the camp shop on the vehicle's tab, to settle before leaving
       (o.tab || []).forEach(function (t) { var p = prod(t[1]); if (!p || !b.cars) return; var c = b.cars[t[3] || 0], sid = uid('S');
         b.charges.push({ d: t[0], desc: 'Shop: ' + t[2] + ' × ' + p.label, e: p.amount * t[2], c: toCard(p.amount) * t[2], sid: sid, car: c.id }); b.eft += p.amount * t[2]; b.card += toCard(p.amount) * t[2]; b.total = method === 'card' ? b.card : b.eft;
         db.sales.push({ sid: sid, d: t[0], t: t[4] || '17:40', item: p.label, pid: p.id, qty: t[2], m: 'bill', amt: (method === 'card' ? toCard(p.amount) : p.amount) * t[2], stand: st.name, ref: b.ref, car: c.reg || 'Vehicle 1', by: 'Leuan' }); });
       (o.notes || []).forEach(function (n) { b.notes.push({ at: n[0].length === 10 ? at(n[0], '10:30') : n[0], by: n[1], text: n[2] }); });
-      if ((b.status === 'in' || b.status === 'out') && b.cars) { b.finalised = { at: at(add(o.ci, -3), '19:48'), by: 'Guest' }; if (!b.eta) b.eta = '13:00-15:00'; }
+      if ((b.status === 'in' || b.status === 'out') && b.cars) { b.finalised = { at: at(add(o.ci, -3), '19:48'), by: 'Guest' }; if (!b.eta) b.eta = '14:00'; }
+      if (b.status === 'out' && b.co < add(TODAY, -2)) b.thanks = { at: b.co + ' 11:40', by: 'Sherri', via: 'WhatsApp' };
       if (o.ind) b.demoInd = { mode: o.ind, kids: o.kidNames || [] };
       if (o.then) o.then(b, st);
       db.bookings.push(b); return b;
@@ -246,7 +248,7 @@
     var T = function (id, subject, b, msgs) { db.threads.push({ id: id, subject: subject, name: guestName(b), email: b.guest.email, phone: b.guest.phone, status: 'open', unread: true, ref: b.ref, msgs: msgs }); };
 
     // 1. everything done: paid in full, finalised, everyone signed, codes sent, shop order and a game drive
-    bk({ first: 'Hennie', last: 'Botha', ci: d(2), co: d(4), adults: 4, kids: 1, method: 'card', pay: 'full', area: 'fenced', setup: 'Off-road trailer', eta: '15:00-18:00', ex: { gd: 5 }, shop: [[/sekelbos/i, 2], [/^ice/i, 2]],
+    bk({ first: 'Hennie', last: 'Botha', ci: d(2), co: d(4), adults: 4, kids: 1, method: 'card', pay: 'full', area: 'fenced', setup: 'Off-road trailer', eta: '16:00', ex: { gd: 5 }, shop: [[/sekelbos/i, 2], [/^ice/i, 2]],
       cars: [{ reg: 'CA 123-456', driver: 'Hennie Botha', guests: ['Marlene Botha', 'Liam Botha'], code: true }, { reg: 'HZ 44 BX GP', driver: 'Pieter Botha', guests: ['Sanet Botha'], code: true }], ind: 'all', kidNames: ['Liam Botha'],
       notes: [[d(-20), 'Sherri', 'Celebrating their 30th wedding anniversary on Saturday. Asked for a quiet stand.']],
       then: function (b) { b.finalised = { at: at(d(-3), '20:14'), by: 'Guest' }; b.drive = { d: d(3), slot: 'am', guide: 'Devon' }; } });
@@ -254,11 +256,11 @@
     bk({ first: 'Thabo', last: 'Nkosi', ci: d(4), co: d(7), adults: 3, method: 'eft', pay: 'full', area: 'unfenced', setup: 'Ground tent',
       then: function (b) { b.vehTbc = true; b.vehicles = 1; } });
     // 3. paid in full and finalised, Dinokeng code still to make; her husband has not signed yet
-    bk({ first: 'Annelie', last: 'de Villiers', ci: d(6), co: d(8), method: 'eft', pay: 'full', area: 'fenced', eta: '13:00-15:00',
+    bk({ first: 'Annelie', last: 'de Villiers', ci: d(6), co: d(8), method: 'eft', pay: 'full', area: 'fenced', eta: '14:00',
       cars: [{ reg: 'CL 77 PP GP', driver: 'Annelie de Villiers', guests: ['Francois de Villiers'] }], ind: 'some',
       then: function (b) { b.finalised = { at: at(d(-1), '18:02'), by: 'Guest' }; } });
     // 4. three vehicles: codes sent for two, the third was added on WhatsApp later
-    bk({ first: 'Kagiso', last: 'Molefe', ci: d(5), co: d(7), adults: 6, method: 'card', pay: 'full', area: 'unfenced', source: 'WhatsApp', eta: '15:00-18:00',
+    bk({ first: 'Kagiso', last: 'Molefe', ci: d(5), co: d(7), adults: 6, method: 'card', pay: 'full', area: 'unfenced', source: 'WhatsApp', eta: '16:00',
       cars: [{ reg: 'JHB 552 GP', driver: 'Kagiso Molefe', guests: ['Palesa Molefe'], code: true }, { reg: 'KK 19 LM GP', driver: 'Tumi Sithole', guests: ['Karabo Sithole'], code: true }, { reg: 'ND 456-789', driver: 'Neo Mabaso', guests: ['Lesego Mabaso'] }], ind: 'some',
       notes: [[d(-2), 'Sherri', 'Third vehicle (Neo Mabaso) added on WhatsApp. Dinokeng code still to make for it.']],
       then: function (b) { b.finalised = { at: at(d(-6), '12:40'), by: 'Guest' }; } });
@@ -280,7 +282,7 @@
     bk(Object.assign({}, koos, { ci: d(-150), co: d(-146), adults: 0, pens: 2, area: 'self-sufficient', setup: 'Caravan', method: 'eft', pay: 'full', status: 'out', cars: [{ reg: 'KVZ 1 GP', driver: 'Koos van Zyl', guests: ['Anna van Zyl'] }] }));
     bk(Object.assign({}, koos, { ci: d(-48), co: d(-45), adults: 0, pens: 2, area: 'self-sufficient', setup: 'Caravan', method: 'eft', pay: 'full', status: 'out', cars: [{ reg: 'KVZ 1 GP', driver: 'Koos van Zyl', guests: ['Anna van Zyl'] }], notes: [[d(-45), 'Leuan', 'Left the stand spotless again. Asked to be told when the new spruit stands open.']] }));
     var mon = nextDow(1, d(5));
-    bk(Object.assign({}, koos, { ci: mon, co: add(mon, 4), adults: 0, pens: 2, area: 'self-sufficient', setup: 'Caravan', method: 'eft', source: 'Phone', created: d(-9), eta: 'Before 13:00', cars: [{ reg: 'KVZ 1 GP', driver: 'Koos van Zyl', guests: ['Anna van Zyl'] }],
+    bk(Object.assign({}, koos, { ci: mon, co: add(mon, 4), adults: 0, pens: 2, area: 'self-sufficient', setup: 'Caravan', method: 'eft', source: 'Phone', created: d(-9), eta: '13:00', cars: [{ reg: 'KVZ 1 GP', driver: 'Koos van Zyl', guests: ['Anna van Zyl'] }],
       then: function (b) { b.onArrival = { how: 'Cash', at: at(d(-9), '11:05'), by: 'Sherri' }; b.notes.push({ at: at(d(-9), '11:05'), by: 'Sherri', text: 'Booked by phone. Pays cash on arrival as always.' }); } }));
     // 9. a long stay: 12 nights on the spruit, balance in two parts
     bk({ first: 'Gerrit', last: 'Fourie', ci: d(10), co: d(22), adults: 0, pens: 2, area: 'self-sufficient', setup: 'Caravan', method: 'eft', pay: 'deposit', ex: { pp: 1 }, town: 'Polokwane',
@@ -343,7 +345,7 @@
         b.notes.push({ at: d(-14) + ' 10:05', by: 'Sherri', text: 'International transfer arrived R285 short because of bank charges. Told Hans to add it to the balance.' });
         T('tdemo-intl', 'Deposit from Germany', b, [{ from: 'guest', at: d(-15) + ' 16:20', body: 'Hello,\n\nI have sent the deposit by SWIFT today. Please let me know when it arrives.\n\nBest regards,\nHans', att: [{ name: 'SWIFT-confirmation.pdf', size: 48210, type: 'application/pdf' }] }, { from: 'staff', by: 'Sherri', at: d(-14) + ' 10:08', body: 'Hi Hans,\n\nIt arrived, thank you! Your bank took R285 in charges, so please add that to the balance.\n\nSherri\nKyleu Bush Camp', att: [] }]); } });
     // 24. the vehicles list more people than were booked
-    bk({ first: 'Lerato', last: 'Mahlangu', ci: d(3), co: d(5), adults: 3, method: 'card', pay: 'full', area: 'fenced', eta: '13:00-15:00',
+    bk({ first: 'Lerato', last: 'Mahlangu', ci: d(3), co: d(5), adults: 3, method: 'card', pay: 'full', area: 'fenced', eta: '14:00',
       cars: [{ reg: 'LM 21 AB GP', driver: 'Lerato Mahlangu', guests: ['Thandeka Mahlangu', 'Zinhle Mahlangu', 'Ayanda Mahlangu'], code: true }], ind: 'some',
       then: function (b) { b.finalised = { at: at(d(-2), '09:40'), by: 'Guest' }; } });
     // 25. paid twice by mistake: the second payment refunded
@@ -351,7 +353,7 @@
       then: function (b) { b.payments.push({ d: d(-4), amt: b.total, m: 'eft', type: 'Payment', ref: b.ref }); b.payments.push({ d: d(-2), amt: -b.total, m: 'eft', type: 'Refund', ref: b.ref });
         b.notes.push({ at: d(-2) + ' 11:15', by: 'Sherri', text: 'Paid by card and again by EFT by mistake. Refunded the EFT payment.' }); } });
     // 26. finalised and arriving tomorrow, but nobody has signed the indemnity
-    bk({ first: 'Sipho', last: 'Ndlovu', ci: d(1), co: d(3), adults: 2, kids: 1, method: 'card', pay: 'full', area: 'unfenced', eta: '13:00-15:00',
+    bk({ first: 'Sipho', last: 'Ndlovu', ci: d(1), co: d(3), adults: 2, kids: 1, method: 'card', pay: 'full', area: 'unfenced', eta: '14:00',
       cars: [{ reg: 'SN 64 ZZ GP', driver: 'Sipho Ndlovu', guests: ['Nomsa Ndlovu', 'Lwazi Ndlovu'], code: true }], ind: 'none',
       then: function (b) { b.finalised = { at: at(d(-4), '21:30'), by: 'Guest' }; } });
     // 27. left two days ago: forgot a chair, left a review
@@ -484,19 +486,23 @@
     // Dinokeng codes: sent for everyone arriving in the next 3 days, and for most finalised bookings after that.
     var LT = 'BCDFGHJKLMNPRSTVWXYZ', regOf = function () { var l = function () { return LT[Math.floor(r() * LT.length)]; }; return l() + l() + ' ' + (10 + Math.floor(r() * 89)) + ' ' + l() + l() + ' GP'; };
     db.bookings.forEach(function (b) {
+      // only guests who finalised gave their vehicles; everyone else has "not given yet" and one empty car waiting
+      var fin = live(b) && (b.status === 'in' || b.status === 'out' || (paid(b) > 0 && balance(b) <= 0 && r() < .7));
+      if (fin) b.vehSaid = { at: b.created, by: 'Guest' }; else { b.vehTbc = true; b.vehicles = 1; }
       var cs = ensureCars(b);
-      if (live(b) && (b.status === 'in' || b.status === 'out' || (paid(b) > 0 && balance(b) <= 0 && r() < .7))) {
+      if (fin) {
         var fa = add(b.ci, -2 - Math.floor(r() * 6)); if (fa > TODAY) fa = TODAY; if (fa < b.created.slice(0, 10)) fa = b.created.slice(0, 10);
         b.finalised = { at: fa + ' ' + (8 + Math.floor(r() * 13)) + ':' + String(Math.floor(r() * 60)).padStart(2, '0'), by: r() < .85 ? 'Guest' : 'Sherri' };
-        if (!b.eta) b.eta = pick(['Before 13:00', '13:00-15:00', '13:00-15:00', '15:00-18:00', '15:00-18:00', 'After 18:00']);
+        if (!b.eta) b.eta = pick(['13:00', '14:00', '14:00', '15:00', '16:00', 'After 18:00']);
         var used = {}; used[guestName(b)] = 1;
         var nm = function (last) { for (var k = 0; k < 9; k++) { var x = pick(FIRST) + ' ' + last; if (!used[x]) { used[x] = 1; return x; } } return ''; };
-        cs.forEach(function (c, i) { c.reg = regOf(); if (i && !c.driver) c.driver = nm(r() < .5 ? b.guest.last : pick(LAST)); var want = Math.max(0, (c.people || 1) - 1); c.guests = []; for (var k = 0; k < want; k++) { var x = nm(i ? c.driver.split(' ').slice(1).join(' ') : b.guest.last); if (x) c.guests.push(x); } c.people = (c.driver ? 1 : 0) + c.guests.length; });
+        cs.forEach(function (c, i) { delete c.auto; c.reg = regOf(); if (i && !c.driver) c.driver = nm(r() < .5 ? b.guest.last : pick(LAST)); var want = Math.max(0, (c.people || 1) - 1); c.guests = []; for (var k = 0; k < want; k++) { var x = nm(i ? c.driver.split(' ').slice(1).join(' ') : b.guest.last); if (x) c.guests.push(x); } c.people = (c.driver ? 1 : 0) + c.guests.length; });
       }
+      if (b.status === 'out' && b.co < add(TODAY, -2)) b.thanks = { at: b.co + ' 11:40', by: 'Sherri', via: b.guest.phone ? 'WhatsApp' : 'Email' };
       if (!live(b) || b.status === 'out' && b.co < add(TODAY, -20)) return;
       if (b.ci < add(TODAY, 3) || (b.finalised && b.ci < add(TODAY, 12) && r() < .6)) cs.forEach(function (c) { c.dgr = 'DGR' + Math.floor(r() * 2176782336).toString(36).toUpperCase().padStart(6, '0').slice(0, 6); var sa = add(b.ci, -6); if (sa > TODAY) sa = TODAY; c.dgrSent = { at: sa + ' 09:10', by: 'Sherri', code: c.dgr }; });
     });
-    db.dgrV = 2;
+    db.dgrV = 2; db.vehV = 1; db.thanksV = 1;
     seedStories(db, r);
     db.bookings.sort(function (a, b) { return a.ci < b.ci ? -1 : 1; });
     var recent = db.bookings.filter(function (b) { return b.created.slice(0, 10) >= add(TODAY, -3); }).slice(-6);
@@ -589,14 +595,14 @@
   function applyCars(b, n, cars) {
     var cs = ensureCars(b);
     if (!n) { b.vehTbc = true; return; }
-    b.vehTbc = false;
-    cars.forEach(function (c, i) { var x = cs[i] || (cs[i] = newCar()); x.reg = String(c.reg || '').toUpperCase(); x.driver = c.driver || ''; x.guests = (c.guests || []).slice(); x.minors = minorsOf(c.minors, x.guests); x.people = (x.driver ? 1 : 0) + x.guests.length; });
+    b.vehTbc = false; b.vehSaid = b.vehSaid || { at: nowStamp(), by: 'Guest' };
+    cars.forEach(function (c, i) { var x = cs[i] || (cs[i] = newCar()); delete x.auto; x.reg = String(c.reg || '').toUpperCase(); x.driver = c.driver || ''; x.guests = (c.guests || []).slice(); x.minors = minorsOf(c.minors, x.guests); x.people = (x.driver ? 1 : 0) + x.guests.length; });
     for (var i = cs.length - 1; i >= n; i--) if (cs[i].st === 'due' && !carTab(b, cs[i]).items.length) cs.splice(i, 1);
     b.vehicles = cs.length;
   }
   function namedIn(b) { return (b.cars || []).reduce(function (a, c) { return a + (c.driver ? 1 : 0) + (c.guests || []).length; }, 0); }
   function namesWarn(b) {   // the drivers and passengers should add up to the guests on the booking
-    if (b.vehTbc) return ''; var n = namedIn(b), t = people(b);
+    if (!vehKnown(b)) return ''; var n = namedIn(b), t = people(b);
     if (n > t) return '<p class="callout bad cflex">' + ic('alert') + '<span><b>The numbers do not match:</b> ' + n + ' people are named in the vehicles, but the booking is for ' + t + '. Check with ' + esc(b.guest.first) + ' and fix the vehicles or the number of guests.</span></p>';
     if (n && n < t) return '<p class="callout warn cflex">' + ic('info') + '<span>' + (t - n) + ' of the ' + t + ' guests ' + (t - n === 1 ? 'is' : 'are') + ' not named in a vehicle yet.</span></p>';
     return '';
@@ -680,7 +686,7 @@
       var card = w.pay === 'deposit' || w.pay === 'full', nowPaid = +w.paid || 0, day = w.created.slice(0, 10);
       // a credit from a cancelled booking, typed on the website: "paid" includes it
       var wc = w.credit && +w.credit.amt > 0 ? w.credit : null, want = wc ? Math.min(+wc.amt, nowPaid) : 0, took = 0, cr = wc ? creditById(wc.id) || creditByCode(wc.code) : null;
-      var b = { ref: w.ref, created: w.created, source: 'Website', guest: { first: w.first, last: w.last, email: w.email, phone: w.phone, consent: !!w.consent }, stand: w.stand, ci: w.ci, co: w.co, adults: w.adults, pens: w.pens, kids: w.kids, vehicles: Math.max(1, +w.vehicles || 1), vehTbc: !!w.vehTbc, eta: w.eta || '', key: w.key || newKey(), setup: w.setup || '', extras: w.extras || {},
+      var b = { ref: w.ref, created: w.created, source: 'Website', guest: { first: w.first, last: w.last, email: w.email, phone: w.phone, consent: !!w.consent }, stand: w.stand, ci: w.ci, co: w.co, adults: w.adults, pens: w.pens, kids: w.kids, vehicles: Math.max(1, +w.vehicles || 1), vehTbc: !!w.vehTbc || !(+w.vehicles > 0), eta: w.eta || '', key: w.key || newKey(), setup: w.setup || '', extras: w.extras || {},
         method: card ? 'card' : 'eft', eft: w.eft, card: w.card, total: card ? w.card : w.eft, payments: [], status: 'pending', notes: w.notes ? [{ at: w.created, by: 'Guest', text: w.notes }] : [], pop: false, isNew: true };
       if (wc) {
         // the credit part is its own payment line (never new income: that money came in on the cancelled booking)
@@ -694,7 +700,8 @@
       var due1 = w.invoice && w.invoice.payFull ? b.total : w.invoice && +w.invoice.deposit > 0 ? +w.invoice.deposit : Math.round(b.total * .5);
       if (paid(b) > 0 && paid(b) >= due1) b.status = 'confirmed';
       linkBooking(b);
-      if (w.cars && w.cars.length) b.cars = w.cars.map(function (c, i) { var dr = c.driver || (i ? '' : w.first + ' ' + w.last), gs = (c.guests || []).slice(); return newCar({ reg: String(c.reg || '').toUpperCase(), driver: dr, phone: i ? '' : w.phone, guests: gs, minors: minorsOf(c.minors, gs), people: (dr ? 1 : 0) + gs.length }); });
+      if (!b.vehTbc) b.vehSaid = { at: w.created, by: 'Guest' };   // the guest gave a number of vehicles on the website
+      if (w.cars && w.cars.length && !b.vehTbc) b.cars = w.cars.map(function (c, i) { var dr = c.driver || (i ? '' : w.first + ' ' + w.last), gs = (c.guests || []).slice(); return newCar({ reg: String(c.reg || '').toUpperCase(), driver: dr, phone: i ? '' : w.phone, guests: gs, minors: minorsOf(c.minors, gs), people: (dr ? 1 : 0) + gs.length }); });
       if (w.overCap) setSizeCheck(b, w.overCap, w.created);   // more people than the stand usually takes: Kyleu's call
       // made on the website before this admin had its demo data, on nights a demo booking also has: keep it, and say so
       if (overlaps(b.stand, b.ci, b.co)) b.notes.push({ at: w.created, by: 'System', text: 'Another booking or a block is on ' + standById(b.stand).name + ' for some of these nights. Check the calendar and move one of them.' });
@@ -864,6 +871,8 @@
       (b.paidClaim ? '<div class="callout info cflex claim">' + ic('bank') + '<div><b>' + esc(b.guest.first) + ' says they paid ' + money(b.paidClaim.amt) + '</b> (' + esc(String(b.paidClaim.what || 'payment').toLowerCase()) + ') on ' + fd(b.paidClaim.date) + (b.paidClaim.note ? ': "' + esc(b.paidClaim.note) + '"' : '') + '.' + ((b.paidClaim.parts || []).length > 1 ? ' That is ' + b.paidClaim.parts.length + ' payments added together: ' + b.paidClaim.parts.map(function (x) { return money(x.amt) + ' on ' + fd(x.date); }).join(', ') + '.' : '') + ' Check the bank, then confirm it.<div class="row-btns"><button type="button" class="btn sm" data-act="pay" data-ref="' + b.ref + '">' + ic('check') + 'Confirm payment</button><button type="button" class="btn ghost sm" data-act="claim-no" data-ref="' + b.ref + '">Not in the bank yet</button></div></div></div>' : '') +
       (extraDue(b) ? '<div class="callout bad cflex">' + ic('alert') + '<div><b>' + money(bal) + ' outstanding.</b> ' + esc(b.extraDue.why || 'The total went up after paying in full') + ' (' + esc(atNice(b.extraDue.at)) + '). Send ' + esc(b.guest.first) + ' the new invoice for just this amount.<div class="row-btns"><button type="button" class="btn sm" data-act="send-doc" data-ref="' + b.ref + '|extra">' + ic('send') + 'Send new invoice</button></div></div></div>' : '') +
       (b.guestEdit && b.guestEdit.at >= add(TODAY, -14) ? '<p class="callout info cflex">' + ic('edit') + '<span><b>Changed by ' + esc(b.guest.first) + ' on the website</b> ' + esc(atNice(b.guestEdit.at)) + ': ' + esc(b.guestEdit.what.join('; ')) + '.</span></p>' : '') +
+      (b.status === 'out' ? (b.thanks ? '<p class="callout cflex cbtn">' + ic('check') + '<span>' + esc(thanksLine(b)) + '.</span><button type="button" class="link-btn" data-act="thanks" data-ref="' + b.ref + '">Send again</button></p>'
+        : '<div class="callout ' + (thanksDue(b) ? 'warn ' : '') + 'cflex cbtn">' + ic('send') + '<span><b>Thank-you not sent yet.</b> Thank ' + esc(b.guest.first) + ' for staying and ask for a Google review.</span><button type="button" class="btn sm" data-act="thanks" data-ref="' + b.ref + '">' + ic('send') + 'Send the thank-you</button></div>') : '') +
       (b.released ? '<p class="callout cflex">' + ic('info') + '<span><b>Released automatically</b> on ' + esc(atNice(b.released.at)) + ': the quotation (valid until ' + fd(b.released.due) + ') was not paid.</span></p>' : '') +
       creditFromHTML(b);
     var body = '';
@@ -874,11 +883,11 @@
         (cl && cl.notes ? '<p class="cl-note">' + ic('note') + '<span>' + esc(cl.notes) + '</span></p>' : '') + '</section>' +
         '<section class="d-sec"><h4>Stay</h4><dl class="kv kv2">' +
         '<dt>Stand</dt><dd><b>' + esc(st.name) + '</b> · ' + AREA_SHORT[st.area] + '</dd>' +
-        '<dt>Arrive</dt><dd>' + fd(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }) + '</dd>' +
-        '<dt>Depart</dt><dd>' + fd(b.co, { weekday: 'long', day: 'numeric', month: 'long' }) + '</dd>' +
+        '<dt>Arrive</dt><dd>' + fd(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }) + ' <span class="muted">· check-in from ' + checkInTime() + '</span></dd>' +
+        '<dt>Depart</dt><dd>' + fd(b.co, { weekday: 'long', day: 'numeric', month: 'long' }) + ' <span class="muted">· check-out by ' + checkOutTime() + '</span></dd>' +
         '<dt>Guests</dt><dd>' + people + (b.kids ? ' <span class="muted">(children under 12)</span>' : '') + '</dd>' +
-        '<dt>Vehicles</dt><dd>' + (b.vehTbc ? '<span class="warn-t">Not sure yet</span>' : b.vehicles + ' vehicle' + (b.vehicles > 1 ? 's' : '')) + (b.setup ? ' · ' + esc(b.setup) : '') + '</dd>' +
-        '<dt>Arrival time</dt><dd>' + (b.eta ? (/^\d/.test(b.eta) ? 'Around ' : '') + esc(b.eta) : '<span class="muted">Not given yet</span>') + '</dd>' +
+        '<dt>Vehicles</dt><dd>' + (cancelled ? '<span class="muted">' + (vehKnown(b) ? vehTxt(b) : 'Not given') + '</span>' : !vehKnown(b) ? '<span class="warn-t">Not given yet</span> <button type="button" class="link-btn" data-act="veh-add" data-ref="' + b.ref + '">' + ic('plus') + 'Add vehicles</button>' : vehTxt(b)) + (b.setup ? ' · ' + esc(b.setup) : '') + '</dd>' +
+        '<dt>Arrival time</dt><dd>' + (b.eta ? esc(etaTxt(b).charAt(0).toUpperCase() + etaTxt(b).slice(1)) : '<span class="muted">Not given yet</span>') + '</dd>' +
         (live(b) ? '<dt>Indemnity</dt><dd>' + indPill(b) + ' <button type="button" class="link-btn" data-ptab="vehicles">See' + ic('chev-r') + '</button></dd>' : '') +
         '<dt>Booked</dt><dd>' + fd(b.created.slice(0, 10), { day: 'numeric', month: 'short', year: 'numeric' }) + ' via ' + esc(b.source) + '</dd></dl></section>' +
         linkSec(b) +
@@ -978,8 +987,8 @@
   var TEMPLATES = {
     eft: { t: 'EFT deposit reminder', s: 'Your Kyleu booking: deposit reminder', b: function (b) { return 'Hi {first},\n\nThank you for booking {stand} from {ci} to {co}. To secure your stand please pay the deposit of {deposit} using reference {ref}. Your quotation is valid for {qdays}; after that the stand is released.\n\nBank: {bank}\n\nUpload your proof of payment at www.kyleu.co.za/pop.html, or reply to this email with it attached.\n\nSee you in the bush!\nThe Kyleu team'; } },
     balance: { t: 'Balance reminder', s: 'Your Kyleu stay is coming up', b: function (b) { return 'Hi {first},\n\nYour stay at {stand} starts on {ci}. The balance of {balance} is due by {baldue}. Pay by EFT with reference {ref}, or reply and we will send a card payment link.\n\nThe Kyleu team'; } },
-    arrival: { t: 'Pre-arrival information', s: 'Getting to Kyleu Bush Camp', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}.\n\nDirections: enter Dinokeng at Tau Gate, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km.\n\nKyleu is a proud DGR CP member, so we send you a Conservation Fee Discount Voucher code for each vehicle. Enter it when you buy your conservation fees at https://dinokeng.plnktn.io to pay R85 instead of R100 per adult per night. To use the self-drive route, each vehicle also needs a Self Drive Permit (R250 once off).\n\nEveryone in your group signs our indemnity online before arriving (each adult for themselves, a parent or guardian for anyone under 18). If not everyone has signed yet, here is the link: {signlink}\n\nLet us know roughly when you will arrive and we will have your stand ready. Gate questions: 060 458 4478.\n\nThe Kyleu team'; } },
-    thanks: { t: 'Thank you & review', s: 'Thanks for staying at Kyleu', b: function (b) { return 'Hi {first},\n\nThank you for camping with us at {stand}. We hope you loved the bush! If you have a minute, a Google review helps our small family camp a lot.\n\nThe Kyleu team'; } },
+    arrival: { t: 'Pre-arrival information', s: 'Getting to Kyleu Bush Camp', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}.\n\nDirections: enter Dinokeng at Tau Gate, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km.\n\nKyleu is a proud DGR CP member, so we send you a Conservation Fee Discount Voucher code for each vehicle. Enter it when you buy your conservation fees at https://dinokeng.plnktn.io to pay R85 instead of R100 per adult per night. To use the self-drive route, each vehicle also needs a Self Drive Permit (R250 once off).\n\nEveryone in your group signs our indemnity online before arriving (each adult for themselves, a parent or guardian for anyone under 18). If not everyone has signed yet, here is the link: {signlink}\n\nYou can check in from {checkin}, and check-out on your last day is by {checkout}. Let us know roughly when you will arrive and we will have your stand ready. Gate questions: 060 458 4478.\n\nThe Kyleu team'; } },
+    thanks: { t: 'Thank you & review', s: 'Thank you for staying at Kyleu', b: function (b) { return b && b.guest ? thanksMsg(b) : thanksTpl(); } },   // the words and the Google review link: Settings > Check-in & Dinokeng
     invoice: { t: 'Quotation or invoice', s: 'Your Kyleu reservation {ref} ({doc})', b: function (b) { return b && b.payments && paid(b) > 0 ? 'Hi {first},\n\nPlease find your invoice for {stand}, {ci} to {co}, attached.\n\nTotal {total}, paid so far {paid}, balance {balance}. Pay by EFT using reference {ref}.\n\nThe Kyleu team'
       : 'Hi {first},\n\nThank you for booking {stand}, {ci} to {co}. Please find your quotation attached, with our bank details and your booking reference {ref}.\n\nThis quotation is valid for {qdays}. After that the stand is released. To secure your stand, please pay {deposit} using reference {ref}.\n\nOnce payment has been made, upload your proof of payment directly to your booking:\n{link}\n\nThe Kyleu team'; } },
     indemnity: { t: 'Sign the indemnity (link)', s: 'Please sign the Kyleu indemnity for {ref}', b: function (b) { return 'Hi {first},\n\nKyleu is inside the Dinokeng Big 5 Game Reserve, so everyone in your group signs our indemnity before arriving: each adult for themselves, and a parent or guardian for anyone under 18. It takes about a minute per person:\n{signlink}\n\nYou can sign for everyone who is with you on one phone, or forward the link so each person signs on their own phone. Everyone gets a copy of what they signed.\n\nSee you on {ci}!\nThe Kyleu team'; } },
@@ -992,7 +1001,7 @@
   };
   function fill(t, b) {
     var dcodes = (b.cars || []).map(function (c) { return c.dgr; }).filter(Boolean);
-    var map = { qdays: validDays(String(b.created || TODAY).slice(0, 10), depositDue(b)), doc: b && b.payments && paid(b) > 0 ? 'invoice' : 'quotation', bank: bankLine(), qvalid: fd(depositDue(b), { weekday: 'long', day: 'numeric', month: 'long' }), link: bookingLink(b), signlink: signLink(b), voucher: dcodes.length ? dcodes.join(', ') : 'the codes we send you', first: b.guest.first, stand: standById(b.stand).name, ci: fd(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }), co: fd(b.co, { weekday: 'long', day: 'numeric', month: 'long' }), deposit: money(deposit(b)), depdue: fd(depositDue(b), { day: 'numeric', month: 'long' }), ref: b.ref, balance: money(balance(b)), baldue: fd(balanceDue(b), { day: 'numeric', month: 'long' }), total: money(b.total), paid: money(paid(b)) };
+    var map = { checkin: checkInTime(), checkout: checkOutTime(), qdays: validDays(String(b.created || TODAY).slice(0, 10), depositDue(b)), doc: b && b.payments && paid(b) > 0 ? 'invoice' : 'quotation', bank: bankLine(), qvalid: fd(depositDue(b), { weekday: 'long', day: 'numeric', month: 'long' }), link: bookingLink(b), signlink: signLink(b), voucher: dcodes.length ? dcodes.join(', ') : 'the codes we send you', first: b.guest.first, stand: standById(b.stand).name, ci: fd(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }), co: fd(b.co, { weekday: 'long', day: 'numeric', month: 'long' }), deposit: money(deposit(b)), depdue: fd(depositDue(b), { day: 'numeric', month: 'long' }), ref: b.ref, balance: money(balance(b)), baldue: fd(balanceDue(b), { day: 'numeric', month: 'long' }), total: money(b.total), paid: money(paid(b)) };
     return t.replace(/\{(\w+)\}/g, function (_, k) { return map[k] != null ? map[k] : _; });
   }
   function actRemind(ref) { var b = byRef(ref); sendTemplate(b, defaultTemplate(b)); }
@@ -1209,7 +1218,8 @@
     var lockAll = closed ? ' disabled' : '', lockCi = closed || inCamp ? ' disabled' : '', n = cl ? clientBookings(cl).length : 1, ex = b.extras || {};
     var srcs = ['Website', 'Phone', 'WhatsApp', 'Email', 'Walk-in']; if (srcs.indexOf(b.source) < 0) srcs.push(b.source);
     var tellTouched = false;
-    var read = function (f) { return { ci: fval(f, 'ci'), co: fval(f, 'co'), stand: fval(f, 'stand'), adults: +fval(f, 'adults') || 0, pens: +fval(f, 'pens') || 0, kids: +fval(f, 'kids') || 0, vehicles: +fval(f, 'veh') || 1, eta: fval(f, 'eta'), gd: +fval(f, 'gd') || 0 }; };
+    var read = function (f) { return { ci: fval(f, 'ci'), co: fval(f, 'co'), stand: fval(f, 'stand'), adults: +fval(f, 'adults') || 0, pens: +fval(f, 'pens') || 0, kids: +fval(f, 'kids') || 0, vehicles: Math.max(0, Math.min(20, +fval(f, 'veh') || 0)), eta: fval(f, 'eta'), gd: +fval(f, 'gd') || 0 }; };
+    var veh0 = vehKnown(b) ? ensureCars(b).length : 0;   // 0: not given yet (the box stays empty)
     var priceOf = function (s) { var q0 = quote(b.stand, b.ci, b.co, b, ex), q1 = quote(s.stand, s.ci, s.co, s, Object.assign({}, ex, { gd: s.gd })); return { de: q1.eft - q0.eft, dc: q1.card - q0.card, nights: q1.nights }; };
     modal('Edit booking ' + esc(b.ref),
       '<h5 class="m-h">Guest</h5>' +
@@ -1220,7 +1230,7 @@
       '<div class="grid2"><label class="fld"><span>Arrive</span><input type="date" name="ci" value="' + b.ci + '"' + lockCi + '></label><label class="fld"><span>Depart</span><input type="date" name="co" value="' + b.co + '"' + lockAll + '></label></div>' +
       '<label class="fld"><span>Stand</span><select name="stand"' + lockCi + '>' + standOptions(b.stand) + '</select></label>' +
       '<div class="grid3"><label class="fld"><span>Adults</span><input type="number" min="0" max="40" name="adults" value="' + b.adults + '"' + lockAll + '></label><label class="fld"><span>Pensioners</span><input type="number" min="0" max="40" name="pens" value="' + b.pens + '"' + lockAll + '></label><label class="fld"><span>Kids under 12</span><input type="number" min="0" max="40" name="kids" value="' + b.kids + '"' + lockAll + '></label></div>' +
-      '<div class="grid3"><label class="fld"><span>Vehicles</span><input type="number" min="1" max="6" name="veh" value="' + (b.vehicles || 1) + '"' + lockAll + '></label><label class="fld"><span>Arrival time</span><select name="eta"' + lockAll + '>' + [''].concat(['Before 13:00', '13:00-15:00', '15:00-18:00', 'After 18:00', 'Not sure yet']).map(function (t) { return '<option value="' + t + '"' + ((b.eta || '') === t ? ' selected' : '') + '>' + (t || 'Not given') + '</option>'; }).join('') + '</select></label><label class="fld"><span>Game drive (people)</span><input type="number" min="0" max="10" name="gd" value="' + (ex.gd || 0) + '"' + lockAll + '></label></div>' +
+      '<div class="grid3"><label class="fld"><span>Vehicles</span><input type="number" min="1" max="20" name="veh" value="' + (veh0 || '') + '" placeholder="Not given yet"' + lockAll + '></label><label class="fld"><span>Arrival time</span><select name="eta"' + lockAll + '>' + [''].concat(b.eta && etaChoices().indexOf(b.eta) < 0 ? [b.eta] : [], etaChoices()).map(function (t) { return '<option value="' + esc(t) + '"' + ((b.eta || '') === t ? ' selected' : '') + '>' + esc(t ? (/^\d{1,2}:\d{2}$/.test(t) ? 'Around ' + t : etaNice(t)) : 'Not given') + '</option>'; }).join('') + '</select></label><label class="fld"><span>Game drive (people)</span><input type="number" min="0" max="10" name="gd" value="' + (ex.gd || 0) + '"' + lockAll + '></label></div>' +
       '<label class="fld"><span>Booked via</span><select name="source">' + srcs.map(function (x) { return '<option' + (x === b.source ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select></label>' +
       '<div class="quote-box" data-q></div>' +
       '<label class="fld"><span>Reason for the change (optional, saved in the notes)</span><input name="why" placeholder="e.g. Guest phoned to add a night"></label>' +
@@ -1248,11 +1258,12 @@
           if (s.co !== b.co) changes.push('depart ' + fd(b.co) + ' to ' + fd(s.co));
           if (s.stand !== b.stand) changes.push('stand ' + st0.name + ' to ' + standById(s.stand).name);
           if (s.adults !== b.adults || s.pens !== b.pens || s.kids !== b.kids) changes.push('guests ' + ppl(b) + ' to ' + ppl(s));
-          if (s.vehicles !== (b.vehicles || 1)) changes.push('vehicles ' + (b.vehicles || 1) + ' to ' + s.vehicles);
+          if (!s.vehicles) s.vehicles = veh0;   // left empty: nothing changes
+          if (s.vehicles !== veh0) changes.push('vehicles ' + (veh0 || 'not given') + ' to ' + s.vehicles);
           if (s.eta !== (b.eta || '')) changes.push('arrival time ' + (b.eta || 'blank') + ' to ' + (s.eta || 'blank'));
           if (s.gd !== (ex.gd || 0)) changes.push('game drive ' + (ex.gd || 0) + ' to ' + s.gd + ' people');
           var oldTotal = b.total, wasFull = paid(b) > 0 && paid(b) >= b.total;
-          b.ci = s.ci; b.co = s.co; b.stand = s.stand; b.adults = s.adults; b.pens = s.pens; b.kids = s.kids; if (s.vehicles !== (b.vehicles || 1)) b.vehTbc = false; b.vehicles = s.vehicles; b.eta = s.eta; b.extras = Object.assign({}, ex, { gd: s.gd }); fitCars(b);
+          b.ci = s.ci; b.co = s.co; b.stand = s.stand; b.adults = s.adults; b.pens = s.pens; b.kids = s.kids; if (s.vehicles !== veh0) { vehSaid(b); b.vehicles = s.vehicles; fitCars(b); } b.eta = s.eta; b.extras = Object.assign({}, ex, { gd: s.gd });
           // an open size check follows the edit: gone when the group now fits the usual size, otherwise it shows the new numbers
           if (b.sizeCheck && !b.sizeCheck.done) { var ug = standById(b.stand).guests || 8; if (people(b) <= ug) delete b.sizeCheck; else { b.sizeCheck.people = people(b); b.sizeCheck.usual = ug; } }
           // shift the price by the difference, so discounts and shop charges already on the booking stay
@@ -1267,7 +1278,7 @@
         b.notes.push({ at: nowStamp(), by: ME.name, text: 'Booking edited: ' + txt + '.' + (why ? ' Reason: ' + why : '') });
         if (fval(f, 'tell')) setTimeout(function () { sendTemplate(b, extraDue(b) ? 'extra' : 'update'); }, 0);
         log('Booking ' + b.ref + ' edited', b.ref); save(); refresh();
-        toast(!b.vehTbc && namedIn(b) > people(b) ? 'Booking updated. The vehicles still list ' + namedIn(b) + ' people: check them.' : 'Booking updated');
+        toast(vehKnown(b) && namedIn(b) > people(b) ? 'Booking updated. The vehicles still list ' + namedIn(b) + ' people: check them.' : 'Booking updated');
       }, { wide: true, noFocus: true, onOpen: function (f) {
         var box = $('[data-q]', f), tell = f.elements.tell;
         tell.addEventListener('change', function () { tellTouched = true; });
@@ -1276,7 +1287,7 @@
           var s = read(f);
           if (s.co <= s.ci) { box.innerHTML = '<span class="bad-t">Departure must be after arrival.</span>'; return; }
           var p = priceOf(s), nt = b.total + (b.method === 'card' ? p.dc : p.de), pd = paid(b), moved = s.ci !== b.ci || s.co !== b.co || s.stand !== b.stand, st = standById(s.stand);
-          box.innerHTML = (moved ? (overlaps(s.stand, s.ci, s.co, b.ref) ? '<span class="pill bad"><i></i>Stand not free for those nights</span>' : '<span class="pill ok"><i></i>Stand free</span>') : '') + sizePill(st, s.adults + s.pens + s.kids) + (!b.vehTbc && namedIn(b) > s.adults + s.pens + s.kids ? ' <span class="pill bad"><i></i>' + namedIn(b) + ' people named in the vehicles</span>' : '') +
+          box.innerHTML = (moved ? (overlaps(s.stand, s.ci, s.co, b.ref) ? '<span class="pill bad"><i></i>Stand not free for those nights</span>' : '<span class="pill ok"><i></i>Stand free</span>') : '') + sizePill(st, s.adults + s.pens + s.kids) + (vehKnown(b) && namedIn(b) > s.adults + s.pens + s.kids ? ' <span class="pill bad"><i></i>' + namedIn(b) + ' people named in the vehicles</span>' : '') +
             '<div class="qb-row"><span>' + p.nights + ' night' + (p.nights > 1 ? 's' : '') + ' · ' + methodLabel(b.method) + '</span><span class="price-pair">' + (nt !== b.total ? '<s>' + money(b.total) + '</s> ' : '') + '<b>' + money(nt) + '</b></span></div>' +
             '<div class="muted small">Paid ' + money(pd) + ' · ' + (nt >= pd ? 'balance ' + money(nt - pd) : '<span class="warn-t">' + money(pd - nt) + ' more than the new total. Keep it as credit or refund it.</span>') + '</div>';
           if (!tellTouched) tell.checked = moved || nt !== b.total;
@@ -1311,7 +1322,7 @@
       '<label class="fld"><span>Stand</span><select name="stand">' + standOptions(pre.stand || '') + '</select></label>' +
       '<div class="grid3"><label class="fld"><span>Adults</span><input type="number" min="0" max="40" name="adults" value="2"></label><label class="fld"><span>Pensioners</span><input type="number" min="0" max="40" name="pens" value="0"></label><label class="fld"><span>Kids under 12</span><input type="number" min="0" max="40" name="kids" value="0"></label></div>' +
       '<div class="grid2"><label class="fld"><span>Booked via</span><select name="source"><option>Phone</option><option>WhatsApp</option><option>Email</option><option>Walk-in</option></select></label><label class="fld"><span>Game drive (people)</span><input type="number" min="0" max="10" name="gd" value="0"></label></div>' +
-      '<label class="fld"><span>Vehicles coming (one booking can cover the whole group)</span><input type="number" min="1" max="20" name="veh" value="1"></label>' +
+      '<label class="fld"><span>Vehicles coming (leave empty if the guest has not said yet)</span><input type="number" min="1" max="20" name="veh" value="" placeholder="Not given yet"></label>' +
       '<label class="fld"><span>Note for the team (optional)</span><input name="note" placeholder="e.g. Celebrating a birthday, arriving late on Friday"></label>' +
       '<span class="fld-l">How will they pay?</span><div class="seg"><label><input type="radio" name="m" value="eft" checked><span>EFT</span></label><label><input type="radio" name="m" value="card"><span>Card</span></label><label><input type="radio" name="m" value="cash"><span>Cash on arrival</span></label></div>' +
       '<div class="quote-box" data-q></div><div data-credit-box></div>',
@@ -1344,6 +1355,7 @@
           b.notes.push({ at: nowStamp(), by: ME.name, text: 'Confirmed without a deposit: the guest pays ' + money(b.total - paid(b)) + ' on arrival (cash).' });
           var oaInv = invFor(b, 'Invoice', null, { by: ME.name, note: 'Payment on arrival (cash), as arranged with Kyleu.' }); b.invoices = [oaInv]; K.commitNo('Invoice', oaInv.no);
         }
+        if (+fval(f, 'veh') > 0) vehSaid(b); else b.vehTbc = true;   // no number typed: vehicles not given yet, never a guess
         ensureCars(b); DB.bookings.push(b); DB.bookings.sort(function (x, y) { return x.ci < y.ci ? -1 : 1; });
         log('New ' + b.source.toLowerCase() + ' booking ' + b.ref + ' for ' + guestName(b), b.ref); save(); render(); openBooking(b.ref);
         toast('Booking ' + b.ref + ' created' + (linked ? ' for returning client ' + esc(clientName(cl)) : ''));
@@ -1422,11 +1434,29 @@
   function minorsOf(m, guests) { return (m || []).filter(function (n, i, a) { return (guests || []).indexOf(n) >= 0 && a.indexOf(n) === i; }); }
   function isMinor(c, n) { return (c.minors || []).indexOf(n) >= 0; }
   function passTxt(c) { return (c.guests || []).map(function (n) { return n + (isMinor(c, n) ? ' (under 18)' : ''); }).join(', '); }
+  /* Vehicles are only "given" once the guest or staff really said so: until then a booking keeps ONE empty car
+     (so it can still be checked in, and a Dinokeng code can wait on it) and every screen says "not given yet".
+     Never one car per person. b.vehSaid = { at, by }: staff typed the number of vehicles. */
+  function carGiven(b, c) { return !!(c.reg || c.make || (c.guests || []).length || c.st !== 'due' || c.noShow || (c.driver && !c.auto && c.driver !== guestName(b))); }   // c.auto: the driver was filled in by the system, not typed
+  function vehKnown(b) { var cs = b.cars || []; return cs.some(function (c) { return c.st !== 'due'; }) || (!b.vehTbc && (!!b.vehSaid || cs.some(function (c) { return carGiven(b, c); }))); }
+  function vehSaid(b) { b.vehTbc = false; if (!b.vehSaid) b.vehSaid = { at: nowStamp(), by: ME ? ME.name : 'System' }; }
+  function vehN(b) { return vehKnown(b) ? ensureCars(b).length : 1; }   // how many vehicles to count where a number is needed: 1 until we are told
+  function vehTxt(b) { var n = vehN(b); return vehKnown(b) ? n + ' vehicle' + (n === 1 ? '' : 's') : 'Vehicles not given yet'; }
+  var VEH_ASSUMED = '1 vehicle assumed until the guest tells us';
+  // not given yet: keep one empty car only (extra made-up ones go, unless something already hangs on them), and say so to the website too
+  function vehTidy(b) {
+    if (vehKnown(b) || !b.cars || !b.cars.length) return false;
+    var was = b.cars.length + '|' + !!b.vehTbc + '|' + b.cars[0].people;
+    for (var i = b.cars.length - 1; i > 0; i--) if (!carGiven(b, b.cars[i]) && !b.cars[i].dgrSent && !b.cars[i].dgr && !b.cars[i].ind && !carTab(b, b.cars[i]).items.length) b.cars.splice(i, 1);
+    if (b.cars.length === 1 && !carGiven(b, b.cars[0])) b.cars[0].people = people(b);
+    b.vehicles = b.cars.length; b.vehTbc = true;
+    return was !== b.cars.length + '|true|' + b.cars[0].people;
+  }
   function ensureCars(b) {
     if (b.cars && b.cars.length) return b.cars;
-    var n = Math.max(1, b.vehicles || 1), st = b.status === 'in' ? 'in' : b.status === 'out' ? 'out' : 'due', ppl = people(b), per = Math.floor(ppl / n);
+    var n = !b.vehTbc && b.vehSaid ? Math.max(1, b.vehicles || 1) : 1, st =b.status === 'in' ? 'in' : b.status === 'out' ? 'out' : 'due', ppl = people(b), per = Math.floor(ppl / n);
     b.cars = [];
-    for (var i = 0; i < n; i++) b.cars.push(newCar({ driver: i ? '' : guestName(b), phone: i ? '' : b.guest.phone, people: per + (i ? 0 : ppl - per * n), st: st, ind: st === 'due' ? null : { at: b.ci + ' 12:00', by: 'Front desk' }, inAt: st === 'due' ? '' : b.ci + ' 12:00', outAt: st === 'out' ? b.co + ' 10:00' : '' }));
+    for (var i = 0; i < n; i++) b.cars.push(newCar({ auto: 1, driver: i ? '' : guestName(b), phone: i ? '' : b.guest.phone, people: per + (i ? 0 : ppl - per * n), st: st, ind: st === 'due' ? null : { at: b.ci + ' 12:00', by: 'Front desk' }, inAt: st === 'due' ? '' : b.ci + ' 12:00', outAt: st === 'out' ? b.co + ' 10:00' : '' }));
     b.vehicles = n; return b.cars;
   }
   function carLabel(c, i) { return c.reg || 'Vehicle ' + (i + 1); }
@@ -1442,11 +1472,13 @@
   function carsHTML(b) {
     if (b.status === 'cancelled') return '';
     var cs = ensureCars(b), nIn = cs.filter(function (c) { return c.st === 'in'; }).length, canIn = (b.status === 'confirmed' || b.status === 'in') && b.ci <= TODAY && TODAY <= b.co;
-    var missing = b.vehTbc || cs.some(function (c) { return !c.reg || !c.driver; });
-    return '<section class="d-sec"><h4 class="h4-row">Vehicles · ' + (b.status === 'out' ? 'all left' : nIn + ' of ' + cs.length + ' in camp') + (b.status !== 'out' ? '<button type="button" class="link-btn" data-act="car-add" data-ref="' + b.ref + '">' + ic('plus') + 'Add vehicle</button>' : '') + '</h4>' +
-      namesWarn(b) + (b.vehTbc ? '<div class="callout warn cflex veh-tbc">' + ic('alert') + '<span><b>Vehicles not given yet.</b> ' + esc(b.guest.first) + ' adds them when finalising the booking after paying in full, or you can add them here.</span><button type="button" class="btn ghost sm" data-act="veh-ok" data-ref="' + b.ref + '">Number confirmed</button></div>' : '') +
-      cs.map(function (c, i) {
-        var k = b.ref + '|' + c.id, t = carTab(b, c), acts = [];
+    // not given yet: say so and offer "Add vehicles"; the one empty car that waits for check-in is not drawn as if it were real
+    var known = vehKnown(b), shown = known ? cs : cs.filter(function (c) { return carGiven(b, c); });
+    var missing = !known || cs.some(function (c) { return !c.reg || !c.driver; });
+    return '<section class="d-sec"><h4 class="h4-row">Vehicles · ' + (!known ? 'not given yet' : b.status === 'out' ? 'all left' : nIn + ' of ' + cs.length + ' in camp') + (b.status !== 'out' ? '<button type="button" class="link-btn" data-act="' + (known ? 'car-add' : 'veh-add') + '" data-ref="' + b.ref + '">' + ic('plus') + (known ? 'Add vehicle' : 'Add vehicles') + '</button>' : '') + '</h4>' +
+      namesWarn(b) + (!known ? '<div class="callout warn cflex veh-tbc">' + ic('alert') + '<span><b>Vehicles: not given yet.</b> The booking is for ' + peopleTxt(b) + '. ' + esc(b.guest.first) + ' adds the vehicles when finalising the booking after paying in full, or you can add them here.' + (canIn && cs.some(function (c) { return c.st === 'due'; }) ? ' Arriving now? Press Check in and type the vehicle in at the gate.' : '') + '</span>' + (b.status !== 'out' ? '<button type="button" class="btn sm" data-act="veh-add" data-ref="' + b.ref + '">' + ic('plus') + 'Add vehicles</button>' : '') + '</div>' : '') +
+      shown.map(function (c) {
+        var i = cs.indexOf(c), k = b.ref + '|' + c.id, t = carTab(b, c), acts = [];
         if (c.st === 'due' && canIn) acts.push('<button type="button" class="btn green sm" data-act="car-in" data-ref="' + k + '">' + ic('in') + 'Check in</button>');
         if (c.st === 'in') acts.push('<button type="button" class="btn ghost sm" data-act="car-tab" data-ref="' + k + '">' + ic('cart') + 'Add to tab</button><button type="button" class="btn green sm" data-act="car-out" data-ref="' + k + '">' + ic('out') + 'Check out</button>');
         acts.push('<button type="button" class="icon-btn sm" data-act="car-edit" data-ref="' + k + '" aria-label="Edit vehicle" title="Edit vehicle">' + ic('edit') + '</button>');
@@ -1454,7 +1486,7 @@
         var sub = [c.driver ? 'Driver ' + c.driver : '', c.people ? c.people + (c.people === 1 ? ' person' : ' people') : ''].filter(Boolean).join(' · ');
         return '<div class="car"><span class="car-i">' + ic('car') + '</span><div class="car-b"><b>' + esc(carLabel(c, i)) + '</b><small>' + esc(sub || 'Details are added at check-in') + '</small>' + ((c.guests || []).length ? '<small class="car-pass">Passengers: ' + esc(passTxt(c)) + '</small>' : '') + '<div class="car-p">' +
           (c.st === 'in' ? '<span class="pill ok"><i></i>In since ' + whenShort(c.inAt) + '</span>' : c.st === 'out' ? '<span class="pill muted"><i></i>Left ' + whenShort(c.outAt) + '</span>' : '<span class="pill muted"><i></i>Expected</span>') +
-          (c.ind ? '<span class="pill ok">' + ic('check') + 'Indemnity signed</span>' : carSigned(b, c) ? '<span class="pill ok">' + ic('check') + 'Signed online</span>' : c.st === 'due' ? '<span class="pill muted">Indemnity not signed yet</span>' : '<span class="pill bad">' + ic('alert') + 'Indemnity not signed</span>') +
+          (c.ind && carPaper(b, c).length ? (carPaper(b, c).every(function (r) { return r.scan; }) ? '<span class="pill ok">' + ic('check') + 'Signed on paper, scan on file</span>' : '<span class="pill warn">' + ic('clip') + 'Signed on paper, scan to upload</span>') : c.ind ? '<span class="pill ok">' + ic('check') + 'Indemnity signed</span>' : carSigned(b, c) ? '<span class="pill ok">' + ic('check') + 'Signed online</span>' : c.st === 'due' ? '<span class="pill muted">Indemnity not signed yet</span>' : '<span class="pill bad">' + ic('alert') + 'Indemnity not signed</span>') +
           (c.dgrSent ? '<span class="pill ok">' + ic('gift') + 'Dinokeng code sent</span>' : '') +
           (t.total ? '<span class="pill ' + (t.owing ? 'warn' : 'ok') + '">Tab ' + money(t.total) + (t.owing ? ', ' + money(t.owing) + ' owing' : ', paid') + '</span>' : '') +
           '</div></div><div class="car-a">' + acts.join('') + '</div></div>';
@@ -1467,7 +1499,7 @@
       '<div class="grid2"><label class="fld"><span>Driver</span><input name="driver" value="' + esc(c.driver) + '"></label><label class="fld"><span>Driver\'s mobile</span><input name="phone" inputmode="tel" value="' + esc(c.phone) + '"></label></div>' +
       '<label class="fld"><span>Passengers, one name per line (everyone else in the vehicle)</span><textarea name="guests" rows="3">' + esc((c.guests || []).join('\n')) + '</textarea></label>';
   }
-  function readCar(f, c) { if (f.elements.make) c.make = fval(f, 'make'); c.reg = fval(f, 'reg').toUpperCase(); c.driver = fval(f, 'driver'); c.phone = fval(f, 'phone'); c.guests = fval(f, 'guests').split(/\n/).map(function (x) { return x.trim(); }).filter(Boolean); c.minors = minorsOf(c.minors, c.guests); c.people =Math.max(1, +fval(f, 'people') || 1, (c.driver ? 1 : 0) + c.guests.length); }
+  function readCar(f, c) { delete c.auto; if (f.elements.make) c.make = fval(f, 'make'); c.reg = fval(f, 'reg').toUpperCase(); c.driver = fval(f, 'driver'); c.phone = fval(f, 'phone'); c.guests = fval(f, 'guests').split(/\n/).map(function (x) { return x.trim(); }).filter(Boolean); c.minors = minorsOf(c.minors, c.guests); c.people =Math.max(1, +fval(f, 'people') || 1, (c.driver ? 1 : 0) + c.guests.length); }
   // the indemnity at check-in: who in this vehicle has signed, who has not, and a way to sign now
   function carInd(b, c) {
     var names = [c.driver].concat(c.guests || []).filter(Boolean), s = K.ind.status(b.ref, people(b));
@@ -1475,11 +1507,12 @@
     var unnamed = Math.max(0, (c.people || names.length) - names.length);
     return { names: names, done: done, left: left, unnamed: unnamed, all: names.length > 0 && !left.length && !unnamed, s: s };
   }
+  function paperLine(b, c) { var pp = carPaper(b, c), n = pp.filter(function (r) { return r.scan; }).length; return pp.length ? '<small>Signed on paper: ' + esc(pp.map(function (r) { return r.name; }).join(', ')) + '. ' + (n === pp.length ? 'The scan is on file.' : n ? n + ' of ' + pp.length + ' scans are on file.' : 'The scan is not uploaded yet.') + '</small>' : ''; }
   function indBox(k, on) {
     var o = carOf(k), b = o.b, c = o.c; if (!c) return '';
     var x = carInd(b, c), list = function (a) { return esc(a.join(', ')); };
-    if (x.all) return '<div class="ind-box ok"><input type="hidden" name="ind" value="online"><span class="ind-box-i">' + ic('check') + '</span><div><b>Indemnity complete: everyone in this vehicle has signed</b><small>' + list(x.done) + '</small></div></div>';
-    if (on && c.ind && c.ind.by !== 'Online') return '<div class="ind-box ok"><span class="ind-box-i">' + ic('check') + '</span><div><b>Indemnity marked as signed</b><small>Ticked by ' + esc(c.ind.by) + ' ' + whenShort(c.ind.at) + (x.left.length ? '. Signed on paper: ' + list(x.left) : '') + '</small></div><label class="check"><input type="checkbox" name="ind" checked><span>Signed</span></label></div>';
+    if (x.all) return '<div class="ind-box ok"><input type="hidden" name="ind" value="online"><span class="ind-box-i">' + ic('check') + '</span><div><b>Indemnity complete: everyone in this vehicle has signed</b><small>' + list(x.done) + '</small>' + paperLine(b, c) + '</div></div>';
+    if (on && c.ind && c.ind.by !== 'Online') return '<div class="ind-box ok"><span class="ind-box-i">' + ic('check') + '</span><div><b>Indemnity marked as signed</b><small>Ticked by ' + esc(c.ind.by) + ' ' + whenShort(c.ind.at) + (x.left.length ? '. Signed on paper: ' + list(x.left) : '') + '</small>' + paperLine(b, c) + '</div><label class="check"><input type="checkbox" name="ind" checked><span>Signed</span></label></div>';
     return '<div class="ind-box bad" role="alert"><span class="ind-box-i">' + ic('alert') + '</span><div class="ind-box-b"><b>Indemnity NOT complete for this vehicle</b>' +
       (x.left.length ? '<small><b>Not signed yet:</b> ' + list(x.left) + '</small>' : '') +
       (x.unnamed ? '<small><b>' + x.unnamed + ' ' + (x.unnamed === 1 ? 'person is' : 'people are') + ' not named</b> in this vehicle, so they cannot have signed. Add their names above, then sign.</small>' : '') +
@@ -1496,8 +1529,8 @@
         if (f.elements.reg && !String(fval(f, 'reg')).trim()) { toast('Add the registration number first: it goes on the gate list'); f.elements.reg.focus(); return false; }
         if (!fval(f, 'ind')) { toast('The indemnity is not complete. Sign now at reception, or tick that they signed the paper form.'); var ib = $('.ind-box', f); if (ib) { ib.scrollIntoView({ block: 'center', behavior: 'smooth' }); ib.classList.remove('shake'); void ib.offsetWidth; ib.classList.add('shake'); } return false; }
         var onl = fval(f, 'ind') === 'online';
-        readCar(f, c); c.ind = c.ind || { at: nowStamp(), by: onl ? 'Online' : ME.name };
-        if (!onl) { var cx = carInd(b, c), who = cx.left.concat(cx.unnamed ? [cx.unnamed + ' unnamed ' + (cx.unnamed === 1 ? 'person' : 'people')] : []); if (who.length) b.notes.push({ at: nowStamp(), by: ME.name, text: carLabel(c, i) + ': paper indemnity signed at check-in by ' + who.join(', ') + '.' }); } c.st = 'in'; c.inAt = nowStamp(); c.inBy = ME.name; delete c.noShow;
+        readCar(f, c); vehSaid(b); c.ind = c.ind || { at: nowStamp(), by: onl ? 'Online' : ME.name };
+        if (!onl) { var cx = carInd(b, c), who = cx.left.concat(cx.unnamed ? [cx.unnamed + ' unnamed ' + (cx.unnamed === 1 ? 'person' : 'people')] : []); if (who.length) b.notes.push({ at: nowStamp(), by: ME.name, text: carLabel(c, i) + ': paper indemnity signed at check-in by ' + who.join(', ') + '. The scan still has to be uploaded.' }); paperRecs(b, c, nowStamp(), ME.name); } c.st = 'in'; c.inAt = nowStamp(); c.inBy = ME.name; delete c.noShow;
         var hn = handRead(f, b); if (hn) b.notes.push({ at: nowStamp(), by: ME.name, text: 'Camp shop order ' + hn + '.' });
         issueRead(f, b);
         if (b.status !== 'in' && bal > 0) b.notes.push({ at: nowStamp(), by: ME.name, text: 'Checked in with ' + money(bal) + ' still owing. Collect at reception.' });
@@ -1528,12 +1561,26 @@
         b.vehicles = b.cars.length;
         log(carLabel(c, i) + ' checked out (' + guestName(b) + ', ' + standById(b.stand).name + ')', b.ref); save(); refresh();
         toast(b.status === 'out' ? 'Checked out. The stand is ready for cleaning.' : esc(carLabel(c, i)) + ' checked out. ' + stillIn + ' vehicle' + (stillIn === 1 ? '' : 's') + ' still in camp');
+        if (b.status === 'out' && can('cap:guests')) setTimeout(function () { thanksStep(b.ref); }, 0);   // the next small step: thank the guest and ask for a Google review
+      }, { noFocus: true });
+  }
+  // staff add the vehicles for a guest who has not given them yet: how many are coming, and the first one's details
+  function actVehAdd(ref) {
+    var b = byRef(ref); if (!b) return; var cs = ensureCars(b), c = cs[0];
+    modal('Add vehicles for ' + esc(guestName(b)), '<p class="muted small">The booking is for ' + peopleTxt(b) + '. Type in what ' + esc(b.guest.first) + ' told you. A registration can also be added later, or at check-in.</p>' +
+      '<label class="fld"><span>How many vehicles are coming?</span><input type="number" min="1" max="20" name="vn" value="1"></label><h5 class="m-h">Vehicle 1</h5>' + carForm(c),
+      'Save vehicles', function (f) {
+        var n = Math.max(1, Math.min(20, +fval(f, 'vn') || 1));
+        readCar(f, c); vehSaid(b); b.vehicles = n; fitCars(b);
+        b.notes.push({ at: nowStamp(), by: ME.name, text: 'Vehicles added by ' + ME.name + ': ' + b.cars.length + ' vehicle' + (b.cars.length === 1 ? '' : 's') + (c.reg ? ', the first is ' + c.reg : '') + '.' });
+        log('Vehicles added to ' + b.ref, b.ref); save(); refresh();
+        toast(b.cars.length > 1 ? b.cars.length + ' vehicles saved. Add the details of the others under Vehicles' : 'Vehicle saved');
       }, { noFocus: true });
   }
   function actCarEdit(key) {
     var o = carOf(key), b = o.b, c = o.c, i = o.i; if (!c) return;
     modal('Edit ' + esc(carLabel(c, i)), carForm(c) + (c.st !== 'due' ? indBox(key, !!c.ind) : ''), 'Save', function (f) {
-      readCar(f, c); if (c.st !== 'due') c.ind = fval(f, 'ind') ? (c.ind || { at: nowStamp(), by: ME.name }) : null;
+      readCar(f, c); vehSaid(b); if (c.st !== 'due') { c.ind = fval(f, 'ind') ? (c.ind || { at: nowStamp(), by: ME.name }) : null; if (fval(f, 'ind') === true) paperRecs(b, c, c.ind.at, ME.name); else if (!c.ind) paperDrop(b, c); }
       log('Vehicle details updated on ' + b.ref, b.ref); save(); refresh(); toast(namedIn(b) > people(b) ? 'Saved, but ' + namedIn(b) + ' people are now named and the booking is for ' + people(b) : 'Vehicle saved');
     });
   }
@@ -1564,13 +1611,13 @@
     if (b.status === 'cancelled') return '';
     var cs = ensureCars(b), n = cs.length, sent = cs.filter(function (c) { return c.dgrSent; }).length;
     return '<section class="d-sec dgr"><h4 class="h4-row">Dinokeng discount vouchers (DGR CP)<span class="pill ' + (sent === n ? 'ok' : sent ? 'warn' : 'muted') + '">' + sent + ' of ' + n + ' sent</span></h4>' +
-      (b.vehTbc ? '<p class="callout warn cflex">' + ic('info') + '<span>' + esc(b.guest.first) + ' is not sure yet how many vehicles are coming. Make the codes once they tell you.</span></p>' : '') +
+      (!vehKnown(b) ? '<p class="callout warn cflex">' + ic('info') + '<span><b>Vehicles not given yet: ' + VEH_ASSUMED + '.</b> Make one code now if you like, and the others once ' + esc(b.guest.first) + ' says how many vehicles are coming.</span></p>' : '') +
       '<details class="dgr-how"><summary>How the vouchers work</summary><ol class="dgr-steps"><li><b>Make the codes</b> on the Dinokeng site: one code per vehicle (copy the client\'s email and the number of vehicles below).</li><li><b>Paste</b> each vehicle\'s code in its box.</li><li><b>Send the codes to the client yourself</b>, by WhatsApp or email. Dinokeng does not send them.</li></ol></details>' +
-      '<div class="dgr-copy"><button type="button" class="chip" data-copy="' + esc(b.guest.email) + '">' + ic('mail') + esc(b.guest.email || 'No email yet') + '<small>Copy</small></button><button type="button" class="chip" data-copy="' + n + '">' + ic('car') + n + ' vehicle' + (n === 1 ? '' : 's') + '<small>Copy</small></button><a class="btn ghost sm" href="' + esc(dgrLink()) + '" target="_blank" rel="noopener">' + ic('ext') + 'Open Dinokeng site to make codes</a></div>' +
+      '<div class="dgr-copy"><button type="button" class="chip" data-copy="' + esc(b.guest.email) + '">' + ic('mail') + esc(b.guest.email || 'No email yet') + '<small>Copy</small></button><button type="button" class="chip" data-copy="' + n + '">' + ic('car') + n + ' vehicle' + (n === 1 ? '' : 's') + (vehKnown(b) ? '' : ' (assumed)') + '<small>Copy</small></button><a class="btn ghost sm" href="' + esc(dgrLink()) + '" target="_blank" rel="noopener">' + ic('ext') + 'Open Dinokeng site to make codes</a></div>' +
       '<div class="dgr-cars">' + cs.map(function (c, i) {
         var k = b.ref + '|' + c.id;
         return '<div class="dgr-car"><label class="dgr-tick"><input type="checkbox" data-dgr-tick="' + k + '"' + (c.dgr && !c.dgrSent ? ' checked' : '') + ' aria-label="Choose ' + esc(carLabel(c, i)) + '"></label>' +
-          '<span class="dgr-who"><b>' + esc(carLabel(c, i)) + '</b><small>' + esc([c.driver, c.people ? c.people + (c.people === 1 ? ' person' : ' people') : ''].filter(Boolean).join(' · ') || 'Registration not given yet') + '</small></span>' +
+          '<span class="dgr-who"><b>' + esc(carLabel(c, i)) + '</b><small>' + esc(!vehKnown(b) && !carGiven(b, c) ? 'Assumed until the guest tells us' : [c.driver, c.people ? c.people + (c.people === 1 ? ' person' : ' people') : ''].filter(Boolean).join(' · ') || 'Registration not given yet') + '</small></span>' +
           '<input class="dgr-code" data-dgr-code="' + k + '" value="' + esc(c.dgr || '') + '" placeholder="Paste code" autocomplete="off" aria-label="Dinokeng code for ' + esc(carLabel(c, i)) + '">' +
           '<span class="dgr-st">' + (c.dgrSent ? '<span class="pill ok">' + ic(c.dgrSent.via === 'WhatsApp' ? 'wa' : 'check') + 'Sent by ' + (c.dgrSent.via || 'email') + ' ' + whenShort(c.dgrSent.at) + '</span>' : '<span class="pill muted">Not sent to client</span>') + '</span>' +
           '<button type="button" class="btn ghost sm" data-act="dgr-send" data-ref="' + k + '">' + ic('send') + (c.dgrSent ? 'Send again' : 'Send to client') + '</button></div>';
@@ -1731,7 +1778,19 @@
   function plate(reg, cls) { var p = regParts(reg); return p[0] ? '<span class="plate ' + (cls || '') + '"><b>' + esc(p[0]) + '</b>' + (p[1] ? '<i>' + esc(p[1]) + '</i>' : '') + '</span>' : '<span class="plate none ' + (cls || '') + '">No reg yet</span>'; }
   function regKey(s) { return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
   function nightsTxt(b) { var n = diff(b.ci, b.co); return n + (n === 1 ? ' night' : ' nights'); }
-  function etaTxt(b) { return b.eta ? (/^\d/.test(b.eta) ? 'around ' : '') + b.eta : ''; }
+  /* ---------- earliest check-in, latest check-out, and the arrival time a guest picks ----------
+     Staff set the two times under Settings > Check-in & Dinokeng. They are kept as website settings
+     ("Check-in time" and "Check-out time", 24 hour HH:MM), so the website and the documents use them too. */
+  function hm24(v) { var m = String(v == null ? '' : v).match(/^\s*(\d{1,2})\s*[:h.]\s*(\d{2})/); return m && +m[1] < 24 && +m[2] < 60 ? ('0' + m[1]).slice(-2) + ':' + m[2] : ''; }
+  function campTime(label, biz, def) { var s = (DB && DB.web && DB.web.settings) || {}; return hm24(s[label]) || hm24(K.BIZ && K.BIZ[biz]) || def; }
+  function checkInTime() { return campTime('Check-in time', 'checkIn', '13:00'); }
+  function checkOutTime() { return campTime('Check-out time', 'checkOut', '11:30'); }
+  // the arrival times to choose from: each hour from the earliest check-in to 18:00, then "After 18:00" and "Not sure yet" (the website offers the same)
+  function etaChoices() { var t = checkInTime(), h = +t.slice(0, 2) + (t.slice(3) > '00' ? 1 : 0), out = []; for (; h <= 18; h++) out.push(('0' + h).slice(-2) + ':00'); return out.concat(['After 18:00', 'Not sure yet']); }
+  // any arrival time, new ("14:00") or old ("Before 13:00", "13:00-15:00", "15:00-18:00"), as minutes after midnight so lists can be put in order; not given or not sure comes last
+  function etaNum(v) { var s = String(v || ''), m = s.match(/(\d{1,2}):(\d{2})/); if (!m) return 9999; var n = +m[1] * 60 + +m[2]; return /^\s*before/i.test(s) ? n - 1 : /^\s*after/i.test(s) ? n + 1 : n; }
+  function etaNice(v) { v = String(v || ''); return /^\d{1,2}:\d{2}$/.test(v) ? 'around ' + v : v.replace(/^(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})$/, '$1 to $2'); }
+  function etaTxt(b) { return b.eta ? etaNice(b.eta) : ''; }
 
   /* ----- wood, ice and other shop items ordered with the booking: handed over at the gate, or delivered to the stand ----- */
   function orderOf(b) { var p = preShop(b); return p && p.items ? p.items : null; }
@@ -1878,7 +1937,8 @@
         else if (c.st === 'out') act = '<span class="pill muted">' + ic('check') + 'Left ' + whenShort(c.outAt) + '</span>';
         else act = '<span class="pill muted">Never arrived</span>';
       }
-      return '<div class="gate-car">' + plate(c.reg, 'big') + '<div class="gate-veh"><b>' + esc(c.make || (c.reg ? 'Vehicle ' + (i + 1) : 'Vehicle ' + (i + 1) + ': ask for the registration')) + '</b><small>' + esc([c.driver ? 'Driver ' + c.driver : '', c.people ? c.people + (c.people === 1 ? ' person' : ' people') : ''].filter(Boolean).join(' · ') || 'Driver and passengers are added at check-in') + '</small><span class="gate-pills">' +
+      var tbc = !vehKnown(b) && !carGiven(b, c);   // vehicles not given yet: this is the one empty car that waits for check-in
+      return '<div class="gate-car">' + plate(c.reg, 'big') + '<div class="gate-veh"><b>' + esc(tbc ? 'Vehicles: not given yet' : c.make || (c.reg ? 'Vehicle ' + (i + 1) : 'Vehicle ' + (i + 1) + ': ask for the registration')) + '</b><small>' + esc(tbc ? 'Ask how many vehicles came, and add each one at check-in' : [c.driver ? 'Driver ' + c.driver : '', c.people ? c.people + (c.people === 1 ? ' person' : ' people') : ''].filter(Boolean).join(' · ') || 'Driver and passengers are added at check-in') + '</small><span class="gate-pills">' +
         (kind === 'in' ? (ind ? '<span class="pill ok">' + ic('check') + 'Indemnity signed</span>' : '<span class="pill warn">' + ic('alert') + 'Indemnity to sign</span>') : '') +
         (t.total ? '<span class="pill ' + (t.owing ? 'warn' : 'ok') + '">Shop tab ' + money(t.total) + (t.owing ? ', ' + money(t.owing) + ' to pay' : ', paid') + '</span>' : '') + '</span></div><div class="gate-act">' + act + '</div></div>';
     }).join('');
@@ -1930,10 +1990,11 @@
       var kind = tab, all = gateList(kind, day), list = all.filter(gateHit), shown = list.filter(function (b) { return GATE.show === 'all' || (GATE.show === 'done') === gateDone(b, kind); });
       var cars = function (l, st) { return l.reduce(function (a, b) { return a + ensureCars(b).filter(function (c) { return !st || c.st === st; }).length; }, 0); };
       var todo = all.filter(function (b) { return !gateDone(b, kind); }), owe = all.filter(function (b) { return balance(b) > 0 && b.status !== 'out'; });
+      var unk = all.filter(function (b) { return !vehKnown(b); }).length, unkTxt = unk ? ' (' + unk + ' not given yet, counted as 1)' : '';
       var sheets = paperSheets();
       body = (sheets.length ? sheets.map(function (s) { return '<div class="callout info cflex gate-paper">' + ic('clip') + '<span><b>Paper ' + (s.kind === 'in' ? 'check-in' : 'check-out') + ' sheet for ' + fd(s.d, { weekday: 'long', day: 'numeric', month: 'long' }) + '</b>: ' + s.n + ' vehicle' + (s.n === 1 ? '' : 's') + ' still to type in. No reminders are shown for them until you do.</span><button type="button" class="btn sm" data-act="gate-paper" data-ref="' + s.kind + '|' + s.d + '">' + ic('edit') + 'Type it in</button></div>'; }).join('') : '') +
         '<div class="kpis gate-kpis">' + (kind === 'in'
-          ? tile('Arriving', all.length + '<small> ' + (all.length === 1 ? 'party' : 'parties') + '</small>', cars(all) + ' vehicle' + (cars(all) === 1 ? '' : 's') + ', ' + all.reduce(function (a, b) { return a + people(b); }, 0) + ' people') + tile('Checked in', cars(all, 'in') + cars(all, 'out'), 'vehicles through the gate', null, 'ok') + tile('Still to come', cars(all, 'due'), todo.length + (todo.length === 1 ? ' party' : ' parties'), null, cars(all, 'due') ? 'warn' : '') + tile('Money to collect', money(owe.reduce(function (a, b) { return a + balance(b); }, 0)), owe.length + ' booking' + (owe.length === 1 ? '' : 's') + ' owing', null, owe.length ? 'warn' : '')
+          ? tile('Arriving', all.length + '<small> ' + (all.length === 1 ? 'party' : 'parties') + '</small>', cars(all) + ' vehicle' + (cars(all) === 1 ? '' : 's') + unkTxt + ', ' + all.reduce(function (a, b) { return a + people(b); }, 0) + ' people') + tile('Checked in', cars(all, 'in') + cars(all, 'out'), 'vehicles through the gate', null, 'ok') + tile('Still to come', cars(all, 'due'), todo.length + (todo.length === 1 ? ' party' : ' parties'), null, cars(all, 'due') ? 'warn' : '') + tile('Money to collect', money(owe.reduce(function (a, b) { return a + balance(b); }, 0)), owe.length + ' booking' + (owe.length === 1 ? '' : 's') + ' owing', null, owe.length ? 'warn' : '')
           : tile('Leaving', all.length + '<small> ' + (all.length === 1 ? 'party' : 'parties') + '</small>', cars(all) + ' vehicle' + (cars(all) === 1 ? '' : 's')) + tile('Checked out', all.filter(function (b) { return b.status === 'out'; }).length, 'parties gone', null, 'ok') + tile('Still in camp', todo.length, 'to check out', null, todo.length ? 'warn' : '') + tile('Tabs to settle', money(owe.reduce(function (a, b) { return a + balance(b); }, 0)), owe.length + ' booking' + (owe.length === 1 ? '' : 's') + ' still owing', null, owe.length ? 'bad' : '')) + '</div>' +
         '<div class="filters gate-filters">' + fsearch('GATE:q', GATE.q, 'Type the plate you see, a name or a stand') +
         '<div class="rp-tabs gate-show">' + [['todo', kind === 'in' ? 'Still to come' : 'Still to leave'], ['done', kind === 'in' ? 'Checked in' : 'Checked out'], ['all', 'Everyone']].map(function (x) { return '<button type="button" class="' + (GATE.show === x[0] ? 'on' : '') + '" data-gateshow="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div></div>' +
@@ -2049,7 +2110,7 @@
             html += '<tr' + (i ? '' : ' class="newparty"') + '>' + (i ? '' : '<td class="st" rowspan="' + cs.length + '">' + esc(st.name) + '</td><td rowspan="' + cs.length + '"><span class="b">' + esc(guestName(b)) + '</span><br><span class="s">' + fdw(b.ci) + ' to ' + fdw(b.co) + (b.eta ? '<br>' + esc(etaTxt(b)) : '') + '<br>' + esc(b.guest.phone || '') + '</span></td>' +
               '<td rowspan="' + cs.length + '"><span class="b">' + people(b) + '</span> booked<br><span class="s">came:</span> <span class="w" style="min-width:8mm"></span></td>' +
               '<td rowspan="' + cs.length + '">' + (b.status === 'pending' ? '<span class="owes">NOT PAID</span><br><span class="s">' + money(b.total) + '</span>' : bal > 0 ? '<span class="owes">OWES ' + money(bal) + '</span><br><span class="s">' + BOX + 'paid: cash / card</span>' : '<span class="b">PAID</span>') + '</td>') +
-              '<td>' + esc(c.make || '') + (c.driver && c.driver !== guestName(b) ? '<br><span class="s">' + esc(c.driver) + '</span>' : '') + '</td><td class="big">' + esc(p[0]) + '</td><td class="reg2">' + esc(p[1]) + '</td>' +
+              '<td>' + (!vehKnown(b) && !carGiven(b, c) ? '<span class="s">Not given yet. Write in each vehicle that comes.</span>' : esc(c.make || '') + (c.driver && c.driver !== guestName(b) ? '<br><span class="s">' + esc(c.driver) + '</span>' : '')) + '</td><td class="big">' + esc(p[0]) + '</td><td class="reg2">' + esc(p[1]) + '</td>' +
               '<td class="s">' + (ind ? '<span class="b">Signed</span>' : BOX + 'signed on paper') + '</td>' +
               (i ? '' : '<td class="s" rowspan="' + cs.length + '">' + (os && (os.left || os.todo.length) ? '<span class="b">' + esc(itemsTxt(os.left || os.items)) + '</span><br>' + BOX + 'given now<br>' + BOX + 'deliver on: <span class="w" style="min-width:12mm"></span>' : os ? esc(os.txt) + '<br>handed over' : 'ICE: <span class="w" style="min-width:10mm"></span><br>WOOD: <span class="w" style="min-width:10mm"></span>') + '</td>') +
               '<td class="b">' + (c.st !== 'due' && c.inAt ? esc(c.inAt.slice(11, 16)) : '') + '</td><td class="s">' + (i ? '' : esc(b.gateNote || '')) + '</td></tr>';
@@ -2057,7 +2118,7 @@
         });
         for (var x = 0; x < 4; x++) html += '<tr class="newparty"><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="s">' + BOX + 'signed on paper</td><td class="s">ICE:<br>WOOD:</td><td></td><td></td></tr>';
         html += '</tbody></table>';
-        if (!printDoc('check-in sheet', dayTxt + (GATE.area ? ' · ' + AREA_SHORT[GATE.area] + ' only' : '') + ' · ' + list.length + ' parties, ' + n + ' vehicles', html, 'Check: name and number of people, registration, indemnity signed, money owing, and ask if they want their wood and ice now or later. The empty rows are for people who are not on the list.')) return;
+        if (!printDoc('check-in sheet', dayTxt + ' · check-in from ' + checkInTime() + (GATE.area ? ' · ' + AREA_SHORT[GATE.area] + ' only' : '') + ' · ' + list.length + ' parties, ' + n + ' vehicles' + (list.some(function (b) { return !vehKnown(b); }) ? ' (' + list.filter(function (b) { return !vehKnown(b); }).length + ' not given yet, counted as 1 each)' : ''), html, 'Check: name and number of people, registration, indemnity signed, money owing, and ask if they want their wood and ice now or later. The empty rows are for people who are not on the list.')) return;
       } else {
         html = '<table><colgroup><col style="width:9%"><col style="width:16%"><col style="width:7%"><col style="width:10%"><col style="width:6%"><col style="width:22%"><col style="width:7%"><col style="width:7%"><col style="width:16%"></colgroup><thead><tr><th>Stand</th><th>Name</th><th colspan="2">Registration</th><th>People</th><th>Still to pay before leaving</th><th>Time out</th><th>Stand checked</th><th>Notes and problems at the stand</th></tr></thead><tbody>';
         list.forEach(function (b) {
@@ -2072,7 +2133,7 @@
           });
         });
         html += '</tbody></table>';
-        if (!printDoc('check-out sheet', dayTxt + (GATE.area ? ' · ' + AREA_SHORT[GATE.area] + ' only' : '') + ' · ' + list.length + ' parties, ' + n + ' vehicles', html, 'Nobody leaves with money still owing: take the payment and tick how it was paid. Write down anything broken or left dirty so it goes on the site jobs list.')) return;
+        if (!printDoc('check-out sheet', dayTxt + ' · check-out by ' + checkOutTime() + (GATE.area ? ' · ' + AREA_SHORT[GATE.area] + ' only' : '') + ' · ' + list.length + ' parties, ' + n + ' vehicles', html, 'Nobody leaves with money still owing: take the payment and tick how it was paid. Write down anything broken or left dirty so it goes on the site jobs list.')) return;
       }
       var todo = list.filter(function (b) { return !gateDone(b, kind) && b.status !== 'pending' && !onPaper(b, kind); });
       if (todo.length) setTimeout(function () {
@@ -2133,8 +2194,8 @@
         if (kind === 'in') {
           if (v === 'no') { c.noShow = { d: day, by: ME.name }; b.notes.push({ at: nowStamp(), by: ME.name, text: carLabel(c, r.i) + ' did not arrive (paper sheet for ' + fdw(day) + ').' }); nDone++; return; }
           c.reg = String(fval(f, 'reg' + n) || c.reg || '').toUpperCase(); c.make = fval(f, 'make' + n); c.people = Math.max(1, +fval(f, 'ppl' + n) || c.people || 1);
-          if (!c.ind && !carSigned(b, c)) { if (fval(f, 'ind' + n)) c.ind = { at: stamp, by: ME.name + ' (paper)' }; else noInd.push(carLabel(c, r.i)); }
-          c.st = 'in'; c.inAt = stamp; c.inBy = ME.name + ' (paper sheet)'; b.status = 'in';
+          if (!c.ind && !carSigned(b, c)) { if (fval(f, 'ind' + n)) { c.ind = { at: stamp, by: ME.name + ' (paper)' }; paperRecs(b, c, stamp, ME.name); } else noInd.push(carLabel(c, r.i)); }
+          c.st = 'in'; c.inAt = stamp; c.inBy = ME.name + ' (paper sheet)'; b.status = 'in'; delete c.auto; vehSaid(b);
           if (fval(f, 'hand' + n)) { var left = orderLeft(b); if (left) drops(b).push({ id: uid('dr'), d: day, items: left, how: 'gate', done: { at: stamp, by: ME.name } }); }
           if (amt > 0) b.payments.push({ d: day, amt: amt, m: fval(f, 'm' + n) || 'cash', type: 'Balance', ref: 'Paid at the gate' });
         } else {
@@ -2464,6 +2525,10 @@
     Object.keys(DB.staffRoles || {}).forEach(function (id) { var su = STAFF.filter(function (x) { return x.id === id; })[0]; if (su && ROLES[DB.staffRoles[id]]) su.role = DB.staffRoles[id]; });   // roles the Owner changed
     DB.vouchers = [];   // Kyleu discount vouchers were removed; only Dinokeng partner codes are used
     DB.bookings.forEach(ensureCars);
+    // vehicles nobody gave: one empty car and "not given yet", instead of made-up cars (older demo data had some)
+    if ((DB.vehV || 0) < 1) { DB.vehV = 1; DB.bookings.forEach(vehTidy); }
+    // demo data from before the thank-you step: older stays count as thanked, so the dashboard only lists the last few days
+    if ((DB.thanksV || 0) < 1) { DB.thanksV = 1; DB.bookings.forEach(function (b) { if (b.status === 'out' && !b.thanks && b.co < add(TODAY, -2)) b.thanks = { at: b.co + ' 11:40', by: 'Sherri', via: b.guest.phone ? 'WhatsApp' : 'Email' }; }); }
     DB.bookings.forEach(function (b) { if (!b.key) b.key = newKey(); });
     // credits made before they had a code: give each one a code now, so the guest can use it on the website
     DB.credits = DB.credits || []; var noCode = DB.credits.filter(function (c) { return !c.code; }).length;
@@ -2499,12 +2564,13 @@
   /* ---------- views ---------- */
   function standsBookedOn(day) { var ids = {}; DB.bookings.forEach(function (b) { if (live(b) && b.ci <= day && day < b.co) ids[b.stand] = b; }); return ids; }
   function tile(label, value, sub, act, tone) { var tag = act ? 'button' : 'div'; return '<' + tag + ' class="kpi ' + (tone || '') + '"' + (act ? ' data-go="' + act + '"' : '') + '><span class="kpi-l">' + label + '</span><b class="kpi-v">' + value + '</b><span class="kpi-s">' + sub + '</span></' + tag + '>'; }
-  function rowB(b, extra) {
+  function rowB(b, extra, more) {
     var st = standById(b.stand), s = stateOf(b);
-    return '<button class="brow" data-open="' + b.ref + '"><span class="brow-st">' + esc(st.name) + '</span><span class="brow-g"><b>' + esc(guestName(b)) + '</b><small>' + people(b) + (people(b) === 1 ? ' guest · ' : ' guests · ') + diff(b.ci, b.co) + (diff(b.ci, b.co) === 1 ? ' night' : ' nights') + (b.setup ? ' · ' + esc(b.setup) : '') + '</small></span>' + (extra || pill(s)) + '</button>';
+    return '<button class="brow" data-open="' + b.ref + '"><span class="brow-st">' + esc(st.name) + '</span><span class="brow-g"><b>' + esc(guestName(b)) + '</b><small>' + people(b) + (people(b) === 1 ? ' guest · ' : ' guests · ') + diff(b.ci, b.co) + (diff(b.ci, b.co) === 1 ? ' night' : ' nights') + (b.setup ? ' · ' + esc(b.setup) : '') + (more ? ' · ' + esc(more) : '') + '</small></span>' + (extra || pill(s)) + '</button>';
   }
   function vDashboard() {
-    var arr = DB.bookings.filter(function (b) { return live(b) && b.ci === TODAY && b.status !== 'pending'; }), dep = DB.bookings.filter(function (b) { return b.co === TODAY && (b.status === 'in' || b.status === 'out'); });
+    // today's arrivals in the order they are expected (old and new arrival times both work; no time given comes last)
+    var arr = DB.bookings.filter(function (b) { return live(b) && b.ci === TODAY && b.status !== 'pending'; }).sort(function (a, b) { return etaNum(a.eta) - etaNum(b.eta) || standSort(a.stand, b.stand); }), dep = DB.bookings.filter(function (b) { return b.co === TODAY && (b.status === 'in' || b.status === 'out'); });
     var tonight = standsBookedOn(TODAY), nT = Object.keys(tonight).length;
     var pend = DB.bookings.filter(function (b) { return b.status === 'pending'; }), pendAmt = pend.reduce(function (a, b) { return a + Math.max(0, deposit(b) - paid(b)); }, 0);
     var balSoon = DB.bookings.filter(function (b) { return b.status === 'confirmed' && balance(b) > 0 && diff(TODAY, balanceDue(b)) <= 7; }), balAmt = balSoon.reduce(function (a, b) { return a + balance(b); }, 0);
@@ -2517,7 +2583,7 @@
       if (b.guestEdit && !b.guestEdit.seen) attention.push({ i: 'edit', tone: 'info', t: '<b>' + esc(guestName(b)) + '</b> changed their booking on the website: ' + esc(b.guestEdit.what.join('; ')), ref: b.ref, o: 0 });
       if (b.paidClaim) attention.push({ i: 'bank', tone: 'info', t: '<b>' + esc(guestName(b)) + '</b> says they paid ' + money(b.paidClaim.amt) + ' on ' + fd(b.paidClaim.date) + ': check the bank and confirm', ref: b.ref, o: 1 });
       if (extraDue(b)) attention.push({ i: 'alert', tone: 'bad', t: '<b>' + esc(guestName(b)) + '</b> owes ' + money(balance(b)) + ' more: ' + esc(b.extraDue.why || 'the total went up after paying in full').toLowerCase() + '. Send the new invoice.', ref: b.ref, o: 1 });
-      if (live(b) && !b.vehTbc && b.status !== 'out' && b.co >= TODAY && namedIn(b) > people(b)) attention.push({ i: 'users', tone: 'warn', t: 'Vehicles list more people than the booking for <b>' + esc(guestName(b)) + '</b> (' + namedIn(b) + ' named, ' + people(b) + ' booked)', ref: b.ref, o: 5 });
+      if (live(b) && vehKnown(b) && b.status !== 'out' && b.co >= TODAY && namedIn(b) > people(b)) attention.push({ i: 'users', tone: 'warn', t: 'Vehicles list more people than the booking for <b>' + esc(guestName(b)) + '</b> (' + namedIn(b) + ' named, ' + people(b) + ' booked)', ref: b.ref, o: 5 });
       if (b.changeReq && !b.changeReq.done && live(b)) attention.push({ i: 'cal', tone: 'warn', t: '<b>' + esc(guestName(b)) + '</b> asked to change the dates or guests (' + fd(b.ci) + ')', ref: b.ref, o: 1 });
       if (openCancelReq(b)) attention.push({ i: 'alert', tone: 'warn', t: '<b>' + esc(guestName(b)) + '</b> asked to cancel the booking (' + fd(b.ci) + '): cancel it, or keep it and let them know', ref: b.ref, o: 1 });
       if (openSize(b)) attention.push({ i: 'users', tone: 'warn', t: '<b>' + esc(guestName(b)) + '</b>: ' + esc(sizeLine(b)) + ' Agree to it or contact them.', ref: b.ref, o: 1 });
@@ -2536,10 +2602,12 @@
     var lowP = shopItems().filter(lowStock); if (lowP.length && can('products')) attention.push({ i: 'box', tone: 'warn', t: 'Running low in the shop: ' + lowP.map(function (p) { return esc(p.label) + ' (' + p.stock + ')'; }).join(', '), go: 'products', o: 6 });
     var noTime = DB.bookings.filter(function (b) { return live(b) && b.extras && b.extras.gd && !b.drive && b.co >= TODAY && diff(TODAY, b.ci) <= 7; }); if (noTime.length) attention.push({ i: 'car', tone: 'warn', t: noTime.length + ' game drive' + (noTime.length > 1 ? 's' : '') + ' this week still need a time', go: 'drives', o: 5 });
     DB.bookings.forEach(function (b) {
-      if (live(b) && b.status !== 'out' && b.ci >= TODAY && diff(TODAY, b.ci) <= 7 && codesTodo(b)) { var nc = ensureCars(b).length, nt = codesTodo(b); attention.push({ i: 'gift', tone: 'warn', t: 'Send Dinokeng codes to <b>' + esc(guestName(b)) + '</b> (' + fdw(b.ci) + ', ' + (nt === nc ? nc + ' vehicle' + (nc === 1 ? '' : 's') : nt + ' of ' + nc + ' vehicles still to send') + ')', ref: b.ref, o: 4 }); }
+      if (live(b) && b.status !== 'out' && b.ci >= TODAY && diff(TODAY, b.ci) <= 7 && codesTodo(b)) { var nc = ensureCars(b).length, nt = codesTodo(b); attention.push({ i: 'gift', tone: 'warn', t: 'Send Dinokeng codes to <b>' + esc(guestName(b)) + '</b> (' + fdw(b.ci) + ', ' + (!vehKnown(b) ? VEH_ASSUMED : nt === nc ? nc + ' vehicle' + (nc === 1 ? '' : 's') : nt + ' of ' + nc + ' vehicles still to send') + ')', ref: b.ref, o: 4 }); }
       if (live(b) && b.status !== 'in' && b.status !== 'out' && b.status !== 'pending' && !onPaper(b, 'in') && b.ci >= TODAY && diff(TODAY, b.ci) <= 2) { var is = K.ind.status(b.ref, people(b)); if (!is.done) attention.push({ i: 'shield', tone: 'warn', t: 'Indemnity: <b>' + esc(guestName(b)) + '</b> arrives ' + (b.ci === TODAY ? 'today' : fdw(b.ci)) + ', ' + Math.min(is.covered, is.total) + ' of ' + is.total + ' signed for', ref: b.ref, o: 3 }); }
+      if (thanksDue(b)) attention.push({ i: 'send', tone: 'info', t: 'Thank-you not sent: <b>' + esc(guestName(b)) + '</b> checked out ' + (outDay(b) === TODAY ? 'today' : outDay(b) === add(TODAY, -1) ? 'yesterday' : 'on ' + fdw(outDay(b))), ref: b.ref, o: 6 });
       if (b.status === 'in') (b.cars || []).forEach(function (c, i) { if (c.st === 'in' && !c.ind) attention.push({ i: 'alert', tone: 'bad', t: 'Indemnity not signed: <b>' + esc(carLabel(c, i)) + '</b> at ' + esc(standById(b.stand).name), ref: b.ref, o: 2 }); });
     });
+    var nScan = can('indemnities') ? paperTodo().length : 0; if (nScan) attention.push({ i: 'clip', tone: 'warn', t: '<b>' + nScan + ' paper indemnity form' + (nScan === 1 ? '' : 's') + ' to upload</b>: scan the signed page' + (nScan === 1 ? '' : 's') + ' and add ' + (nScan === 1 ? 'it' : 'them'), go: 'indemnities:paper', o: 5 });
     var nAge = can('news') ? newsAge() : null; if (nAge !== null && nAge > 14) attention.push({ i: 'note', tone: 'muted', t: nAge === 999 ? 'No camp news posted yet. A short post makes the news page feel alive.' : 'No camp news for ' + nAge + ' days. A short post keeps the news page fresh.', go: 'news', o: 7 });
     DB.dismissed = DB.dismissed || {};
     attention.forEach(function (a) { a.key = (a.ref || a.go) + '|' + a.i + '|' + a.t.replace(/<[^>]+>/g, '').slice(0, 60); });
@@ -2565,7 +2633,7 @@
         var inList = Object.keys(tonight).map(function (id) { return tonight[id]; });
         var lists = { arr: arr, dep: dep, in: inList }, pg = pageOf(lists[DP.tab], DP.tab, 6), at = pageOf(attention, 'attn', 6), ac = pageOf(DB.log.slice().sort(function (a, b) { return String(b.at) > String(a.at) ? 1 : String(b.at) < String(a.at) ? -1 : 0; }), 'act', 7);
         var row = function (b) { var cs = ensureCars(b), n = cs.length, din = cs.filter(function (c) { return c.st === 'in'; }).length, ddue = cs.filter(function (c) { return c.st === 'due'; }).length, cnt = n > 1 ? ' <small>' + (DP.tab === 'arr' ? din : n - din) + '/' + n + '</small>' : '';
-          return DP.tab === 'arr' ? rowB(b, !ddue ? '<span class="pill ok"><i></i>Checked in</span>' : '<span class="row-act" data-act="checkin" data-ref="' + b.ref + '">' + ic('in') + 'Check in' + cnt + '</span>') : DP.tab === 'dep' ? rowB(b, !din ? '<span class="pill muted"><i></i>Checked out</span>' : '<span class="row-act" data-act="checkout" data-ref="' + b.ref + '">' + ic('out') + 'Check out' + cnt + '</span>') : rowB(b); };
+          return DP.tab === 'arr' ? rowB(b, !ddue ? '<span class="pill ok"><i></i>Checked in</span>' : '<span class="row-act" data-act="checkin" data-ref="' + b.ref + '">' + ic('in') + 'Check in' + cnt + '</span>', etaTxt(b)) : DP.tab === 'dep' ? rowB(b, !din ? '<span class="pill muted"><i></i>Checked out</span>' : '<span class="row-act" data-act="checkout" data-ref="' + b.ref + '">' + ic('out') + 'Check out' + cnt + '</span>') : rowB(b); };
         return '<div class="cols"><section class="card" id="today"><header class="card-h"><h3>Today at camp</h3><div class="tabs" role="tablist">' + [['arr', 'Arriving', arr.length], ['dep', 'Departing', dep.length], ['in', 'In camp', nT]].map(function (x) { return '<button class="' + (DP.tab === x[0] ? 'on' : '') + '" data-dtab="' + x[0] + '">' + x[1] + ' <span>' + x[2] + '</span></button>'; }).join('') + '</div></header>' +
           (pg.items.length ? pg.items.map(row).join('') : '<p class="empty">' + ({ arr: 'No arrivals today.', dep: 'No departures today.', in: 'Nobody in camp tonight.' })[DP.tab] + '</p>') + pg.bar +
           '<footer class="card-f"><span>' + ic('car') + '<b>' + carsInCamp() + '</b> vehicles in camp</span><span>' + ic('fire') + '<b>' + woodBags + '</b> free firewood bags tonight</span><span>' + ic('car') + '<b>' + drives.length + '</b> game drive' + (drives.length === 1 ? '' : 's') + ' booked</span><span>' + ic('ice') + '<b>' + ice + '</b> bags of ice to hand out</span></footer></section>' +
@@ -3006,7 +3074,7 @@
     var blob = doc.output('blob'); return { blob: blob, url: URL.createObjectURL(blob), data: doc.output('datauristring') };
   }
   function guestsLine(b) { var a = b.adults + b.pens; return a + ' adult' + (a === 1 ? '' : 's') + (b.pens ? ' (' + b.pens + ' pensioner' + (b.pens === 1 ? '' : 's') + ')' : '') + (b.kids ? ', ' + b.kids + ' child' + (b.kids === 1 ? '' : 'ren') : ''); }
-  function stayRows(b) { var st = standById(b.stand); return [['Booking', b.ref], ['Guest', guestName(b)], ['Mobile', b.guest.phone || '-'], ['Email', b.guest.email || '-'], ['Stand', st.name + ' (' + AREA_SHORT[st.area] + ')'], ['Arrive', fd(b.ci, LONGD)], ['Depart', fd(b.co, LONGD)], ['Nights', diff(b.ci, b.co)], ['Guests', guestsLine(b)], ['Vehicles', ensureCars(b).length]]; }
+  function stayRows(b) { var st = standById(b.stand); return [['Booking', b.ref], ['Guest', guestName(b)], ['Mobile', b.guest.phone || '-'], ['Email', b.guest.email || '-'], ['Stand', st.name + ' (' + AREA_SHORT[st.area] + ')'], ['Arrive', fd(b.ci, LONGD) + ', check-in from ' + checkInTime()], ['Depart', fd(b.co, LONGD) + ', check-out by ' + checkOutTime()], ['Nights', diff(b.ci, b.co)], ['Guests', guestsLine(b)], ['Vehicles', vehKnown(b) ? ensureCars(b).length : 'Not given yet']]; }
   function moneyLines(b, k) {
     var q = quote(b.stand, b.ci, b.co, b, b.extras), card = b.method === 'card', sum = 0;
     q.lines.forEach(function (l) { var v = card ? l.c : l.e; sum += v; k.line(l.t, money(v)); });
@@ -3063,7 +3131,7 @@
   function invFor(b, kind, lines, extra) {
     kind = kind || 'Invoice'; lines = lines || invLines(b);
     return Object.assign({ id: K.docId(), kind: kind, no: nextInvNo(b, kind), date: TODAY, ref: b.ref, guest: { name: guestName(b), email: b.guest.email, phone: b.guest.phone },
-      stay: { stand: standById(b.stand).name, ci: b.ci, co: b.co, nights: diff(b.ci, b.co), guests: guestsLine(b), vehicles: b.vehTbc ? 'Not sure yet' : ensureCars(b).length },
+      stay: { stand: standById(b.stand).name, ci: b.ci, co: b.co, nights: diff(b.ci, b.co), guests: guestsLine(b), vehicles: vehKnown(b) ? ensureCars(b).length : 'Not given yet' },
       lines: lines, total: lines.reduce(function (a, l) { return a + l.amt; }, 0), paid: paid(b), deposit: deposit(b), depPct: depPct(), depositDue: depositDue(b), balanceDue: balanceDue(b),
       payFull: payFullOf(b), cancelled: b.status === 'cancelled', onArrival: b.onArrival && kind !== 'Quote' ? b.onArrival.how : '' }, extra || {});
   }
@@ -3263,10 +3331,54 @@
         var T = TEMPLATES[k], codes = ensureCars(b).filter(function (c) { return c.dgr; });
         var docs = (SEND_DOCS[k] || []).map(function (d) { return d === 'indemnity' ? docIndemnity(b) : d === 'codes' ? (codes.length ? docCodes(b, codes) : null) : docBooking(b, d); }).filter(Boolean);
         return { subject: fill(T.s, b), text: fill(T.b(b), b), docs: docs };
-      } });
+      }, onSent: function (via, cur) { if (cur && cur.key === 'thanks' && b.status === 'out') thanksMark(b, via === 'wa' ? 'WhatsApp' : 'Email'); } });
   }
   function defaultTemplate(b) { return paidUp(b) && !b.finalised && b.ci >= TODAY ? 'finalise' : b.status === 'pending' ? 'eft' : balance(b) && b.ci > TODAY ? 'balance' : diff(TODAY, b.ci) <= 10 && b.ci >= TODAY ? 'arrival' : b.status === 'out' ? 'thanks' : 'confirm'; }
 
+  /* ---------- the thank-you after a stay, with a link to review Kyleu on Google ----------
+     Not a form on the website: only a link to Kyleu's Google reviews. The link and the words are set under
+     Settings > Check-in & Dinokeng (DB.settings.thanksLink, DB.settings.thanksText). Staff send it right after
+     check-out, by WhatsApp or email. b.thanks = { at, by, via: 'WhatsApp' | 'Email' } once it is sent. */
+  var THANKS_DEF = 'Hi {first}, thank you for staying with us at Kyleu Bush Camp. We appreciate you choosing Kyleu and hope you loved the bush.\n\nDid you enjoy your stay? We would love to hear what was good and what we can do better. It takes a minute to leave us a Google review:\n{link}\n\nWe hope to see you again soon.\nThe Kyleu team';
+  var THANKS_DAYS = 14;   // the dashboard reminds about check-outs this many days back, not older ones
+  var SITE_REVIEW = '';   // the "Google reviews" link in the website's own settings, used until staff type another one
+  if (K.settingsFile) K.settingsFile().then(function (S) { if (S) SITE_REVIEW = S.get('Google reviews', '') || ''; if (SITE_REVIEW && ME && route() === 'settings' && SET === 'camp' && !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '')) render(); }).catch(function () {});
+  function reviewLink() { var s = DB.settings || {}; return String(s.thanksLink != null ? s.thanksLink : (webDB().settings['Google reviews'] || SITE_REVIEW || '')).trim(); }
+  function thanksTpl() { return (DB.settings && DB.settings.thanksText) || THANKS_DEF; }
+  function thanksMsg(b) { return thanksTpl().replace(/\{first\}/g, (b.guest && b.guest.first) || 'there').replace(/\{link\}/g, reviewLink()); }
+  function outDay(b) { var d = ''; (b.cars || []).forEach(function (c) { if (c.outAt && c.outAt.slice(0, 10) > d) d = c.outAt.slice(0, 10); }); return d || b.co; }
+  function thanksDue(b) { return b.status === 'out' && !b.thanks && outDay(b) >= add(TODAY, -THANKS_DAYS); }
+  function thanksLine(b) { var t = b.thanks, d = String(t.at).slice(0, 10), tm = String(t.at).slice(11, 16); return 'Thank-you sent by ' + t.via + ' ' + (d === TODAY ? 'today' : 'on ' + fd(d)) + (tm ? ' at ' + tm : '') + (t.by ? ' by ' + t.by : ''); }
+  function thanksMark(b, via, to) {
+    b.thanks = { at: nowStamp(), by: ME.name, via: via };
+    b.notes.push({ at: nowStamp(), by: ME.name, text: 'Thank-you with the Google review link sent by ' + via + (to ? ' to ' + to : '') + '.' });
+  }
+  // the small step right after check-out (and from the booking, or the dashboard list): the message, then WhatsApp or email
+  function thanksStep(ref) {
+    var b = byRef(ref); if (!b) return;
+    var link = reviewLink(), ph = b.guest.phone || '', em = b.guest.email || '', hasWa = waDigits(ph).length >= 10, hasMail = /.+@.+\..+/.test(em);
+    modal('Send the thank-you',
+      (b.thanks ? '<p class="callout info cflex">' + ic('check') + '<span>' + esc(thanksLine(b)) + '. You can send it again.</span></p>'
+        : '<p class="muted small">' + esc(guestName(b)) + ' has checked out of ' + esc(standById(b.stand).name) + '. Thank ' + esc(b.guest.first) + ' for staying and ask for a Google review.</p>') +
+      (link ? '' : '<div class="callout warn cflex cbtn">' + ic('alert') + '<span><b>There is no Google review link yet.</b> ' + (can('settings') ? 'Add it first under Settings, Check-in &amp; Dinokeng, so the message has a link to press.' : 'Ask Sherri to add it under Settings first, so the message has a link to press.') + '</span>' + (can('settings') ? '<button type="button" class="btn ghost sm" data-th-set>Open Settings</button>' : '') + '</div>') +
+      '<label class="fld"><span>Message (you can still change it here)</span><textarea name="msg" rows="11">' + esc(thanksMsg(b)) + '</textarea></label>' +
+      (hasWa || hasMail ? '<p class="muted small">' + [hasWa ? 'WhatsApp: ' + esc(ph) : '', hasMail ? 'Email: ' + esc(em) : ''].filter(Boolean).join(' · ') + '</p>' : '<p class="callout warn cflex">' + ic('alert') + '<span>There is no mobile number or email address on this booking. Add one under Edit booking first.</span></p>') +
+      '<div class="row-btns th-acts"><button type="button" class="btn ghost" data-close>Not now</button><span class="sx-sp"></span>' + (hasWa ? '<button type="button" class="btn wa" data-th-wa>' + ic('wa') + 'Send by WhatsApp</button>' : '') + (hasMail ? '<button type="button" class="btn" data-th-mail>' + ic('mail') + 'Send by email</button>' : '') + '</div>',
+      null, null, { noFocus: true, onOpen: function (f) {
+        f.addEventListener('submit', function (e) { e.preventDefault(); e.stopImmediatePropagation(); }, true);   // Enter never closes the box
+        f.addEventListener('click', function (e) {
+          var t = e.target, txt = f.elements.msg.value.replace(/\r/g, '').trim(), via = t.closest('[data-th-wa]') ? 'WhatsApp' : t.closest('[data-th-mail]') ? 'Email' : '';
+          if (t.closest('[data-th-set]')) { closeModal(); if (drawerRef) closeDrawer(); SET = 'camp'; if (route() === 'settings') render(); else location.hash = '#/settings'; return; }
+          if (!via) return;
+          if (!txt) { toast('The message is empty'); return; }
+          if (via === 'WhatsApp') openWhatsApp(ph, txt);   // straight from the click, so the browser lets WhatsApp open
+          else logEmail(b, 'Thank you for staying at Kyleu', txt + (mySig() ? '\n\n--\n' + sigText(mySig()) : ''), [], em);
+          thanksMark(b, via, via === 'WhatsApp' ? ph : em);
+          log('Thank-you sent to ' + guestName(b) + ' by ' + via, b.ref); save(); closeModal(); refresh();
+          toast(via === 'WhatsApp' ? 'WhatsApp is opening with the thank-you' : 'Thank-you emailed to ' + esc(em) + ' (demo: nothing really leaves this browser)');
+        });
+      } });
+  }
   function logEmail(b, subject, body, att, to) {
     var t = DB.threads.filter(function (x) { return x.ref === b.ref && x.status !== 'closed'; })[0];
     if (!t) { t = { id: uid('t'), subject: subject, name: guestName(b), email: to || b.guest.email, phone: b.guest.phone, status: 'waiting', unread: false, ref: b.ref, msgs: [] }; DB.threads.push(t); }
@@ -4111,10 +4223,17 @@
       '<div class="grid2"><label class="fld"><span>Card fee added to card prices</span><input value="' + cardFee() + '%" disabled></label><label class="fld"><span>Provider charges (for reports)</span><input data-provfee value="' + (DB.settings.providerFee || 2.95) + '" inputmode="decimal"></label></div><p class="muted small">Change the card fee on the Rates & fees page.</p></section>' +
       '<section class="card"><header class="card-h"><h3>EFT bank details</h3></header><p class="small">The bank details printed on quotations and invoices are under <button type="button" class="link-btn" data-set="docs">Quotes &amp; invoices</button>.</p></section></div>';
     if (SET === 'docs') body = docsPage();
-    if (SET === 'emails') body = '<div class="tpl-grid">' + Object.keys(TEMPLATES).map(function (k) { var t = TEMPLATES[k]; return '<section class="card"><header class="card-h"><h3>' + t.t + '</h3><span class="muted small">' + ({ confirm: 'Sent when a booking is made', eft: 'Sent 3 days after an unpaid quotation', balance: 'Sent 10 days before arrival', arrival: 'Sent 3 days before arrival', thanks: 'Sent the day after departure' })[k] + '</span></header><p class="small"><b>' + esc(t.s) + '</b></p><pre class="tpl">' + esc(t.b({})) + '</pre></section>'; }).join('') + '</div><p class="demo-note">' + ic('info') + 'Words in {curly brackets} are filled in for each guest. In the live version these send automatically.</p>';
+    if (SET === 'emails') body = '<div class="tpl-grid">' + Object.keys(TEMPLATES).map(function (k) { var t = TEMPLATES[k]; return '<section class="card"><header class="card-h"><h3>' + t.t + '</h3><span class="muted small">' + ({ confirm: 'Sent when a booking is made', eft: 'Sent 3 days after an unpaid quotation', balance: 'Sent 10 days before arrival', arrival: 'Sent 3 days before arrival', thanks: 'Sent by you right after check-out' })[k] + '</span></header><p class="small"><b>' + esc(t.s) + '</b></p><pre class="tpl">' + esc(t.b({})) + '</pre></section>'; }).join('') + '</div><p class="demo-note">' + ic('info') + 'Words in {curly brackets} are filled in for each guest. In the live version these send automatically.</p>';
     if (SET === 'maps') body = '<p class="muted small me-intro">Move campsites, text and buildings, draw roads and footpaths, add new campsites, and change the game drive route and story of the "A day at Kyleu" scroll map. Press Save in the editor when you are done.</p><div class="me-wrap"><iframe class="me-frame" src="map-editor.html" title="Map editor"></iframe></div><div class="row-btns"><a class="btn ghost sm" href="map-editor.html" target="_blank" rel="noopener">' + ic('ext') + 'Open the editor full screen</a></div><p class="demo-note">' + ic('info') + 'Demo: Save updates the website maps in this browser. For the live site, press "Download map file" in the editor and replace assets/js/campmap-layout.js with it (or the live version saves it on the server).</p>';
     if (SET === 'sig') body = sigPage();
-    if (SET === 'camp') body = '<div class="cols"><section class="card"><header class="card-h"><h3>Indemnity</h3><button class="btn ghost sm" data-act="ind-print" data-ref="">' + ic('note') + 'Print a blank paper form</button></header><p class="muted small">Guests sign this online when they finalise their booking, or with the signing link, or here at reception. Every signed form keeps its own copy of the exact wording that was signed, so changing it here only affects new signatures. See them all under <a href="#/indemnities">Indemnities</a>.</p><label class="fld"><span>Wording</span><textarea data-indemnity rows="14">' + esc(indText()) + '</textarea></label><p class="hint">' + ic('info') + ' Start a line with <b>##</b> for a heading and <b>-</b> for a bullet; put <b>**</b> around words to make them bold. Have Kyleu\'s lawyer or insurer check the wording.</p></section>' +
+    if (SET === 'camp') body = '<section class="card"><header class="card-h"><h3>Check-in and check-out times</h3><span class="muted small">Used on the website, in emails and on the printed sheets</span></header>' +
+      '<div class="grid2"><label class="fld"><span>Earliest check-in</span><input type="time" step="300" data-camptime="in" value="' + checkInTime() + '"></label><label class="fld"><span>Latest check-out</span><input type="time" step="300" data-camptime="out" value="' + checkOutTime() + '"></label></div>' +
+      '<p class="hint">' + ic('info') + ' Guests choose an arrival time from the earliest check-in onwards. Between check-out and check-in the team cleans the stands.</p></section>' +
+      '<section class="card"><header class="card-h"><h3>Thank-you after the stay</h3><span class="muted small">You send it right after check-out, by WhatsApp or email</span></header>' +
+      '<label class="fld"><span>Google review link</span><input data-thanks="link" inputmode="url" autocomplete="off" value="' + esc(reviewLink()) + '" placeholder="https://"><small class="muted">Paste the \'Ask for reviews\' link from your Google Business Profile.' + (DB.settings.thanksLink == null && reviewLink() ? ' For now this is the Google reviews link from the website.' : '') + '</small></label>' +
+      '<label class="fld"><span>Message</span><textarea data-thanks="text" rows="9">' + esc(thanksTpl()) + '</textarea></label>' +
+      '<p class="hint">' + ic('info') + ' <b>{first}</b> becomes the guest\'s first name and <b>{link}</b> becomes the review link. This is only a link to Kyleu\'s reviews on Google, not a form on the website. Both boxes save by themselves. Empty the message to get the first wording back.</p></section>' +
+      '<div class="cols"><section class="card"><header class="card-h"><h3>Indemnity</h3><button class="btn ghost sm" data-act="ind-print" data-ref="">' + ic('note') + 'Print a blank paper form</button></header><p class="muted small">Guests sign this online when they finalise their booking, or with the signing link, or here at reception. Every signed form keeps its own copy of the exact wording that was signed, so changing it here only affects new signatures. See them all under <a href="#/indemnities">Indemnities</a>.</p><label class="fld"><span>Wording</span><textarea data-indemnity rows="14">' + esc(indText()) + '</textarea></label><p class="hint">' + ic('info') + ' Start a line with <b>##</b> for a heading and <b>-</b> for a bullet; put <b>**</b> around words to make them bold. Have Kyleu\'s lawyer or insurer check the wording.</p></section>' +
       '<section class="card"><header class="card-h"><h3>Dinokeng discount vouchers (DGR CP)</h3></header><p class="small">Kyleu is a proud DGR CP member, allowed to issue Conservation Fee Discount Vouchers. For each booking, staff make one code per vehicle on the Dinokeng partner site, paste the codes on the booking and send them to the client from here, by WhatsApp or email. Dinokeng does not send the codes.</p><p class="small">The guest enters the code when they buy conservation fees on Dinokeng\'s permit site (dinokeng.plnktn.io) and pays the partner rate: R85 instead of R100 per adult per night. Children, pensioners and international guests pay the same either way. Each vehicle that uses the self-drive route also needs a Self Drive Permit, R250 once off.</p><label class="fld"><span>Link to Dinokeng\'s partner site</span><input data-dgrlink value="' + esc(dgrLink()) + '" placeholder="https://"></label><p class="hint">Paste the link you use to request codes. The booking panel opens it for you.</p></section></div>';
     if (SET === 'data') body = '<div class="cols"><section class="card"><header class="card-h"><h3>Privacy (POPIA)</h3></header><p class="small">Guest details are only used to manage bookings. Guests can ask for their details to be removed; deleting a guest keeps the booking for tax records but removes their contact details.</p><p class="small">Only staff with an account can open this admin, and every change is logged.</p></section>' +
       '<section class="card"><header class="card-h"><h3>Demo data</h3></header><p class="small">Everything in this admin is made-up demo data kept only in this browser. Bookings you make on the website demo show up here too.</p><div class="row-btns"><button class="btn ghost" data-act="export-json">' + ic('download') + 'Download a backup</button><button class="btn ghost danger-t" data-act="reset">Reset demo data</button></div></section></div>' +
@@ -4167,20 +4286,146 @@
   }
   function signLink(b) { if (!b.key) { b.key = newKey(); save(); } return new URL(K.ind.signUrl(b.ref, b.key, '../'), location.href).href; }
   function indRec(id) { return K.ind.all().filter(function (r) { return r.id === id; })[0] || null; }
+  /* ---------- paper indemnity forms and their scans ----------
+     A guest who signs the printed form at the gate gets a form on record like the online ones (the same
+     "kyleu-indemnities" list), marked paper: true, via "Paper form at reception", with no signature picture.
+     Staff then upload the scan of the signed page (a photo or a PDF): rec.scan = { name, type, size, at, by, key }.
+     The file itself is kept in the browser's file store (K.files, key "ind-scan-..."), so the list of forms stays
+     small. One scan can cover several people: their forms then share the same key. Live version: on the server. */
+  var IND_STORE = 'kyleu-indemnities', PAPER_VIA = 'Paper form at reception', SCAN_PDF_MAX = 1.5 * 1048576, SCAN_PHOTO_MAX = 15 * 1048576;
+  function isPaper(r) { return !!(r && (r.paper || /paper/i.test(r.via || ''))); }
+  function indWrite(list) { try { localStorage.setItem(IND_STORE, JSON.stringify(list)); return true; } catch (e) { return false; } }
+  function indRefKey(ref) { return String(ref || '').replace(/[^A-Z0-9]/gi, '').toUpperCase(); }
+  function paperFor(ref) { return K.ind.forRef(ref).filter(isPaper); }
+  function carPaper(b, c) { return paperFor(b.ref).filter(function (r) { return r.car === c.id; }); }
+  function paperTodo() { return K.ind.all().filter(function (r) { return !r.voided && isPaper(r) && !r.scan; }); }
+  function scanTxt(r) { return r.scan ? 'scan on file' : 'scan not uploaded yet'; }
+  // the button that takes a file straight away: ids = the form (or forms) the scan is for
+  function scanBtn(ids, label, cls) { return '<label class="btn ' + (cls || 'sm') + ' file-btn">' + ic('clip') + label + '<input type="file" accept="image/*,application/pdf,.pdf" data-scan-file="' + esc(ids) + '"></label>'; }
+  // everyone in this vehicle who has not signed online gets a paper form on record (people who are not named: one form for the group)
+  function paperRecs(b, c, at, by) {
+    var st = standById(b.stand), cov = K.ind.status(b.ref, people(b)).cov, l = K.ind.all(), rk = indRefKey(b.ref), i = (b.cars || []).indexOf(c), made = [];
+    var named = [c.driver].concat(c.guests || []).filter(Boolean), names = named.filter(function (n) { return !cov[K.ind.nkey(n)]; }), unnamed = Math.max(0, (c.people || named.length) - named.length);
+    var mine = l.filter(function (r) { return !r.voided && isPaper(r) && indRefKey(r.ref) === rk && r.car === c.id; }), grp = mine.filter(function (r) { return r.group; })[0];
+    var n0 = l.filter(function (r) { return indRefKey(r.ref) === rk; }).length;
+    var mk = function (name, o) { n0++; var rec = Object.assign({ id: uid('indp'), no: 'IND-' + rk + '-' + n0, ref: b.ref, stand: b.stand, standName: st.name, area: st.area, ci: b.ci, co: b.co, eta: b.eta || '', name: name, idNo: '', idKind: '', dob: '', phone: '', email: '',
+      reg: c.reg || '', role: name === c.driver ? 'Driver' : 'Passenger', minors: [], bookedBy: guestName(b), sig: '', typed: false, at: at || nowStamp(), via: PAPER_VIA, by: by || (ME ? ME.name : 'Front desk'), textV: K.ind.version(indText()), text: '', paper: true, car: c.id }, o || {}); l.push(rec); made.push(rec); return rec; };
+    names.forEach(function (n) { var rec = mk(n, isMinor(c, n) ? { minor: true } : null); if (grp && grp.scan && !unnamed) rec.scan = Object.assign({}, grp.scan); });   // named later: the group's scan goes with them
+    if (unnamed && !grp) mk(unnamed + (unnamed === 1 ? ' person' : ' people') + ' not named, ' + carLabel(c, i), { group: unnamed, role: '' });
+    if (grp && !unnamed) l.splice(l.indexOf(grp), 1);   // everyone is named now, so the group's own form goes
+    if (made.length || (grp && !unnamed)) indWrite(l);
+    return made;
+  }
+  // the paper tick was taken off this vehicle: its paper forms go, unless a scan is already on file
+  function paperDrop(b, c) { var l = K.ind.all(), rk = indRefKey(b.ref), keep = l.filter(function (r) { return !(isPaper(r) && !r.scan && r.car === c.id && indRefKey(r.ref) === rk); }); if (keep.length !== l.length) indWrite(keep); }
+  // a photo is made smaller first, the way proof of payment is; a PDF is kept as it is, up to 1.5 MB
+  function scanBlob(file, cb) {
+    var isImg = /^image\//.test(file.type || ''), isPdf = /pdf/i.test(file.type || '') || /\.pdf$/i.test(file.name || '');
+    if (!isImg && !isPdf) { cb(null, 'Choose a photo or a PDF of the signed form. That file is something else.'); return; }
+    if (isPdf) { if (file.size > SCAN_PDF_MAX) cb(null, 'That PDF is ' + kb(file.size) + '. The most is 1.5 MB: scan it in black and white, or take a photo of the page instead.'); else cb(file, 'application/pdf'); return; }
+    if (file.size > SCAN_PHOTO_MAX) { cb(null, 'That photo is ' + kb(file.size) + ', which is too big. The most is 15 MB: take the photo again at a lower quality.'); return; }
+    var rd = new FileReader();
+    rd.onload = function () { var im = new Image(); im.onload = function () {
+      var s = Math.min(1, 1400 / Math.max(im.width, im.height)), cv = document.createElement('canvas'); cv.width = Math.round(im.width * s); cv.height = Math.round(im.height * s); cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+      try { var bin = atob(cv.toDataURL('image/jpeg', .8).split(',')[1]), arr = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i); cb(new Blob([arr], { type: 'image/jpeg' }), 'image/jpeg'); } catch (e) { cb(null, 'That photo could not be made smaller. Try another photo, or a PDF.'); }
+    }; im.onerror = function () { cb(null, 'That photo could not be opened. Try another photo, or a PDF.'); }; im.src = rd.result; };
+    rd.onerror = function () { cb(null, 'That file could not be read. Try again.'); };
+    rd.readAsDataURL(file);
+  }
+  // keep the file and put it on each form it is for; done(true, names) or done(false)
+  function scanSave(file, ids, done) {
+    scanBlob(file, function (blob, type) {
+      if (!blob) { toast(type); done(false); return; }
+      if (!K.files) { toast('This browser cannot keep files, so the scan was not saved.'); done(false); return; }
+      var key = 'ind-scan-' + uid('s');
+      K.files.put(key, blob).then(function () {
+        var l = K.ind.all(), old = [], names = [], ref = '', scan = { name: file.name || 'Scan', type: type, size: blob.size, at: nowStamp(), by: ME.name, key: key };
+        l.forEach(function (r) { if (ids.indexOf(r.id) < 0 || !isPaper(r)) return; if (r.scan && r.scan.key) old.push(r.scan.key); r.scan = Object.assign({}, scan); names.push(r.name); ref = r.ref; });
+        if (!names.length) { K.files.del(key); toast('That paper form was not found. Open the page again.'); done(false); return; }
+        if (!indWrite(l)) { K.files.del(key); toast('The scan could not be saved: this browser is out of space.'); done(false); return; }
+        old.forEach(function (k) { if (!l.some(function (r) { return r.scan && r.scan.key === k; })) K.files.del(k); });   // a replaced file goes, unless another person's form still uses it
+        var b = byRef(ref); if (b) b.notes.push({ at: nowStamp(), by: ME.name, text: 'Scan of the signed paper indemnity uploaded for ' + names.join(', ') + ' (' + scan.name + ').' });
+        log('Paper indemnity scan uploaded for ' + names.join(', '), ref); save(); done(true, names);
+      }, function () { toast('The scan could not be saved in this browser. Check that it has space, and try again.'); done(false); });
+    });
+  }
+  function scanDone(ok, names) { if (!ok) return; if (!$('#modal').hidden) closeModal(); refresh(); var left = paperTodo().length; toast('Scan saved for ' + esc(names.length > 2 ? names.length + ' people' : names.join(' and ')) + (left ? '. ' + left + ' paper form' + (left === 1 ? '' : 's') + ' still to upload' : '. All paper forms have their scan')); }
+  // one scan for several people on the same booking: choose the file, then tick who is on it
+  function actScanMany(ref) {
+    var list = paperFor(ref), b = byRef(ref), busy = false; if (!list.length) return;
+    modal('One scan for several people', '<p class="muted small">' + esc(ref) + (b ? ' · ' + esc(guestName(b)) + ' · ' + esc(standById(b.stand).name) : '') + '. Use this when one scanned page or one PDF holds the signatures of the whole group.</p>' +
+      '<label class="fld"><span>The scan (a photo or a PDF)</span><input type="file" name="file" accept="image/*,application/pdf,.pdf"></label>' +
+      '<span class="fld-l">This scan is for: tick the people</span><div class="scan-who">' + list.map(function (r) { return '<label class="check"><input type="checkbox" name="who" value="' + esc(r.id) + '"' + (r.scan ? '' : ' checked') + '><span>' + esc(r.name) + (r.scan ? ' <small class="muted">(has a scan already: ticking replaces it)</small>' : '') + '</span></label>'; }).join('') + '</div>' +
+      '<p class="hint">' + ic('info') + ' A photo is made smaller before it is kept. A PDF can be up to 1.5 MB.</p>',
+      'Save the scan', function (f) {
+        if (busy) return false;
+        var file = f.elements.file.files && f.elements.file.files[0], ids = $$('[name=who]:checked', f).map(function (x) { return x.value; });
+        if (!file) { toast('Choose the photo or PDF of the signed form'); return false; }
+        if (!ids.length) { toast('Tick at least one person this scan is for'); return false; }
+        busy = true; scanSave(file, ids, function (ok, names) { busy = false; scanDone(ok, names); });
+        return false;
+      }, { noFocus: true });
+  }
+  // a paper form: who, when, and the scan itself if it is on file
+  function actPaperView(id) {
+    var r = indRec(id); if (!r) return;
+    var row = function (a, v) { return v ? '<dt>' + a + '</dt><dd>' + v + '</dd>' : ''; }, sc = r.scan;
+    modal('Paper indemnity form', '<div class="ind-view"><dl class="kv">' + row('Name', '<b>' + esc(r.name) + '</b>') + row('Booking', '<button type="button" class="link-btn" data-open="' + esc(r.ref) + '">' + esc(r.ref) + '</button>') + row('Stand', esc(r.standName)) + row('Stay', fd(r.ci) + ' to ' + fd(r.co)) + row('Vehicle', esc(r.reg || '')) +
+      row('Signed', esc(K.ind.when(r)) + ', on the printed form') + row('Marked by', esc(r.by || '')) + row('Scan', sc ? '<span class="ok-t">On file</span>: ' + esc(sc.name) + (sc.size ? ', ' + kb(sc.size) : '') + ' · uploaded ' + esc(atNice(sc.at)) + (sc.by ? ' by ' + esc(sc.by) : '') : '<span class="warn-t">Not uploaded yet</span>') + '</dl>' +
+      (sc ? '<div class="scan-view" data-scan-view><p class="muted small">Opening the scan…</p></div>' : '<p class="callout warn cflex">' + ic('clip') + '<span>The signed paper form is not on file yet. Scan it or take a photo, then upload it here.</span></p>') +
+      '<div class="row-btns">' + scanBtn(r.id, sc ? 'Replace the scan' : 'Upload the scan', sc ? 'ghost' : '') + (sc && sc.key ? '<button type="button" class="btn ghost" data-scan-dl>' + ic('download') + 'Download</button>' : '') + '</div></div>', null, null, { wide: true, noFocus: true, onOpen: function (f) {
+        var box = $('[data-scan-view]', f); if (!box) return;
+        if (!sc.key || !K.files) { box.innerHTML = '<div class="att-demo">' + ic('note') + '<div><b>' + esc(sc.name) + '</b><p class="muted small">Made-up demo file, so there is nothing to open. In the live version the scan opens here.</p></div></div>'; return; }
+        K.files.get(sc.key).then(function (blob) {
+          if (!blob) { box.innerHTML = '<p class="callout warn cflex">' + ic('alert') + '<span>The file is not in this browser any more (it was uploaded on another computer, or the browser was cleared). Upload it again.</span></p>'; return; }
+          var url = URL.createObjectURL(blob);
+          box.innerHTML = /^image/.test(sc.type || blob.type || '') ? '<img class="att-img" src="' + url + '" alt="Scan of the signed form">' : '<iframe class="att-pdf" src="' + url + '" title="Scan of the signed form"></iframe>';
+          var dl = $('[data-scan-dl]', f); if (dl) dl.addEventListener('click', function () { downloadFile(blob, sc.name || 'scan'); });
+        });
+      } });
+  }
+  // the printed list of paper forms, with and without their scan
+  function paperPrint() {
+    var list = K.ind.all().filter(function (r) { return !r.voided && isPaper(r); }).sort(function (a, b) { return a.ci < b.ci ? 1 : a.ci > b.ci ? -1 : a.ref < b.ref ? -1 : 1; }), n = list.filter(function (r) { return r.scan; }).length;
+    if (!list.length) { toast('No paper forms on record'); return; }
+    printDoc('paper indemnity forms', list.length + ' paper form' + (list.length === 1 ? '' : 's') + ' · ' + n + ' with the scan on file, ' + (list.length - n) + ' still to upload',
+      '<table><thead><tr><th>Stay</th><th>Booking</th><th>Stand</th><th>Booked by</th><th>Name on the form</th><th>Signed</th><th>Scan</th></tr></thead><tbody>' + list.map(function (r) {
+        return '<tr><td>' + fd(r.ci) + ' to ' + fd(r.co) + '</td><td>' + esc(r.ref) + '</td><td>' + esc(r.standName) + '</td><td>' + esc(r.bookedBy || '') + '</td><td class="b">' + esc(r.name) + '</td><td>' + fd(r.at.slice(0, 10)) + (r.by ? '<br><span class="s">with ' + esc(r.by) + '</span>' : '') + '</td><td>' + (r.scan ? '<span class="b">On file</span><br><span class="s">' + esc(r.scan.name) + '</span>' : BOX + 'to upload') + '</td></tr>';
+      }).join('') + '</tbody></table>', 'Keep the signed paper forms until their scan is on file.');
+  }
+  // once in each browser: paper ticks from typed-in sheets get their forms, and the demo gets a few paper forms to show (one with its scan)
+  function paperInit() {
+    if (!DB || DB.paperV) return; DB.paperV = 1;
+    DB.bookings.forEach(function (b) { if (!live(b)) return; (b.cars || []).forEach(function (c, i) { if (c.ind && c.ind.by !== 'Online' && (/\(paper\)/.test(c.ind.by || '') || (b.notes || []).some(function (n) { return String(n.text).indexOf(carLabel(c, i) + ': paper indemnity signed at check-in') === 0; }))) paperRecs(b, c, c.ind.at, String(c.ind.by).replace(/\s*\(paper\)/, '')); }); });
+    var l = K.ind.all(), cand = l.filter(function (r) { return r.demo && !r.voided && !isPaper(r) && /reception/i.test(r.via || '') && r.ci <= TODAY; }), refs = [];
+    cand.sort(function (a, b) { return a.ci < b.ci ? 1 : -1; }).forEach(function (r) { if (refs.indexOf(r.ref) < 0 && refs.length < 3) refs.push(r.ref); });
+    cand.forEach(function (r) {
+      var k = refs.indexOf(r.ref); if (k < 0) return;
+      r.paper = true; r.via = PAPER_VIA; r.by = 'Leuan'; r.sig = ''; r.typed = false; r.idNo = ''; r.idKind = ''; r.dob = '';
+      var pb = byRef(r.ref); if (pb) (pb.cars || []).forEach(function (c) { if ([c.driver].concat(c.guests || []).filter(Boolean).some(function (n) { return K.ind.nkey(n) === K.ind.nkey(r.name); })) r.car = c.id; });
+      if (k === refs.length - 1 && refs.length > 1) r.scan = { name: 'Indemnity ' + r.ref + ' signed.jpg', type: 'image/jpeg', size: 284100, at: r.at, by: 'Leuan', demo: true };
+    });
+    if (refs.length) indWrite(l);
+    save();
+  }
   function indNames(b) { var out = []; ensureCars(b).forEach(function (c, i) { if (c.driver) out.push({ name: c.driver, reg: c.reg, car: 'Vehicle ' + (i + 1), role: 'Driver' }); (c.guests || []).filter(Boolean).forEach(function (n) { var p = { name: n, reg: c.reg, car: 'Vehicle ' + (i + 1), role: 'Passenger' }; if (isMinor(c, n)) p.minor = true; out.push(p); }); }); if (!out.some(function (p) { return K.ind.nkey(p.name) === K.ind.nkey(guestName(b)); })) out.unshift({ name: guestName(b), reg: '', car: '', role: '' }); return out; }
   function carSigned(b, c) { var ns = [c.driver].concat(c.guests || []).filter(Boolean), cov = K.ind.status(b.ref, people(b)).cov; return ns.length > 0 && ns.every(function (n) { return cov[K.ind.nkey(n)]; }); }
   function indPill(b) { var s = K.ind.status(b.ref, people(b)); return '<span class="pill ' + (s.done ? 'ok' : s.covered ? 'warn' : 'muted') + '">' + (s.done ? ic('check') + 'Everyone signed for' : Math.min(s.covered, s.total) + ' of ' + s.total + ' signed for') + '</span>'; }
   function indHTML(b) {
     if (b.status === 'cancelled') return '';
     var s = K.ind.status(b.ref, people(b)), left = indNames(b).filter(function (p) { return !s.cov[K.ind.nkey(p.name)]; }), unnamed = Math.max(0, s.total - s.covered - left.length);
+    var nPap = s.recs.filter(isPaper).length, nEl = s.recs.length - nPap;
     return '<section class="d-sec ind-sec"><h4 class="h4-row">Indemnity' + indPill(b) + '</h4>' +
       (s.recs.length ? '<div class="ind-recs">' + s.recs.map(function (r) {
+        if (isPaper(r)) return '<div class="ind-rec paper' + (r.scan ? ' has' : '') + '"><span class="ind-rec-i">' + ic('clip') + '</span><span class="ind-rec-b"><b>' + esc(r.name) + '</b><small>Signed on paper ' + whenShort(r.at) + (r.by ? ', with ' + esc(r.by) : '') + ' · ' + (r.scan ? 'scan on file since ' + whenShort(r.scan.at) : '<span class="warn-t">scan not uploaded yet</span>') + '</small></span>' +
+          (r.scan ? '<button type="button" class="btn ghost sm" data-act="ind-view" data-ref="' + r.id + '">View scan</button>' + scanBtn(r.id, 'Replace', 'ghost sm') : scanBtn(r.id, 'Upload the scan')) + '</div>';
         return '<div class="ind-rec"><span class="ind-rec-i">' + ic('shield') + '</span><span class="ind-rec-b"><b>' + esc(r.name) + '</b><small>' + esc(r.idKind) + ' ' + esc(K.ind.maskId(r.idNo)) + ' · signed ' + whenShort(r.at) + (/reception/i.test(r.via) ? ' at reception' : /link/i.test(r.via) ? ' with the link' : ' online') + ((r.minors || []).length ? ' · also for ' + esc(r.minors.join(', ')) : '') + '</small></span>' +
           '<button type="button" class="btn ghost sm" data-act="ind-view" data-ref="' + r.id + '">View</button><button type="button" class="icon-btn sm" data-act="ind-pdf" data-ref="' + r.id + '" aria-label="Download the signed form" title="Download PDF">' + ic('download') + '</button></div>';
       }).join('') + '</div>' : '<p class="muted small">Nobody has signed yet. Guests sign online when they finalise the booking, or you can send them the signing link.</p>') +
       (left.length || unnamed ? '<p class="small ind-left">' + ic('info') + ' Still to sign: ' + esc(left.map(function (p) { return p.name; }).join(', ')) + (unnamed ? (left.length ? ' and ' : '') + unnamed + ' ' + (unnamed === 1 ? 'person' : 'people') + ' not named yet' : '') + '</p>' : '') +
       '<div class="row-btns ind-acts-a">' + (s.done ? '' : '<button type="button" class="btn sm" data-act="ind-sign" data-ref="' + b.ref + '">' + ic('edit') + 'Sign here at reception</button><button type="button" class="btn ghost sm" data-act="send-doc" data-ref="' + b.ref + '|indemnity">' + ic('send') + 'Send the signing link</button><button type="button" class="btn ghost sm" data-act="ind-link" data-ref="' + b.ref + '">' + ic('clip') + 'Copy link</button>') +
-      (s.recs.length > 1 ? '<button type="button" class="btn ghost sm" data-act="ind-pdf-ref" data-ref="' + b.ref + '">' + ic('download') + 'All ' + s.recs.length + ' forms (PDF)</button>' : '') + '<button type="button" class="btn ghost sm" data-act="ind-print" data-ref="' + b.ref + '|">' + ic('note') + 'Paper form</button></div></section>';
+      (nPap > 1 ? '<button type="button" class="btn ghost sm" data-act="scan-many" data-ref="' + b.ref + '">' + ic('clip') + 'One scan for several people</button>' : '') +
+      (nEl > 1 ? '<button type="button" class="btn ghost sm" data-act="ind-pdf-ref" data-ref="' + b.ref + '">' + ic('download') + 'All ' + nEl + ' online forms (PDF)</button>' : '') + '<button type="button" class="btn ghost sm" data-act="ind-print" data-ref="' + b.ref + '|">' + ic('note') + 'Paper form</button></div></section>';
   }
   // a guest signs on this device, at reception
   function actIndSign(ref, after) {
@@ -4196,7 +4441,7 @@
       } });
   }
   function actIndView(id) {
-    var r = indRec(id); if (!r) return;
+    var r = indRec(id); if (!r) return; if (isPaper(r)) return actPaperView(id);
     var row = function (a, v) { return v ? '<dt>' + a + '</dt><dd>' + v + '</dd>' : ''; };
     modal('Signed indemnity', '<div class="ind-view"><dl class="kv">' + row('Name', '<b>' + esc(r.name) + '</b>') + row(esc(r.idKind === 'SA ID' ? 'SA ID number' : 'Passport number'), esc(r.idNo)) + row('Date of birth', fd(r.dob, { day: 'numeric', month: 'long', year: 'numeric' })) + row('Mobile', esc(r.phone)) + row('Email', esc(r.email)) +
       row('Signs for (under 18)', esc((r.minors || []).join(', '))) + row('Booking', '<button type="button" class="link-btn" data-open="' + esc(r.ref) + '">' + esc(r.ref) + '</button>') + row('Stand', esc(r.standName) + ' · ' + esc(K.ind.AREA_NAME[r.area] || '')) + row('Stay', fd(r.ci) + ' to ' + fd(r.co)) + row('Vehicle', esc(r.reg ? r.reg + (r.role ? ' (' + r.role.toLowerCase() + ')' : '') : 'Not given')) +
@@ -4216,7 +4461,7 @@
       if (INDF.area && r.area !== INDF.area) return false;
       if (INDF.from && r.co < INDF.from) return false;
       if (INDF.to && r.ci > INDF.to) return false;
-      if (INDF.via && (INDF.via === 'reception' ? !/reception/i.test(r.via) : INDF.via === 'link' ? !/link/i.test(r.via) : /reception|link/i.test(r.via))) return false;
+      if (INDF.via && (INDF.via === 'paper' ? !isPaper(r) : INDF.via === 'reception' ? !/reception/i.test(r.via) || isPaper(r) : INDF.via === 'link' ? !/link/i.test(r.via) : /reception|link/i.test(r.via))) return false;
       if (q && [r.name, r.idNo, r.ref, r.reg, r.phone, r.email, r.standName, (r.minors || []).join(' ')].join(' ').toLowerCase().indexOf(q) < 0) return false;
       return true;
     }).sort(function (a, b) { return a.at < b.at ? 1 : -1; });
@@ -4225,7 +4470,7 @@
     var t = [];
     if (INDF.from || INDF.to) t.push('stays ' + (INDF.from ? 'from ' + fd(INDF.from, { day: 'numeric', month: 'short', year: 'numeric' }) : '') + (INDF.to ? ' to ' + fd(INDF.to, { day: 'numeric', month: 'short', year: 'numeric' }) : ''));
     if (INDF.stand) t.push(standById(INDF.stand).name); else if (INDF.area) t.push(K.ind.AREA_NAME[INDF.area]);
-    if (INDF.via) t.push({ online: 'signed online', link: 'signed with the link', reception: 'signed at reception' }[INDF.via]);
+    if (INDF.via) t.push({ online: 'signed online', link: 'signed with the link', reception: 'signed at reception', paper: 'signed on paper' }[INDF.via]);
     if (INDF.q) t.push('search "' + INDF.q + '"');
     return t.join(', ');
   }
@@ -4233,11 +4478,11 @@
     var all = K.ind.all().filter(function (r) { return !r.voided; }), month = TODAY.slice(0, 7);
     var soon = DB.bookings.filter(function (b) { return live(b) && b.status !== 'out' && b.status !== 'pending' && b.co >= TODAY && diff(TODAY, b.ci) <= 30; }).sort(function (a, b) { return a.ci < b.ci ? -1 : 1; });
     var todo = soon.filter(function (b) { return !K.ind.status(b.ref, people(b)).done; }), week = todo.filter(function (b) { return diff(TODAY, b.ci) <= 7; });
-    var online = all.filter(function (r) { return !/reception/i.test(r.via); }).length;
+    var online = all.filter(function (r) { return !/reception/i.test(r.via); }).length, pTodo = all.filter(function (r) { return isPaper(r) && !r.scan; });
     var head = '<div class="page-h"><div><h1>Indemnities</h1><p class="muted">Every guest signs Kyleu\'s indemnity before arriving: online when they finalise the booking, with the signing link, or here at reception. Each signed form keeps the exact wording, the signature, and the date and time. Filter below and download the forms for the insurer.</p></div>' +
       '<div class="ph-act"><button class="btn ghost" data-act="ind-csv">' + ic('download') + 'Spreadsheet</button><button class="btn" data-act="ind-pdf-all">' + ic('download') + 'Download PDF</button></div></div>' +
       '<div class="kpis">' + tile('Arriving this week, not all signed', week.length, week.length ? 'Send them the signing link' : 'Everyone arriving is signed for', null, week.length ? 'warn' : 'ok') + tile('Signed this month', all.filter(function (r) { return r.at.slice(0, 7) === month; }).length, 'forms') + tile('Signed before arriving', all.length ? Math.round(online / all.length * 100) + '%' : '-', online + ' of ' + all.length + ' online') + tile('Forms on record', all.length, 'kept for the insurer') + '</div>' +
-      '<div class="chips">' + [['signed', 'Signed forms', all.length], ['todo', 'Still to sign', todo.length]].map(function (x) { return '<button class="chip' + (INDF.tab === x[0] ? ' on' : '') + '" data-indtab="' + x[0] + '">' + x[1] + ' <span>' + x[2] + '</span></button>'; }).join('') + '</div>';
+      '<div class="chips">' + [['signed', 'Signed forms', all.length], ['todo', 'Still to sign', todo.length], ['paper', 'Paper forms to upload', pTodo.length]].map(function (x) { return '<button class="chip' + (INDF.tab === x[0] ? ' on' : '') + '" data-indtab="' + x[0] + '">' + x[1] + ' <span>' + x[2] + '</span></button>'; }).join('') + '</div>';
     if (INDF.tab === 'todo') {
       var row = function (b) {
         var s = K.ind.status(b.ref, people(b));
@@ -4246,18 +4491,33 @@
       };
       return head + '<section class="card"><header class="card-h"><h3>Arriving in the next 30 days, not everyone signed</h3><span class="count">' + todo.length + '</span></header>' + (todo.length ? todo.map(row).join('') : '<p class="empty">Everyone arriving in the next 30 days is signed for.</p>') + '</section>';
     }
+    if (INDF.tab === 'paper') {
+      // everyone who signed on paper and has no scan yet, by booking, newest stays first
+      var grp = {}, order = [], nPaper = all.filter(isPaper).length;
+      pTodo.forEach(function (r) { if (!grp[r.ref]) { grp[r.ref] = []; order.push(r.ref); } grp[r.ref].push(r); });
+      order.sort(function (x, y) { var a = grp[x][0], b = grp[y][0]; return a.ci < b.ci ? 1 : a.ci > b.ci ? -1 : x < y ? -1 : 1; });
+      return head + '<section class="card"><header class="card-h"><h3>Paper forms to upload</h3><span class="count">' + pTodo.length + '</span>' + (nPaper ? '<button type="button" class="btn ghost sm" data-act="paper-print">' + ic('note') + 'Print the list of paper forms</button>' : '') + '</header>' +
+        (pTodo.length ? '<p class="muted small">These people signed the printed form at the gate. Scan each signed page, or take a photo of it, and add it here. To do many quickly, go down the list: press <b>Upload the scan</b>, choose the file, and that row is done. Photos are made smaller by themselves; a PDF can be up to 1.5 MB.</p>' +
+          order.map(function (ref) {
+            var rs = grp[ref], r0 = rs[0], pb = byRef(ref);
+            return '<div class="paper-grp"><div class="paper-grp-h"><span class="brow-g"' + (pb ? ' data-open="' + esc(ref) + '"' : '') + '><b>' + esc(r0.bookedBy || (pb ? guestName(pb) : '')) + '</b><small>' + esc(ref) + ' · ' + esc(r0.standName) + ' · ' + fd(r0.ci) + ' to ' + fd(r0.co) + '</small></span>' +
+              (rs.length > 1 ? scanBtn(rs.map(function (r) { return r.id; }).join(','), 'One scan for all ' + rs.length, 'ghost sm') + '<button type="button" class="link-btn" data-act="scan-many" data-ref="' + esc(ref) + '">Choose the people</button>' : '') + '</div>' +
+              rs.map(function (r) { return '<div class="paper-row-i">' + ic('clip') + '<span class="brow-g"><b>' + esc(r.name) + '</b><small>Signed on paper ' + whenShort(r.at) + (r.by ? ', with ' + esc(r.by) : '') + (r.reg ? ' · ' + esc(r.reg) : '') + '</small></span>' + scanBtn(r.id, 'Upload the scan') + '</div>'; }).join('') + '</div>';
+          }).join('')
+          : '<p class="empty">' + (nPaper ? 'Nothing to upload. Every paper form has its scan on file.' : 'Nothing to upload. Nobody has signed on paper yet.') + '</p>') + '</section>';
+    }
     var list = indFiltered(), areas = [['', 'All areas']].concat(Object.keys(K.ind.AREA_NAME).map(function (k) { return [k, { fenced: 'Fenced camp', unfenced: 'Open camp', 'self-sufficient': 'Self-sufficient' }[k]]; }));
     return head + '<div class="filters">' + fsearch('INDF:q', INDF.q, 'Search name, ID, booking or vehicle') +
       fsel('INDF:area', INDF.area, areas, 'Area') + fsel('INDF:stand', INDF.stand, [['', 'All stands']].concat(STANDS.filter(function (x) { return !INDF.area || x.area === INDF.area; }).map(function (x) { return [x.id, x.name]; })), 'Stand') +
       '<label class="fld-inline">Stays from <input type="date" data-fk="INDF:from" value="' + esc(INDF.from) + '"' + (INDF.from ? ' class="on"' : '') + '></label><label class="fld-inline">to <input type="date" data-fk="INDF:to" value="' + esc(INDF.to) + '"' + (INDF.to ? ' class="on"' : '') + '></label>' +
-      fsel('INDF:via', INDF.via, [['', 'Signed anywhere'], ['online', 'Online, finalising'], ['link', 'With the link'], ['reception', 'At reception']], 'How signed') + fclear('INDF', ['q', 'area', 'stand', 'from', 'to', 'via']) + '</div>' +
+      fsel('INDF:via', INDF.via, [['', 'Signed anywhere'], ['online', 'Online, finalising'], ['link', 'With the link'], ['reception', 'At reception'], ['paper', 'On paper']], 'How signed') + fclear('INDF', ['q', 'area', 'stand', 'from', 'to', 'via']) + '</div>' +
       '<div class="card flush">' + (list.length ? '<table class="tbl" data-sort-key="ind"><thead><tr><th>Signed</th><th>Name</th><th>ID or passport</th><th>Booking</th><th>Stand</th><th>Stay</th><th>Vehicle</th><th>How</th><th class="r"></th></tr></thead><tbody>' +
         list.map(function (r) {
           return '<tr><td data-s="' + esc(r.at) + '">' + whenShort(r.at) + '<small class="muted"> ' + (r.at.slice(0, 10) === TODAY ? '' : r.at.slice(0, 4)) + '</small></td><td><button type="button" class="link-btn" data-act="ind-view" data-ref="' + r.id + '"><b>' + esc(r.name) + '</b></button>' + ((r.minors || []).length ? '<small class="muted"> +' + r.minors.length + ' under 18</small>' : '') + '</td>' +
-            '<td>' + esc(K.ind.maskId(r.idNo)) + '</td><td><button type="button" class="link-btn" data-open="' + esc(r.ref) + '">' + esc(r.ref) + '</button></td><td>' + esc(r.standName) + '</td><td data-s="' + esc(r.ci) + '">' + fd(r.ci) + ' to ' + fd(r.co) + '</td><td>' + esc(r.reg || '') + '</td>' +
-            '<td>' + (/reception/i.test(r.via) ? 'Reception' : /link/i.test(r.via) ? 'Link' : 'Online') + '</td><td class="r"><button type="button" class="icon-btn sm" data-act="ind-pdf" data-ref="' + r.id + '" aria-label="Download PDF" title="Download PDF">' + ic('download') + '</button></td></tr>';
+            '<td>' + (isPaper(r) ? '<span class="muted">On the paper form</span>' : esc(K.ind.maskId(r.idNo))) + '</td><td><button type="button" class="link-btn" data-open="' + esc(r.ref) + '">' + esc(r.ref) + '</button></td><td>' + esc(r.standName) + '</td><td data-s="' + esc(r.ci) + '">' + fd(r.ci) + ' to ' + fd(r.co) + '</td><td>' + esc(r.reg || '') + '</td>' +
+            '<td>' + (isPaper(r) ? 'Paper<br>' + (r.scan ? '<small class="ok-t">Scan on file</small>' : '<small class="warn-t">Scan to upload</small>') : /reception/i.test(r.via) ? 'Reception' : /link/i.test(r.via) ? 'Link' : 'Online') + '</td><td class="r">' + (isPaper(r) ? (r.scan ? '<button type="button" class="btn ghost sm" data-act="ind-view" data-ref="' + r.id + '">View scan</button>' : scanBtn(r.id, 'Upload the scan')) : '<button type="button" class="icon-btn sm" data-act="ind-pdf" data-ref="' + r.id + '" aria-label="Download PDF" title="Download PDF">' + ic('download') + '</button>') + '</td></tr>';
         }).join('') + '</tbody></table>' : '<p class="empty">' + (all.length ? 'No signed forms with these filters.' : 'No signed forms yet. They appear here as soon as a guest signs.') + '</p>') + '</div>' +
-      '<p class="muted small" style="margin-top:12px">' + ic('info') + ' ID numbers are partly hidden here; the full number is on the signed form. Download PDF makes one file with a register page and every form that matches the filters.</p>';
+      '<p class="muted small" style="margin-top:12px">' + ic('info') + ' ID numbers are partly hidden here; the full number is on the signed form. Download PDF makes one file with a register page and every online form that matches the filters. Paper forms are kept as scans: the register says how many there are and how many scans are on file.</p>';
   }
 
   /* ---------- Dinokeng codes page: arrivals and which codes are still to send ---------- */
@@ -4279,7 +4539,7 @@
     var row = function (b) {
       var n = ensureCars(b).length, t = codesTodo(b);
       return '<div class="brow vrow"><span class="brow-st">' + fd(b.ci) + '</span><span class="brow-g" data-open="' + b.ref + '"><b>' + esc(guestName(b)) + '</b><small>' + esc(b.guest.email || 'No email') + ' · ' +
-        (b.vehTbc ? 'not sure yet how many vehicles' : !t ? 'all ' + n + ' sent' : t === n ? n + ' vehicle' + (n === 1 ? '' : 's') + ', none sent' : t + ' of ' + n + ' vehicles still to send') + '</small></span>' +
+        (!vehKnown(b) ? (t ? VEH_ASSUMED + ', not sent' : 'vehicles not given yet, 1 code sent') : !t ? 'all ' + n + ' sent' : t === n ? n + ' vehicle' + (n === 1 ? '' : 's') + ', none sent' : t + ' of ' + n + ' vehicles still to send') + '</small></span>' +
         vPay(b).html + (t ? '<button class="btn sm ghost" data-act="dgr" data-ref="' + b.ref + '">' + ic('gift') + 'Add codes</button>' : '<span class="pill ok vsent">' + ic('check') + 'Codes sent</span>') + '</div>';
     };
     return '<div class="page-h"><div><h1>Dinokeng vouchers</h1><p class="muted">Kyleu is a proud DGR CP member, so overnight guests qualify for Conservation Fee Discount Vouchers and pay R85 instead of R100 per adult per night. Make one code per vehicle on the Dinokeng site, paste it on the booking and send it to the client yourself by WhatsApp or email. Dinokeng does not send them.</p></div><div class="ph-act"><a class="btn ghost" href="' + esc(dgrLink()) + '" target="_blank" rel="noopener">' + ic('ext') + 'Open Dinokeng site</a></div></div>' +
@@ -4390,6 +4650,7 @@
     var t = e.target;
     if (!ME) return;
     var go = t.closest('[data-go]'); if (go) {
+      var itab = /^indemnities:(\w+)$/.exec(go.dataset.go); if (itab) { INDF.tab = itab[1]; if (route() === 'indemnities') render(); else location.hash = '#/indemnities'; return; }
       var tday = /^today:(\w+)$/.exec(go.dataset.go);
       if (tday) { DP.tab = tday[1]; DP[tday[1]] = 0; render(); var tc = $('#today'); if (tc) { tc.scrollIntoView({ behavior: 'smooth', block: 'center' }); tc.classList.remove('flash'); void tc.offsetWidth; tc.classList.add('flash'); } return; }
       location.hash = '#/' + go.dataset.go; return;
@@ -4514,7 +4775,9 @@
       var mk = K.invoicePDF(iv); if (mk) downloadFile(mk.blob, mk.name); else toast('The PDF maker did not load. Check the internet connection.'); return;
     }
     if (act === 'claim-no') { var nb = byRef(ref); nb.notes.push({ at: nowStamp(), by: ME.name, text: 'Checked the bank: the ' + money(nb.paidClaim.amt) + ' the guest told us about is not in yet.' }); nb.paidClaim = null; if (nb.status !== 'pending' || !(nb.pops || []).length) nb.pop = false; log('Payment not in the bank yet for ' + nb.ref, nb.ref); save(); refresh(); toast('Noted. Use Send a message to let ' + esc(nb.guest.first) + ' know.'); return; }
-    if (act === 'veh-ok') { var vb = byRef(ref); vb.vehTbc = false; log('Number of vehicles confirmed on ' + vb.ref, vb.ref); save(); refresh(); toast('Marked as confirmed'); return; }
+    if (act === 'veh-add') return actVehAdd(ref);
+    if (act === 'thanks') return thanksStep(ref);
+    if (act === 'veh-ok') { var vb = byRef(ref); vehSaid(vb); log('Number of vehicles confirmed on ' + vb.ref, vb.ref); save(); refresh(); toast('Marked as confirmed'); return; }
     if (act === 'size-ok') { var szb = byRef(ref), szc = szb && szb.sizeCheck; if (!szc) return; szc.done = { at: nowStamp(), by: ME.name }; szb.notes.push({ at: nowStamp(), by: ME.name, text: 'Agreed to ' + szc.people + ' people on a stand that usually takes ' + szc.usual + '.' }); log('Agreed to ' + szc.people + ' people on ' + standById(szb.stand).name + ' (usually ' + szc.usual + ')', szb.ref); save(); refresh(); toast('Noted: ' + szc.people + ' people on ' + esc(standById(szb.stand).name) + ' is fine'); return; }
     if (act === 'cancel-keep') { var ckb = byRef(ref); if (!ckb || !ckb.cancelReq) return; ckb.cancelReq.done = { at: nowStamp(), by: ME.name, kept: true }; ckb.notes.push({ at: nowStamp(), by: ME.name, text: 'Cancellation request from the website: the booking is kept.' }); log('Cancellation request on ' + ckb.ref + ': the booking is kept', ckb.ref); save(); refresh(); toast('Booking kept. Use Send a message to let ' + esc(ckb.guest.first) + ' know.'); return; }
     if (act === 'req-done') { var rb = byRef(ref); rb.changeReq.done = { at: nowStamp(), by: ME.name }; rb.notes.push({ at: nowStamp(), by: ME.name, text: 'Change request from the website dealt with.' }); log('Change request on ' + rb.ref + ' dealt with', rb.ref); save(); refresh(); toast('Change request marked as dealt with'); return; }
@@ -4525,17 +4788,19 @@
     if (act === 'car-in') return actCarIn(ref);
     if (act === 'car-out') return actCarOut(ref);
     if (act === 'car-edit') return actCarEdit(ref);
-    if (act === 'car-add') { var ab = byRef(ref); ensureCars(ab).push(newCar()); ab.vehicles = ab.cars.length; log('Vehicle added to ' + ab.ref, ab.ref); save(); refresh(); toast('Vehicle added. Check it in when it arrives'); return; }
+    if (act === 'car-add') { var ab = byRef(ref); if (!vehKnown(ab)) return actVehAdd(ref); ensureCars(ab).push(newCar()); ab.vehicles = ab.cars.length; vehSaid(ab); log('Vehicle added to ' + ab.ref, ab.ref); save(); refresh(); toast('Vehicle added. Check it in when it arrives'); return; }
     if (act === 'car-del') { var dc = carOf(ref); if (!dc.c) return; dc.b.cars.splice(dc.i, 1); dc.b.vehicles = dc.b.cars.length; save(); refresh(); toast('Vehicle removed'); return; }
     if (act === 'car-tab') { SHOP.who = ref; SHOP.tab = 'till'; closeDrawer(); location.hash = '#/shop'; render(); return; }
     if (act === 'ind-print') { var ip = (ref || '').split('|'); printIndemnity(ip[0], ip[1]); return; }
     if (act === 'ind-sign') { actIndSign(ref); return; }
     if (act === 'ind-sign-car') { var oc = carOf(ref); if (oc.c) { var mf = $('#modal form'); if (mf && oc.c.st === 'due') readCar(mf, oc.c); actIndSign(oc.b.ref, function () { if (oc.c.st === 'due') actCarIn(ref); else actCarEdit(ref); }); } return; }
     if (act === 'ind-view') { actIndView(ref); return; }
-    if (act === 'ind-pdf') { var r1 = indRec(ref); if (r1) K.ind.pdf([r1]).catch(function () { toast('The PDF could not be made. Check the internet connection.'); }); return; }
-    if (act === 'ind-pdf-ref') { var rr = K.ind.forRef(ref); if (rr.length) K.ind.pdf(rr, { name: 'Kyleu indemnities ' + ref + '.pdf' }).catch(function () { toast('The PDF could not be made. Check the internet connection.'); }); return; }
-    if (act === 'ind-pdf-all') { var ra = indFiltered(); if (!ra.length) { toast('No signed forms with these filters'); return; } toast('Making the PDF of ' + ra.length + ' form' + (ra.length === 1 ? '' : 's') + '…'); K.ind.pdf(ra, { register: true, filters: indFilterText() }).catch(function () { toast('The PDF could not be made. Check the internet connection.'); }); return; }
-    if (act === 'ind-csv') { var rc = indFiltered(); if (!rc.length) { toast('No signed forms with these filters'); return; } K.ind.csv(rc); return; }
+    if (act === 'scan-many') { actScanMany(ref); return; }
+    if (act === 'paper-print') { paperPrint(); return; }
+    if (act === 'ind-pdf') { var r1 = indRec(ref); if (r1 && isPaper(r1)) { actPaperView(ref); return; } if (r1) K.ind.pdf([r1]).catch(function () { toast('The PDF could not be made. Check the internet connection.'); }); return; }
+    if (act === 'ind-pdf-ref') { var rr = K.ind.forRef(ref).filter(function (r) { return !isPaper(r); }); if (rr.length) K.ind.pdf(rr, { name: 'Kyleu indemnities ' + ref + '.pdf' }).catch(function () { toast('The PDF could not be made. Check the internet connection.'); }); return; }
+    if (act === 'ind-pdf-all') { var raAll = indFiltered(), ra = raAll.filter(function (r) { return !isPaper(r); }), rp = raAll.filter(isPaper), rpS = rp.filter(function (r) { return r.scan; }).length; if (!ra.length) { toast(rp.length ? 'Only paper forms match these filters. Their scans are opened one by one, or print the list under Paper forms to upload' : 'No signed forms with these filters'); return; } toast('Making the PDF of ' + ra.length + ' form' + (ra.length === 1 ? '' : 's') + '…'); K.ind.pdf(ra, { register: true, filters: [indFilterText(), rp.length ? 'not in this file: ' + rp.length + ' paper form' + (rp.length === 1 ? '' : 's') + ' (' + rpS + ' with the scan on file, ' + (rp.length - rpS) + ' still to upload)' : ''].filter(Boolean).join(', ') }).catch(function () { toast('The PDF could not be made. Check the internet connection.'); }); return; }
+    if (act === 'ind-csv') { var rc = indFiltered(); if (!rc.length) { toast('No signed forms with these filters'); return; } K.ind.csv(rc.map(function (r) { return isPaper(r) ? Object.assign({}, r, { by: (r.by || 'staff') + ', on the paper form, ' + scanTxt(r) }) : r; })); return; }
     if (act === 'ind-link') { var lb = byRef(ref), lu = signLink(lb); (navigator.clipboard ? navigator.clipboard.writeText(lu) : Promise.reject()).then(function () { toast('Signing link copied'); }).catch(function () { window.prompt('Copy the signing link', lu); }); return; }
     if (act === 'client-edit') return actClient(ref);
     if (act === 'client-book') { closeModal(); return actNew({ cid: ref }); }
@@ -4627,7 +4892,7 @@
     if (act === 'invite') { modal('Invite a staff member', '<label class="fld"><span>Name</span><input name="n"></label><label class="fld"><span>Email</span><input name="e" type="email"></label><label class="fld"><span>Role</span><select name="r">' + Object.keys(ROLES).map(function (r) { return '<option>' + r + '</option>'; }).join('') + '</select></label>', 'Send invite', function () { toast('Invite sent (demo)'); }); return; }
     if (act === 'connect') { modal('Connect ' + esc(ref), '<p>In the live version you would sign in to your ' + esc(ref) + ' account here. Guests then pay on ' + esc(ref) + '\'s secure page and the booking is confirmed by itself the moment the payment goes through.</p><p class="muted small">Card numbers never touch the Kyleu website.</p>', null); return; }
     if (act === 'export-json') { var bl = document.createElement('a'); bl.href = URL.createObjectURL(new Blob([JSON.stringify(DB, null, 1)], { type: 'application/json' })); bl.download = 'kyleu-admin-backup.json'; bl.click(); return; }
-    if (act === 'reset') { modal('Reset demo data?', '<p>All demo bookings, payments and notes go back to the start. Bookings made on the website demo are removed too.</p>', 'Reset', function () { try { localStorage.removeItem(KEY); localStorage.removeItem(WEB); localStorage.removeItem('kyleu-web-news'); localStorage.removeItem(WEBK); localStorage.removeItem(POPK); localStorage.removeItem('kyleu-indemnities'); } catch (x) {} STANDS = CONTENT_STANDS.slice(); P.holidays = JSON.parse(ORIG_HOL); CART = {}; IN.id = null; DB = null; P.wkDays = [5, 6, 0]; DB = seed(); migrate(); save(); seedInd(true); render(); toast('Demo data reset'); }, { danger: true }); return; }
+    if (act === 'reset') { modal('Reset demo data?', '<p>All demo bookings, payments and notes go back to the start. Bookings made on the website demo are removed too.</p>', 'Reset', function () { try { localStorage.removeItem(KEY); localStorage.removeItem(WEB); localStorage.removeItem('kyleu-web-news'); localStorage.removeItem(WEBK); localStorage.removeItem(POPK); localStorage.removeItem('kyleu-indemnities'); } catch (x) {} STANDS = CONTENT_STANDS.slice(); P.holidays = JSON.parse(ORIG_HOL); CART = {}; IN.id = null; DB = null; P.wkDays = [5, 6, 0]; DB = seed(); migrate(); save(); seedInd(true); paperInit(); render(); toast('Demo data reset'); }, { danger: true }); return; }
   }
   function onInput(e) {
     var t = e.target;
@@ -4645,6 +4910,7 @@
     if (t.matches('[data-soc]')) { socDB()[t.dataset.soc] = t.value.trim(); socSave(); return; }
     if (t.matches('[data-indemnity]')) { DB.settings.indemnity = t.value; save(); return; }
     if (t.matches('[data-dgrlink]')) { DB.settings.dgrLink = t.value.trim(); save(); return; }
+    if (t.matches('[data-thanks]')) { if (t.dataset.thanks === 'link') DB.settings.thanksLink = t.value.trim(); else DB.settings.thanksText = t.value.replace(/\r/g, '').trim(); save(); return; }
     if (t.matches('[data-provfee]')) { DB.settings.providerFee = parseFloat(t.value) || 0; save(); return; }
     if (t.matches('[data-doc]') && t.type !== 'checkbox') {
       var dc = K.docCfg(), dk = t.dataset.doc; dc[dk] = /Next$/.test(dk) ? (parseInt(String(t.value).replace(/\D/g, ''), 10) || 1) : dk === 'vatRate' ? (parseFloat(t.value) || 0) : t.value.trim();
@@ -4707,6 +4973,20 @@
       if (wt.value === 'own' && !hw2.home.heroName) { var fi = $('[data-hero-file]'); if (fi) fi.click(); render(); return; }
       if (wt.value) hw2.home.hero = wt.value; else delete hw2.home.hero;
       log('Home page header photo changed'); save(); render(); toast('Saved. The home page shows it now.'); return;
+    }
+    if (wt.matches && wt.matches('[data-scan-file]')) {
+      var sfile = wt.files && wt.files[0], sids = String(wt.dataset.scanFile || '').split(',').filter(Boolean); wt.value = '';
+      if (sfile && sids.length) { var slab = wt.closest('label'); if (slab) slab.classList.add('busy'); scanSave(sfile, sids, function (ok, names) { if (slab) slab.classList.remove('busy'); scanDone(ok, names); }); }
+      return;
+    }
+    if (wt.matches && wt.matches('[data-camptime]')) {
+      // kept as website settings, keyed by the setting's label, so the website and the documents pick them up
+      var isIn = wt.dataset.camptime === 'in', ctv = hm24(wt.value), ctw = webDB();
+      if (!ctv) { toast('Choose a time, for example ' + (isIn ? '13:00' : '11:30')); wt.value = isIn ? checkInTime() : checkOutTime(); return; }
+      if (isIn ? ctv <= checkOutTime() : ctv >= checkInTime()) { toast('The latest check-out must be before the earliest check-in, so the team has time to clean the stands'); wt.value = isIn ? checkInTime() : checkOutTime(); return; }
+      ctw.settings['Check-in time'] = isIn ? ctv : checkInTime(); ctw.settings['Check-out time'] = isIn ? checkOutTime() : ctv;
+      if (K.BIZ) { K.BIZ.checkIn = ctw.settings['Check-in time']; K.BIZ.checkOut = ctw.settings['Check-out time']; }
+      log((isIn ? 'Earliest check-in' : 'Latest check-out') + ' changed to ' + ctv); save(); render(); toast('Saved. The website shows it now.'); return;
     }
     if (wt.matches && wt.matches('[data-ws]')) {
       var sk = wt.dataset.ws, sv = wt.value.trim(), sw = webDB();
@@ -4777,7 +5057,7 @@
     // pick up website demo bookings made in another tab
     window.addEventListener('storage', function (e) { if (e.key === WEB && ME && importWeb()) { render(); toast('New booking from the website'); } if (e.key === POPK && ME && importPop()) { render(); toast('Proof of payment uploaded on the website'); } });
     Promise.all([K.pricesFile ? K.pricesFile() : K.prices(), K.stands()]).then(function (r) {
-      P = r[0]; ORIG_HOL = JSON.stringify(P.holidays); CONTENT_STANDS = r[1]; STANDS = r[1].slice(); loadDB(); seedInd();
+      P = r[0]; ORIG_HOL = JSON.stringify(P.holidays); CONTENT_STANDS = r[1]; STANDS = r[1].slice(); loadDB(); seedInd(); paperInit();
       var id = null; try { id = sessionStorage.getItem(SESS); } catch (e) {}
       var s = STAFF.filter(function (x) { return x.id === id; })[0];
       if (s) start(s); else login();
