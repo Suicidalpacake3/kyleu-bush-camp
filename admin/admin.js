@@ -966,9 +966,9 @@
     else if (pd > 0) add1('pay', 'Payment', bLate && !here ? 'todo' : 'part', '<b>Deposit paid, balance ' + money(bal) + (bLate ? ' was due ' : ' by ') + fd(balanceDue(b)) + '.</b> ' + money(pd) + ' is paid so far.', payBtn);
     else add1('pay', 'Payment', 'todo', '<b>Nothing paid yet.</b> ' + money(bal) + ' to pay' + (bLate ? '' : ' by ' + fd(balanceDue(b))) + '.', payBtn);
     // 3. indemnity: needed for every booking
-    var is = K.ind.status(b.ref, people(b)), gateAll = here && !dueN && nC > 0 && cs.every(function (c) { return c.ind; }), indDone = is.done || gateAll;
+    var is = indStat(b), gateAll = here && !dueN && nC > 0 && cs.every(function (c) { return c.ind; }), indDone = is.done || gateAll;
     add1('ind', 'Indemnity', indDone ? 'done' : is.covered ? 'part' : 'todo', (is.done ? 'Everyone is signed for (' + is.total + ' of ' + is.total + ').' : gateAll ? 'Signed at check-in for every vehicle.' : '<b>' + Math.min(is.covered, is.total) + ' of ' + is.total + ' signed for.</b> Everyone signs before they arrive, or at reception.') +
-      (indDone ? '' : toSend(b, 'ind') ? ' The signing link has not been sent yet.' : b.sends && b.sends.ind ? ' The signing link was ' + esc(sentTxt(b.sends.ind)) + '.' : ''),
+      (indDone ? '' : toSend(b, 'ind') ? ' The signing link has not been sent yet.' : b.sends && b.sends.ind && !nudgeOf(b, 'ind') ? ' The signing link was ' + esc(sentTxt(b.sends.ind)) + '.' : ''),   // with b.nudges the line under the text says when it went out
       indDone ? '' : btn('send-doc', b.ref + '|indemnity', 'send', 'Send the signing link') + btn('ind-sign', b.ref, 'edit', 'Sign at reception', 'ghost'));
     // 4. Dinokeng voucher codes: one for each vehicle, needed for every booking
     var sentN = cs.filter(function (c) { return c.dgrSent; }).length, ready = cs.filter(function (c) { return c.dgr && !c.dgrSent; }).length, known = vehKnown(b), vN = nC + ' vehicle' + (nC === 1 ? '' : 's'), assumed = known ? '' : ' (' + VEH_ASSUMED + ')', toGo = nC - sentN;
@@ -992,7 +992,84 @@
     // 8. the thank-you after the stay
     add1('thanks', 'Thank-you', b.thanks ? 'done' : 'todo', b.thanks ? esc(thanksLine(b)) + '.' : b.status === 'out' ? '<b>Not sent yet.</b> Thank ' + first + ' for staying and ask for a Google review.' : 'Sent after check-out, with the Google review link.',
       b.status === 'out' ? btn('thanks', b.ref, 'send', b.thanks ? 'Send again' : 'Send the thank-you', b.thanks ? 'ghost' : '') : '', b.status !== 'out');
+    // when the guest was last reminded about a step that is still open (the same words as in the lists): x.nk is the kind in b.nudges, x.n the line
+    var NK = { pay: 'pay', ind: 'ind', dgr: 'dgr', veh: 'fin' };
+    S.forEach(function (x) { x.nk = NK[x.k] || ''; x.n = x.nk && (x.s === 'todo' || x.s === 'part') && !(x.k === 'pay' && b.onArrival) && !(x.k === 'veh' && here) && b.status !== 'out' ? nudgeNote(b, x.nk) : ''; });
     return S;
+  }
+  /* ---------- what is still to do on a booking, for the lists (the bookings list and its "Still to do" filters) ----------
+     Built from whereSteps, so the lists and the booking always agree. Only for bookings that are still coming or in camp.
+     STG keeps the answers for one draw of the screen (set and cleared in render()), so each booking is worked out once per draw. */
+  var STG = null;
+  function indStat(b) { if (!STG) return K.ind.status(b.ref, people(b)); var k = 'i|' + b.ref; return STG[k] || (STG[k] = K.ind.status(b.ref, people(b))); }
+  function stageOf(b) {
+    var ck = 's|' + b.ref; if (STG && STG[ck]) return STG[ck];
+    var r = { on: live(b) && b.status !== 'out' && b.co >= TODAY, S: {}, left: [], open: [], fin: false, ready: false };
+    if (r.on) {
+      whereSteps(b).forEach(function (x) { r.S[x.k] = x; });
+      r.fin = !!b.finalised || r.S.veh.s === 'done';   // finalised: the guest (or staff) finalised it, or the vehicles and the arrival time are given
+      ['pay', 'ind', 'dgr'].forEach(function (k) { if (r.S[k].s === 'todo' || r.S[k].s === 'part') r.left.push(k); });
+      if (!r.fin) r.left.push('fin');
+      r.open = r.left.filter(function (k) { return !(k === 'pay' && b.onArrival); });   // what a reminder can still help with (pay on arrival is arranged)
+      r.ready = !r.left.length;
+    }
+    if (STG) STG[ck] = r; return r;
+  }
+  // the newest reminder about the things in "kinds" (null when there is none)
+  function lastNudge(b, kinds) { var best = null; kinds.forEach(function (k) { var x = nudgeOf(b, k); if (x && (!best || String(x.at) > String(best.x.at))) best = { k: k, x: x }; }); return best; }
+  // the "Still to do" filters of the bookings list: [key, label, the kinds of reminder that go with it]
+  var TODO_F = [['unpaid', 'Not paid', ['pay']], ['deposit', 'Deposit paid (balance owing)', ['pay']], ['ind', 'Indemnity not signed', ['ind']], ['dgr', 'Dinokeng codes not sent', ['dgr']], ['notfin', 'Not finalised', ['fin']], ['ready', 'Finalised and ready', []]];
+  function todoHit(b, key) {
+    var sg = stageOf(b); if (!sg.on) return false;
+    return key === 'unpaid' ? sg.left.indexOf('pay') >= 0 && paid(b) <= 0 : key === 'deposit' ? sg.left.indexOf('pay') >= 0 && paid(b) > 0 : key === 'ind' ? sg.left.indexOf('ind') >= 0 : key === 'dgr' ? sg.left.indexOf('dgr') >= 0 : key === 'notfin' ? !sg.fin : key === 'ready' ? sg.ready : true;
+  }
+  // which reminders count for a row: the chosen filter's own kind, or everything that is still open
+  function todoKinds(b, key) { var sg = stageOf(b), f = TODO_F.filter(function (x) { return x[0] === key; })[0]; return f ? f[2].filter(function (k) { return sg.open.indexOf(k) >= 0; }) : sg.open; }
+  // "Not reminded in the last 3 days": something is still open, and the newest reminder about it is 3 days old or more (or there is none)
+  function todoStale(b, key) { var ks = todoKinds(b, key); if (!ks.length) return false; var ln = lastNudge(b, ks); return !ln || nudgeStale(b, ln.k); }
+  var TODO_LBL = { pay: 'Payment', ind: 'Indemnity', dgr: 'Dinokeng codes' };
+  function plainTxt(h) { return String(h || '').replace(/<[^>]+>/g, '').replace(/"/g, '&quot;').replace(/\s+/g, ' ').trim(); }   // step text is already escaped: only the tags go
+  function todoCell(b) {
+    var sg = stageOf(b);
+    if (!sg.on) return thanksDue(b) ? '<span class="todo-c todo" data-todo="thanks" title="Checked out ' + esc(outDay(b) === TODAY ? 'today' : 'on ' + fd(outDay(b))) + '. The thank-you with the Google review link is not sent yet.">Thank-you</span>' : '';
+    if (sg.ready) return '<span class="fin-tag ok" data-fin="ready" title="Paid, everyone signed for, Dinokeng codes sent, vehicles and arrival time given.">' + ic('check') + 'Finalised and ready</span>';
+    var is = indStat(b), veh = sg.S.veh, fw = b.finalised ? 'Finalised ' + (String(b.finalised.at).slice(0, 10) === TODAY ? 'today' : 'on ' + fd(String(b.finalised.at).slice(0, 10))) + (b.finalised.by ? ' by ' + esc(b.finalised.by) : '') + '. ' : '';
+    return (sg.fin ? '<span class="fin-tag ok" data-fin="1" title="' + fw + plainTxt(veh.t) + '">' + ic('check') + 'Finalised</span>'
+      : '<span class="fin-tag warn" data-fin="0" data-todo="fin" title="' + plainTxt(veh.t) + ' ' + (paidUp(b) || b.onArrival ? '' : 'Finalising opens once the booking is paid in full. ') + esc(nudgeTxt(b, 'fin')) + '.">Not finalised</span>') +
+      ['pay', 'ind', 'dgr'].filter(function (k) { return sg.left.indexOf(k) >= 0; }).map(function (k) {
+        var x = sg.S[k], lbl = k === 'pay' ? (b.onArrival ? 'Pays on arrival' : 'Payment') : k === 'ind' ? 'Indemnity <b>' + Math.min(is.covered, is.total) + ' of ' + is.total + '</b>' : TODO_LBL[k] + (x.s === 'part' ? ' <b>' + (b.cars || []).filter(function (c) { return c.dgrSent; }).length + ' of ' + (b.cars || []).length + '</b>' : '');
+        return '<span class="todo-c ' + x.s + '" data-todo="' + k + '" title="' + plainTxt(x.t) + (k === 'pay' && b.onArrival ? '' : ' ' + esc(nudgeTxt(b, k)) + '.') + '">' + lbl + '</span>';
+      }).join('');
+  }
+  // the "Last reminded" cell: follows the "Still to do" filter (its own kind), or shows the newest reminder about anything still open
+  function nudgeCell(b, key) {
+    var ks = todoKinds(b, key); if (!ks.length) return { s: '9999-12-31', h: '' };
+    var ln = lastNudge(b, ks), k = ln ? ln.k : ks[0], stale = !ln || nudgeStale(b, k);
+    return { s: ln ? String(ln.x.at) : '0000-00-00', h: '<span class="nudge-t' + (stale ? ' stale' : '') + '" data-nudge="' + k + '" title="' + esc(ks.map(function (x) { return NUDGE_WHAT[x] + ': ' + nudgeTxt(b, x, true); }).join(' · ')) + '">' + esc(ln ? nudgeTxt(b, k) : 'Not reminded yet') + '</span>' + (ln || ks.length === 1 ? '<small>' + NUDGE_WHAT[k] + '</small>' : '') };
+  }
+  // what staff can do from a row of the bookings list, without opening the booking: only what fits what is still to do
+  function rowActs(b) {
+    var sg = stageOf(b), A = [], put = function (act, ref, icn, label, kind) { A.push({ act: act, ref: ref, i: icn, l: label, k: kind || '' }); };
+    if (!sg.on) return A;
+    put('row-copy', b.ref, 'clip', sg.fin ? 'Copy booking link' : 'Copy finalise link');
+    if (!sg.fin) put('send-doc', b.ref + '|' + nudgeTpl(b, 'fin'), 'send', paidUp(b) ? 'Send finalise link' : 'Send booking link (to finalise once paid)', 'fin');
+    if (sg.left.indexOf('ind') >= 0) put('send-doc', b.ref + '|indemnity', 'shield', 'Send indemnity link', 'ind');
+    if (sg.open.indexOf('pay') >= 0) put('send-doc', b.ref + '|' + nudgeTpl(b, 'pay'), 'bank', 'Send payment reminder', 'pay');
+    if (sg.left.indexOf('dgr') >= 0) put('row-dgr', b.ref, 'gift', ensureCars(b).some(function (c) { return c.dgr && !c.dgrSent; }) ? 'Send Dinokeng codes' : 'Add Dinokeng codes, then send', 'dgr');
+    put('remind', b.ref, 'mail', 'Send another message');
+    return A;
+  }
+  function closeRowMenu() { var m = $('.row-menu'); if (m) m.remove(); $$('[data-act="row-menu"][aria-expanded="true"]').forEach(function (x) { x.setAttribute('aria-expanded', 'false'); }); }
+  function rowMenu(btn, ref) {
+    var was = $('.row-menu'), same = was && was.dataset.ref === ref; closeRowMenu(); if (same) return;
+    var b = byRef(ref); if (!b) return;
+    var m = document.createElement('div'); m.className = 'd-menu row-menu'; m.dataset.ref = ref; m.setAttribute('role', 'menu'); m.setAttribute('aria-label', 'Send or copy for ' + guestName(b));
+    m.innerHTML = '<p class="rm-h">' + esc(guestName(b)) + ' · ' + esc(b.ref) + '</p>' + rowActs(b).map(function (a) { return '<button type="button" role="menuitem" data-act="' + a.act + '" data-ref="' + esc(a.ref) + '"' + (a.k ? ' data-kind="' + a.k + '"' : '') + '>' + ic(a.i) + '<span>' + a.l + (a.k ? '<small>' + esc(nudgeTxt(b, a.k)) + '</small>' : '') + '</span></button>'; }).join('');
+    document.body.appendChild(m);
+    var r = btn.getBoundingClientRect(), w = m.offsetWidth, h = m.offsetHeight;
+    m.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.right - w)) + 'px';
+    m.style.top = Math.max(8, r.bottom + h + 8 > window.innerHeight && r.top - h - 6 > 8 ? r.top - h - 6 : r.bottom + 6) + 'px';
+    btn.setAttribute('aria-expanded', 'true');
   }
   var STATE_WORD = { done: 'done', part: 'partly done', todo: 'to do', na: 'not needed' }, STEP_LONG = { dgr: 'Dinokeng voucher codes', veh: 'Vehicles and arrival time' };
   function whereHTML(b) {
@@ -1002,7 +1079,7 @@
     var left = S.filter(function (x) { return (x.s === 'todo' && !x.later) || x.s === 'part'; }).length;
     return '<section class="d-sec bk-where" data-where="' + b.ref + '"><h4 class="h4-row">Where this booking is<span class="pill ' + (left ? 'warn' : 'ok') + '">' + (left ? left + ' to do' : ic('check') + 'Nothing to do now') + '</span></h4>' +
       '<ol class="bk-prog">' + S.map(function (x, i) { return '<li><button type="button" class="bp-s ' + x.s + (x.later ? ' later' : '') + (x === cur ? ' on' : '') + '" data-wstep="' + b.ref + '|' + x.k + '" data-state="' + x.s + '" aria-pressed="' + (x === cur) + '" title="' + x.l + ': ' + (x.later ? 'later' : STATE_WORD[x.s]) + '"><i>' + (x.s === 'done' ? ic('check') : i + 1) + '</i><span>' + x.l + '</span></button></li>'; }).join('') + '</ol>' +
-      '<div class="bp-d ' + cur.s + (cur.later ? ' later' : '') + '" data-wdetail="' + cur.k + '"><p><span class="bp-dl">' + (STEP_LONG[cur.k] || cur.l) + ' · ' + (cur.later ? 'later' : STATE_WORD[cur.s]) + '</span>' + cur.t + '</p>' + (cur.a ? '<div class="row-btns">' + cur.a + '</div>' : '') + '</div></section>';
+      '<div class="bp-d ' + cur.s + (cur.later ? ' later' : '') + '" data-wdetail="' + cur.k + '"><p><span class="bp-dl">' + (STEP_LONG[cur.k] || cur.l) + ' · ' + (cur.later ? 'later' : STATE_WORD[cur.s]) + '</span>' + cur.t + '</p>' + (cur.n ? '<p class="bp-n">' + cur.n + '</p>' : '') + (cur.a ? '<div class="row-btns">' + cur.a + '</div>' : '') + '</div></section>';
   }
   // "Keep the stand: do not release it" on an unpaid booking (b.noRelease). Staff can change it at any time until the booking is paid.
   function actKeep(ref, on) {
@@ -2832,6 +2909,8 @@
     DB.credits = DB.credits || []; var noCode = DB.credits.filter(function (c) { return !c.code; }).length;
     DB.credits.forEach(function (c) { creditFix(c); }); if (noCode) save();
     if ((DB.dgrV || 0) < 2) { DB.dgrV = 2; DB.bookings.forEach(function (b) { var was = b.dgr; delete b.dgr; if (!live(b) || !(was || b.ci < add(TODAY, 3))) return; b.cars.forEach(function (c) { if (c.dgr) return; c.dgr = 'DGR' + Math.random().toString(36).slice(2, 8).toUpperCase(); c.dgrSent = { at: add(b.ci, -6) + ' 09:10', by: 'Sherri', code: c.dgr }; }); }); }
+    // data from before "last reminded" was kept (b.nudges): fill it in once from what is stored, so the lists are not empty
+    if ((DB.nudgeV || 0) < 1) { DB.nudgeV = 1; DB.bookings.forEach(nudgeFill); save(); }
     newsDB();
   }
 
@@ -2901,9 +2980,9 @@
     var noTime = DB.bookings.filter(function (b) { return live(b) && b.extras && b.extras.gd && !b.drive && b.co >= TODAY && diff(TODAY, b.ci) <= 7; }); if (noTime.length) attention.push({ i: 'car', tone: 'warn', t: noTime.length + ' game drive' + (noTime.length > 1 ? 's' : '') + ' this week still need a time', go: 'drives', o: 5 });
     DB.bookings.forEach(function (b) {
       if (live(b) && b.status !== 'out' && b.ci >= TODAY && diff(TODAY, b.ci) <= 7 && codesTodo(b)) { var nc = ensureCars(b).length, nt = codesTodo(b); var soonC = diff(TODAY, b.ci) <= 3, vTxt = !vehKnown(b) ? VEH_ASSUMED : nt === nc ? nc + ' vehicle' + (nc === 1 ? '' : 's') : nt + ' of ' + nc + ' vehicles still to send';
-        attention.push({ i: 'gift', tone: 'warn', t: soonC ? 'Dinokeng codes not sent: <b>' + esc(guestName(b)) + '</b> arrives ' + (b.ci === TODAY ? 'today' : fdw(b.ci)) + ' (' + vTxt + ')' : 'Send Dinokeng codes to <b>' + esc(guestName(b)) + '</b> (' + fdw(b.ci) + ', ' + vTxt + ')', ref: b.ref, o: soonC ? 3 : 4 }); }
+        attention.push({ i: 'gift', tone: 'warn', t: soonC ? 'Dinokeng codes not sent: <b>' + esc(guestName(b)) + '</b> arrives ' + (b.ci === TODAY ? 'today' : fdw(b.ci)) + ' (' + vTxt + ')' : 'Send Dinokeng codes to <b>' + esc(guestName(b)) + '</b> (' + fdw(b.ci) + ', ' + vTxt + ')', ref: b.ref, o: soonC ? 3 : 4, n: nudgeOf(b, 'dgr') ? 'codes ' + nudgeTxt(b, 'dgr', true) : '' }); }
       // every booking needs the indemnity, also a stand that is kept without a payment (b.noRelease) and pay on arrival
-      if (live(b) && b.status !== 'in' && b.status !== 'out' && (b.status !== 'pending' || b.noRelease) && !onPaper(b, 'in') && b.ci >= TODAY && diff(TODAY, b.ci) <= 3) { var is = K.ind.status(b.ref, people(b)); if (!is.done) attention.push({ i: 'shield', tone: 'warn', t: 'Indemnity not signed: <b>' + esc(guestName(b)) + '</b> arrives ' + (b.ci === TODAY ? 'today' : fdw(b.ci)) + ', ' + Math.min(is.covered, is.total) + ' of ' + is.total + ' signed for', ref: b.ref, o: 3 }); }
+      if (live(b) && b.status !== 'in' && b.status !== 'out' && (b.status !== 'pending' || b.noRelease) && !onPaper(b, 'in') && b.ci >= TODAY && diff(TODAY, b.ci) <= 3) { var is = indStat(b); if (!is.done) attention.push({ i: 'shield', tone: 'warn', t: 'Indemnity not signed: <b>' + esc(guestName(b)) + '</b> arrives ' + (b.ci === TODAY ? 'today' : fdw(b.ci)) + ', ' + Math.min(is.covered, is.total) + ' of ' + is.total + ' signed for', ref: b.ref, o: 3, n: nudgeTxt(b, 'ind', true) }); }
       if (thanksDue(b)) attention.push({ i: 'send', tone: 'info', t: 'Thank-you not sent: <b>' + esc(guestName(b)) + '</b> checked out ' + (outDay(b) === TODAY ? 'today' : outDay(b) === add(TODAY, -1) ? 'yesterday' : 'on ' + fdw(outDay(b))), ref: b.ref, o: 6 });
       if (b.status === 'in') (b.cars || []).forEach(function (c, i) { if (c.st === 'in' && !c.ind) attention.push({ i: 'alert', tone: 'bad', t: 'Indemnity not signed: <b>' + esc(carLabel(c, i)) + '</b> at ' + esc(standById(b.stand).name), ref: b.ref, o: 2 }); });
     });
@@ -2937,13 +3016,13 @@
         return '<div class="cols"><section class="card" id="today"><header class="card-h"><h3>Today at camp</h3><div class="tabs" role="tablist">' + [['arr', 'Arriving', arr.length], ['dep', 'Departing', dep.length], ['in', 'In camp', nT]].map(function (x) { return '<button class="' + (DP.tab === x[0] ? 'on' : '') + '" data-dtab="' + x[0] + '">' + x[1] + ' <span>' + x[2] + '</span></button>'; }).join('') + '</div></header>' +
           (pg.items.length ? pg.items.map(row).join('') : '<p class="empty">' + ({ arr: 'No arrivals today.', dep: 'No departures today.', in: 'Nobody in camp tonight.' })[DP.tab] + '</p>') + pg.bar +
           '<footer class="card-f"><span>' + ic('car') + '<b>' + carsInCamp() + '</b> vehicles in camp</span><span>' + ic('fire') + '<b>' + woodBags + '</b> free firewood bags tonight</span><span>' + ic('car') + '<b>' + drives.length + '</b> game drive' + (drives.length === 1 ? '' : 's') + ' booked</span><span>' + ic('ice') + '<b>' + ice + '</b> bags of ice to hand out</span></footer></section>' +
-          '<section class="card"><header class="card-h"><h3>Needs attention</h3><span class="count">' + (attention.length + softs.length) + '</span></header>' + softHtml + (attention.length ? '<ul class="attn">' + at.items.map(function (a) { return '<li><button ' + (a.ref ? 'data-open="' + a.ref + '"' : 'data-go="' + a.go + '"') + '><span class="attn-i ' + a.tone + '">' + ic(a.i) + '</span><span>' + a.t + '</span>' + ic('chev-r', 'chev') + '</button><button type="button" class="attn-x" data-dismiss="' + esc(a.key) + '" aria-label="Done: hide this" title="Done: hide this">' + ic('check') + '</button></li>'; }).join('') + '</ul>' + at.bar : '<p class="empty">All clear. Enjoy the bush!</p>') + '</section></div>' +
+          '<section class="card"><header class="card-h"><h3>Needs attention</h3><span class="count">' + (attention.length + softs.length) + '</span></header>' + softHtml + (attention.length ? '<ul class="attn">' + at.items.map(function (a) { return '<li><button ' + (a.ref ? 'data-open="' + a.ref + '"' : 'data-go="' + a.go + '"') + '><span class="attn-i ' + a.tone + '">' + ic(a.i) + '</span><span>' + a.t + (a.n ? ' <small class="attn-n">' + ic('bell') + esc(a.n) + '</small>' : '') + '</span>' + ic('chev-r', 'chev') + '</button><button type="button" class="attn-x" data-dismiss="' + esc(a.key) + '" aria-label="Done: hide this" title="Done: hide this">' + ic('check') + '</button></li>'; }).join('') + '</ul>' + at.bar : '<p class="empty">All clear. Enjoy the bush!</p>') + '</section></div>' +
           '<div class="cols"><section class="card"><header class="card-h"><h3>Stands booked, next 30 nights</h3><span class="muted small">Weekend nights in bold</span></header>' + colChart(occ, { max: STANDS.length, label: 'Stands booked per night', colA: C_CARD, band: 24 }) + '</section>' +
           '<section class="card"><header class="card-h"><h3>Recent activity</h3><span class="count">' + DB.log.length + '</span></header><ul class="feed">' + ac.items.map(function (l) { return '<li' + (l.ref ? ' data-open="' + l.ref + '"' : '') + '><span>' + esc(l.text) + '</span><small>' + esc(l.by) + ' · ' + esc(atNice(l.at)) + '</small></li>'; }).join('') + '</ul>' + ac.bar + '</section></div>';
       })();
   }
 
-  var F = { q: '', st: 'upcoming', area: '', stand: '', src: '', m: '', from: '', to: '' };
+  var F = { q: '', st: 'upcoming', area: '', stand: '', src: '', m: '', from: '', to: '', todo: '', stale: '' };   // todo: one "Still to do" filter (TODO_F); stale '1': not reminded in the last 3 days
   function bucket(b) {
     var s = stateOf(b);
     return { pending: s.k === 'pending' || s.k === 'pop' || s.k === 'overdue' || s.k === 'kept', kept: isKept(b), arrival: s.k === 'arrival', baldue: s.k === 'baldue', in: s.k === 'in', cancelled: s.k === 'cancelled', upcoming: live(b) && b.co >= TODAY && b.status !== 'out', past: b.status === 'out' || (b.co < TODAY && live(b)), all: true };
@@ -2952,24 +3031,34 @@
     var groups = [['upcoming', 'Upcoming'], ['pending', 'Awaiting EFT'], ['kept', 'Stand kept'], ['arrival', 'Pays on arrival'], ['baldue', 'Balance due'], ['in', 'In camp'], ['past', 'Past'], ['cancelled', 'Cancelled'], ['all', 'All']];
     var q = F.q.toLowerCase();
     var base = DB.bookings.filter(function (b) { var st = standById(b.stand); return (!F.area || st.area === F.area) && (!F.stand || b.stand === F.stand) && (!F.src || b.source === F.src) && (!F.m || b.method === F.m) && (!F.from || b.ci >= F.from) && (!F.to || b.ci <= F.to) && bHit(b, q, st.name + (isKept(b) ? ' stand kept' : '') + (b.onArrival && live(b) && balance(b) > 0 ? ' pays on arrival' : '')); });   // typing "kept" or "arrival" finds those bookings
-    var counts = {}; groups.forEach(function (g) { counts[g[0]] = 0; }); base.forEach(function (b) { var k = bucket(b); groups.forEach(function (g) { if (k[g[0]]) counts[g[0]]++; }); });
-    var list = base.filter(function (b) { return bucket(b)[F.st]; });
+    // "Still to do": one stage at a time (F.todo), and "not reminded in the last 3 days" on top of it (F.stale). Both work together with
+    // the status chips and the other filters: each chip counts what it would show with everything else as it is now.
+    var hitTodo = function (b) { return (!F.todo || todoHit(b, F.todo)) && (!F.stale || todoStale(b, F.todo)); };
+    var base2 = F.todo || F.stale ? base.filter(hitTodo) : base, inSt = base.filter(function (b) { return bucket(b)[F.st]; });
+    var counts = {}; groups.forEach(function (g) { counts[g[0]] = 0; }); base2.forEach(function (b) { var k = bucket(b); groups.forEach(function (g) { if (k[g[0]]) counts[g[0]]++; }); });
+    var tc = {}; TODO_F.forEach(function (x) { tc[x[0]] = inSt.filter(function (b) { return todoHit(b, x[0]) && (!F.stale || todoStale(b, x[0])); }).length; });
+    var nStale = inSt.filter(function (b) { return (!F.todo || todoHit(b, F.todo)) && todoStale(b, F.todo); }).length;
+    var list = inSt.filter(hitTodo);
     var srcs = []; DB.bookings.forEach(function (b) { if (srcs.indexOf(b.source) < 0) srcs.push(b.source); }); srcs.sort();
     if (F.st === 'past' || F.st === 'cancelled' || F.st === 'all') list = list.slice().reverse();
     return '<div class="page-h"><div><h1>Bookings</h1><p class="muted">' + list.length + ' shown' + (hasFee() ? ' · card prices include the ' + cardFee() + '% card fee, EFT prices do not' : '') + '</p></div><div class="ph-act"><button class="btn ghost" data-act="csv-bookings">' + ic('download') + 'Export</button><button class="btn" data-act="new">' + ic('plus') + 'New booking</button></div></div>' +
       '<div class="filters"><label class="search">' + ic('search') + '<input type="search" placeholder="Search name, ref, phone or stand" value="' + esc(F.q) + '" data-f="q" aria-label="Search bookings"></label>' +
-      '</div>' + (function () { var nAct = ['area', 'stand', 'src', 'm', 'from', 'to'].filter(function (k) { return F[k]; }).length; return '<details class="more-filters"' + (window.innerWidth > 760 || nAct ? ' open' : '') + '><summary>' + ic('list') + 'Filters' + (nAct ? ' (' + nAct + ')' : '') + '</summary>'; })() + '<div class="filter-row">' + fsel('F:area', F.area, [['', 'All areas']].concat(Object.keys(AREA_SHORT).map(function (a) { return [a, AREA_SHORT[a]]; }))) +
+      '</div>' + (function () { var nAct = ['area', 'stand', 'src', 'm', 'from', 'to', 'todo', 'stale'].filter(function (k) { return F[k]; }).length; return '<details class="more-filters"' + (window.innerWidth > 760 || nAct ? ' open' : '') + '><summary>' + ic('list') + 'Filters' + (nAct ? ' (' + nAct + ')' : '') + '</summary>'; })() + '<div class="filter-row">' + fsel('F:area', F.area, [['', 'All areas']].concat(Object.keys(AREA_SHORT).map(function (a) { return [a, AREA_SHORT[a]]; }))) +
       fsel('F:stand', F.stand, [['', 'All stands']].concat(STANDS.filter(function (x) { return !F.area || x.area === F.area; }).map(function (x) { return [x.id, x.name]; }))) +
       fsel('F:src', F.src, [['', 'Booked via: any']].concat(srcs.map(function (x) { return [x, 'Booked via ' + x]; }))) + fsel('F:m', F.m, [['', 'Pays by: any'], ['card', 'Pays by card'], ['eft', 'Pays by EFT']]) +
-      '<span class="frange"><label class="fdate"><span>Arriving from</span><input type="date" data-fk="F:from" value="' + F.from + '"' + (F.from ? ' class="on"' : '') + '></label><label class="fdate"><span>to</span><input type="date" data-fk="F:to" value="' + F.to + '"' + (F.to ? ' class="on"' : '') + '></label></span>' + fclear('F', ['area', 'stand', 'src', 'm', 'from', 'to']) + '</div></details>' +
+      '<span class="frange"><label class="fdate"><span>Arriving from</span><input type="date" data-fk="F:from" value="' + F.from + '"' + (F.from ? ' class="on"' : '') + '></label><label class="fdate"><span>to</span><input type="date" data-fk="F:to" value="' + F.to + '"' + (F.to ? ' class="on"' : '') + '></label></span>' + fclear('F', ['area', 'stand', 'src', 'm', 'from', 'to', 'todo', 'stale']) + '</div></details>' +
       '<div class="chips scroll">' + groups.filter(function (g) { return (g[0] !== 'kept' && g[0] !== 'arrival') || counts[g[0]] || F.st === g[0]; }).map(function (g) { return '<button class="chip' + (F.st === g[0] ? ' on' : '') + '" data-fst="' + g[0] + '">' + g[1] + ' <span>' + counts[g[0]] + '</span></button>'; }).join('') + '</div>' +
-      '<div class="card flush"><table class="tbl"><thead><tr><th>Guest</th><th>Stand</th><th>Dates</th><th>Guests</th><th class="r">Total</th><th class="r">Balance</th><th>Status</th></tr></thead><tbody>' +
+      '<div class="chips todo-f" role="group" aria-label="Still to do"><span class="chips-l">Still to do</span>' + TODO_F.map(function (x) { return '<button class="chip' + (F.todo === x[0] ? ' on' : '') + '" data-ftodo="' + x[0] + '" aria-pressed="' + (F.todo === x[0]) + '">' + x[1] + ' <span>' + tc[x[0]] + '</span></button>'; }).join('') +
+      '<button class="chip' + (F.stale ? ' on' : '') + '" data-fstale="1" aria-pressed="' + !!F.stale + '" title="Something is still to do, and the guest was not reminded about it in the last ' + NUDGE_DAYS + ' days">' + ic('bell') + 'Not reminded in the last ' + NUDGE_DAYS + ' days <span>' + nStale + '</span></button></div>' +
+      '<div class="card flush bk-card"><table class="tbl bk"><thead><tr><th>Guest</th><th>Stand</th><th>Dates</th><th>Guests</th><th class="r">Total</th><th class="r">Balance</th><th>Status</th><th>Still to do</th><th>Last reminded</th><th class="r"></th></tr></thead><tbody>' +
       (list.length ? list.map(function (b) {
-        var st = standById(b.stand);
+        var st = standById(b.stand), sg = stageOf(b), nc = nudgeCell(b, F.todo);
         return '<tr data-open="' + b.ref + '" tabindex="0"><td data-l="Guest"><b>' + esc(guestName(b)) + '</b>' + (b.isNew ? ' <span class="new">New</span>' : '') + (isKept(b) ? ' <span class="tag-kept" title="' + KEPT_TXT + '">' + ic('lock') + 'Kept</span>' : '') + (staysBefore(b) ? ' <span class="ret-dot" title="Returning client">' + ic('return') + '</span>' : '') + '<small>' + esc(b.ref) + ' · ' + esc(b.source) + '</small></td><td data-l="Stand">' + esc(st.name) + '<small>' + AREA_SHORT[st.area] + '</small></td>' +
           '<td data-l="Dates" data-s="' + b.ci + '">' + fd(b.ci) + ' to ' + fd(b.co) + '<small>' + diff(b.ci, b.co) + ' night' + (diff(b.ci, b.co) === 1 ? '' : 's') + ' · ' + (b.ci > TODAY ? 'arrives ' + rel(b.ci) : b.ci === TODAY ? 'arrives today' : b.co > TODAY ? 'in camp' : 'left ' + rel(b.co)) + '</small></td><td data-l="Guests">' + people(b) + '</td>' +
-          '<td data-l="Total" class="r">' + money(b.total) + '<small>' + methodLabel(b.method) + (b.method !== 'card' && hasFee() ? ' · card ' + money(b.card) : '') + '</small></td><td data-l="Balance" class="r">' + (balance(b) ? money(balance(b)) : '<span class="muted">0</span>') + '</td><td data-l="Status">' + pill(stateOf(b)) + '</td></tr>';
-      }).join('') : '<tr><td colspan="7" class="empty">No bookings match.</td></tr>') + '</tbody></table></div>';
+          '<td data-l="Total" class="r">' + money(b.total) + '<small>' + methodLabel(b.method) + (b.method !== 'card' && hasFee() ? ' · card ' + money(b.card) : '') + '</small></td><td data-l="Balance" class="r">' + (balance(b) ? money(balance(b)) : '<span class="muted">0</span>') + '</td><td data-l="Status">' + pill(stateOf(b)) + '</td>' +
+          '<td data-l="Still to do" class="td-todo" data-s="' + (sg.on ? sg.left.length : -1) + '">' + todoCell(b) + '</td><td data-l="Last reminded" class="td-nudge" data-s="' + nc.s + '">' + nc.h + '</td>' +
+          '<td data-l="Actions" class="r td-acts">' + (sg.on ? '<button type="button" class="icon-btn sm" data-act="row-copy" data-ref="' + b.ref + '" title="' + (sg.fin ? 'Copy booking link' : 'Copy finalise link') + '" aria-label="' + (sg.fin ? 'Copy booking link' : 'Copy finalise link') + ' for ' + esc(guestName(b)) + '">' + ic('clip') + '</button><button type="button" class="icon-btn sm" data-act="row-menu" data-ref="' + b.ref + '" aria-haspopup="menu" aria-expanded="false" title="Send or copy" aria-label="Send or copy for ' + esc(guestName(b)) + '">' + ic('more') + '</button>' : '') + '</td></tr>';
+      }).join('') : '<tr><td colspan="10" class="empty">No bookings match.</td></tr>') + '</tbody></table></div>';
   }
 
   function holdTxtOf(b) {
@@ -2981,18 +3070,23 @@
     if (h.state === 'grace') return '<b>The quotation ran out on ' + fdw(h.due) + '.</b> That was over a weekend, so the stand is kept until ' + end + '. Record the payment if it came in, or the stand is released automatically.';
     return 'Quotation valid until <b>' + fdw(h.due) + '</b> (' + rel(h.due) + '). ' + (payFullOf(b) ? 'The full amount' : 'A deposit of') + ' <b>' + money(deposit(b)) + '</b> secures the stand.' + (paid(b) > 0 ? ' ' + money(paid(b)) + ' is already paid, so <b>' + money(Math.max(0, deposit(b) - paid(b))) + '</b> is still needed.' : '') + (h.why === 'weekend' ? ' It runs out over a weekend, so the stand is kept until ' + end + '.' : '');
   }
+  var EF = { sort: '' };   // EFT payments: '' = by date due, 'nudge' = by last reminded
   function vEft() {
-    var pend = DB.bookings.filter(function (b) { return b.status === 'pending'; });
+    var pend =DB.bookings.filter(function (b) { return b.status === 'pending'; });
     var pop = pend.filter(function (b) { return b.pop; }), over = pend.filter(function (b) { return !b.pop && !b.noRelease && TODAY > depositDue(b); }), wait = pend.filter(function (b) { return !b.pop && (b.noRelease || TODAY <= depositDue(b)); });   // kept for the guest (b.noRelease): waits, is never overdue for release
     var bal = DB.bookings.filter(function (b) { return b.status === 'confirmed' && b.method !== 'card' && balance(b) > 0 && (diff(TODAY, balanceDue(b)) <= 14 || b.paidClaim); }).sort(function (a, b) { return a.ci < b.ci ? -1 : 1; });
+    // EF.sort 'nudge': in every section, the guest who was reminded longest ago (or never) comes first
+    if (EF.sort === 'nudge') [pop, over, wait, bal].forEach(function (l) { l.sort(function (a, b) { var x = nudgeOf(a, 'pay'), y = nudgeOf(b, 'pay'), xs = x ? String(x.at) : '', ys = y ? String(y.at) : ''; return xs < ys ? -1 : xs > ys ? 1 : 0; }); });
     function card(b, kind) {
       var amt = kind === 'bal' ? balance(b) : deposit(b), due = kind === 'bal' ? balanceDue(b) : depositDue(b), left = diff(TODAY, due);
-      return '<article class="eft-card ' + kind + '"><div class="eft-top" data-open="' + b.ref + '"><div><b>' + esc(guestName(b)) + '</b><small>' + esc(b.ref) + ' · ' + esc(standById(b.stand).name) + ' · ' + fd(b.ci) + ' to ' + fd(b.co) + '</small></div><div class="eft-amt"><b>' + money(amt) + '</b><small>' + (kind === 'bal' ? 'balance' : payFullOf(b) ? 'full amount (arrives soon)' : depPct() + '% deposit') + (hasFee() ? ' · card ' + money(kind === 'bal' ? b.card - paid(b) : Math.round(b.card * depPct() / 100)) : '') + '</small></div></div>' +
+      var stale = kind !== 'pop' && !b.paidClaim && left < 0 && nudgeStale(b, 'pay');   // overdue, and not reminded in the last 3 days: a soft highlight
+      return '<article class="eft-card ' + kind + (stale ? ' stale' : '') + '" data-eft="' + b.ref + '"><div class="eft-top" data-open="' + b.ref + '"><div><b>' + esc(guestName(b)) + '</b><small>' + esc(b.ref) + ' · ' + esc(standById(b.stand).name) + ' · ' + fd(b.ci) + ' to ' + fd(b.co) + '</small></div><div class="eft-amt"><b>' + money(amt) + '</b><small>' + (kind === 'bal' ? 'balance' : payFullOf(b) ? 'full amount (arrives soon)' : depPct() + '% deposit') + (hasFee() ? ' · card ' + money(kind === 'bal' ? b.card - paid(b) : Math.round(b.card * depPct() / 100)) : '') + '</small></div></div>' +
         '<div class="eft-due ' + (kind !== 'bal' && b.noRelease ? 'info-t' : left < 0 ? 'bad-t' : left <= 1 ? 'warn-t' : '') + '">' + ic('clock') + (kind !== 'bal' && b.noRelease ? '<b>' + KEPT_TXT + '.</b> The quotation ' + (left < 0 ? 'ran out on ' : 'is valid until ') + fd(due) + ' (' + rel(due) + ')' : b.softHold && kind !== 'bal' ? '<b>Kept until ' + keptEnd(b.softHold) + '.</b> Confirm the payment, or the stand is released' : kind !== 'bal' && holdOf(b).until > due ? 'Due ' + fd(due) + ' (' + rel(due) + '). Stand kept until ' + keptEnd(holdOf(b).until) + (holdOf(b).why === 'pop' ? ' (proof of payment)' : ' (not over a weekend)') : left < 0 ? 'Overdue by ' + -left + ' day' + (-left > 1 ? 's' : '') : 'Due ' + fd(due) + ' (' + rel(due) + ')') + (b.paidClaim ? '<span class="info-t pop-line">' + ic('bank') + esc(b.guest.first) + ' says they paid ' + money(b.paidClaim.amt) + ' on ' + fd(b.paidClaim.date) + ': check the bank</span>' : '') + (b.pop && (b.pops || []).length ? '<span class="info-t pop-line">' + ic('note') + 'Proof of payment received' + ((b.pops || []).length ? ' ' + whenSaid(b.pops[b.pops.length - 1].at) + ', check the bank:' : ': check the bank') + '</span>' + popChips(b) : '') + '</div>' +
-        '<div class="eft-act"><button class="btn sm" data-act="pay" data-ref="' + b.ref + '">' + ic('check') + 'Money is in</button><button class="btn sm ghost" data-act="remind" data-ref="' + b.ref + '">' + ic('send') + 'Remind</button>' + (kind === 'over' || (kind === 'pop' && TODAY > depositDue(b)) ? '<button class="btn sm ghost danger-t" data-act="release" data-ref="' + b.ref + '">' + ic('x') + 'Release stand</button>' : '') + '</div></article>';
+        '<div class="eft-nudge' + (stale ? ' stale' : '') + '"><span class="eft-nl">Last reminded</span>' + nudgeNote(b, 'pay') + (stale ? '<span class="eft-late">Overdue: time to remind</span>' : '') + '</div>' +
+        '<div class="eft-act"><button class="btn sm" data-act="pay" data-ref="' + b.ref + '">' + ic('check') + 'Money is in</button><button class="btn sm ghost" data-act="remind" data-kind="pay" data-ref="' + b.ref + '">' + ic('send') + 'Remind</button>' + (kind === 'over' || (kind === 'pop' && TODAY > depositDue(b)) ? '<button class="btn sm ghost danger-t" data-act="release" data-ref="' + b.ref + '">' + ic('x') + 'Release stand</button>' : '') + '</div></article>';
     }
     var sec = function (title, sub, list, kind) { return '<section class="eft-sec"><h3>' + title + ' <span class="count">' + list.length + '</span></h3><p class="muted small">' + sub + '</p>' + (list.length ? '<div class="eft-grid">' + list.map(function (b) { return card(b, kind); }).join('') + '</div>' : '<p class="empty">Nothing here.</p>') + '</section>'; };
-    return '<div class="page-h"><div><h1>EFT payments</h1><p class="muted">' + (hasFee() ? 'Guests who chose EFT pay the normal price (no ' + cardFee() + '% card fee). ' : 'Guests pay by EFT. Proof of payment from the website lands here. ') + 'Match their payments here.</p></div></div>' +
+    return '<div class="page-h"><div><h1>EFT payments</h1><p class="muted">' + (hasFee() ? 'Guests who chose EFT pay the normal price (no ' + cardFee() + '% card fee). ' : 'Guests pay by EFT. Proof of payment from the website lands here. ') + 'Match their payments here.</p></div><div class="ph-act">' + fsel('EF:sort', EF.sort, [['', 'Sort by date due'], ['nudge', 'Sort by last reminded: longest ago first']], 'Sort the payments') + '</div></div>' +
       '<div class="card match"><label class="search big">' + ic('search') + '<input data-match placeholder="Paste the reference from the bank statement, e.g. KY26 5903" aria-label="Bank reference"></label><div data-match-out class="muted small">Tip: guests use their booking reference when they pay, so you can paste it straight from the bank app.</div></div>' +
       sec('Proof of payment received', 'The guest says they paid. Check the bank, then confirm.', pop, 'pop') +
       sec('Waiting for payment', 'Quotation sent. It holds the stand for ' + num('Booking rules', 'Deposit due within days of invoice', 5) + ' days; after that the stand is released automatically' + (holdRules().skip !== 'off' ? ', never over a weekend.' : '.'), wait, 'wait') +
@@ -3451,6 +3545,7 @@
     if (!t) { t = { id: uid('t'), subject: subject, name: guestName(b), email: b.guest.email, phone: b.guest.phone, status: 'closed', unread: false, ref: b.ref, auto: true, msgs: [] }; DB.threads.push(t); }
     var sh = sigShared();
     t.msgs.push({ from: 'staff', by: 'Website (automatic)', at: at, body: (t.subject !== subject ? 'Subject: ' + subject + '\n\n' : '') + body + '\n\n--\nKyleu Bush Camp\n' + sh.phone + ' · info@kyleu.co.za · ' + sh.web + '\nProud DGR CP Member', att: att });
+    nudgeMark(b, nudgeKinds(b, 'inv', body, [{ inv: inv }]), 'Email (automatic)', null, at, 'Website');
   }
   function invMailBody(b, inv, updated) {
     var st = K.invoiceState(inv);
@@ -3586,10 +3681,86 @@
   function toSend(b, k) { return !!(b.toSend && b.toSend[k]) && live(b); }
   function sentTxt(x) { return x ? 'sent by ' + x.via + ' ' + (String(x.at).slice(0, 10) === TODAY ? 'today' : 'on ' + fd(String(x.at).slice(0, 10))) + (x.by ? ' by ' + x.by : '') : ''; }
 
+  /* ---------- when the guest was last contacted about each thing, for every list ----------
+     b.nudges = { pay, ind, dgr, fin }, each { at, by, via, n }:
+       pay = a payment reminder, or the quotation or invoice sent (again)      ind = the indemnity signing link, or a reminder to sign
+       dgr = the Dinokeng voucher codes, or a reminder about them               fin = the link to their booking (finalise), or a reminder to finalise
+     via is 'WhatsApp', 'Email' or 'Email (automatic)'; n counts how many times. The first time reads "Sent", after that "Reminded".
+     Set in one place: when a message really leaves the send box (nudgeKinds works out which kinds the message carries, from the
+     template or action that opened the box and from the links, codes and documents in it). The website's own invoice emails and
+     replies from the Inbox are counted the same way. Older data is filled in once from what is stored (DB.nudgeV in migrate()). */
+  var NUDGE_KINDS = ['pay', 'ind', 'dgr', 'fin'], NUDGE_DAYS = 3;   // "not reminded in the last 3 days"
+  var NUDGE_WHAT = { pay: 'Payment', ind: 'Indemnity link', dgr: 'Dinokeng codes', fin: 'Finalise link' };
+  var NUDGE_TPL = { eft: ['pay'], balance: ['pay'], invoice: ['pay'], extra: ['pay'], inv: ['pay'], indemnity: ['ind'], codes: ['dgr'], finalise: ['fin'], link: ['fin'], details: ['fin'] };
+  function nudgeKinds(b, key, text, docs) {
+    var t = String(text || ''), ks = (NUDGE_TPL[key] || []).slice(), put = function (k) { if (ks.indexOf(k) < 0) ks.push(k); };
+    if ((docs || []).some(function (d) { return d.inv; }) && (key !== 'receipt' || balance(b) > 0)) put('pay');   // a receipt only counts while money is still owing
+    if (b.key && t.indexOf('k=' + b.key) >= 0) put('fin');
+    if (b.key && K.ind && t.indexOf('t=' + K.ind.token(b.ref, b.key)) >= 0) put('ind');
+    if ((docs || []).some(function (d) { return /^Dinokeng/i.test(d.name || ''); }) || (b.cars || []).some(function (c) { return c.dgr && t.indexOf(c.dgr) >= 0; })) put('dgr');
+    return ks;
+  }
+  // once: the kinds already counted in this send box, so WhatsApp and then email of the same message count as one time
+  function nudgeMark(b, kinds, via, once, at, by) {
+    if (!b || !kinds || !kinds.length) return;
+    b.nudges = b.nudges || {};
+    kinds.forEach(function (k) {
+      var x = b.nudges[k], n = (x ? x.n || 1 : 0) + (once && once[k] && x ? 0 : 1), nx = { at: at || nowStamp(), by: by != null ? by : (ME ? ME.name : ''), via: via || 'Email', n: n };
+      if (x && String(x.at) > String(nx.at)) { x.n = n; nx = x; }   // an older message counted late never hides a newer one
+      b.nudges[k] = nx; if (once) once[k] = 1;
+    });
+  }
+  function nudgeOf(b, kind) { return (b && b.nudges && b.nudges[kind]) || null; }
+  function nudgeAgo(b, kind) { var x = nudgeOf(b, kind); return x ? Math.max(0, diff(String(x.at).slice(0, 10), TODAY)) : null; }   // days since, null when never
+  function nudgeStale(b, kind) { var d = nudgeAgo(b, kind); return d === null || d >= NUDGE_DAYS; }
+  // "Sent today", "Reminded yesterday by WhatsApp", "Reminded 5 days ago by email (3 times)", "Not reminded yet". short: "reminded 5 days ago"
+  function nudgeTxt(b, kind, short) {
+    var x = nudgeOf(b, kind); if (!x) return short ? 'not reminded yet' : 'Not reminded yet';
+    var n = x.n || 1, d = nudgeAgo(b, kind), w = (n > 1 ? 'Reminded ' : 'Sent ') + (d === 0 ? 'today' : d === 1 ? 'yesterday' : d + ' days ago');
+    if (short) return w.toLowerCase();
+    return w + (x.via ? ' by ' + (/whats/i.test(x.via) ? 'WhatsApp' : /auto/i.test(x.via) ? 'automatic email' : 'email') : '') + (n > 2 ? ' (' + n + ' times)' : '');
+  }
+  function nudgeTip(b, kind) { var x = nudgeOf(b, kind); return x ? NUDGE_WHAT[kind] + ': ' + atNice(x.at) + (x.by ? ', by ' + x.by : '') : NUDGE_WHAT[kind] + ': nothing sent yet'; }
+  // the same words as a small line with a bell, for the booking and the cards
+  function nudgeNote(b, kind, calm) { return '<span class="nudge-n' + (!calm && nudgeStale(b, kind) ? ' stale' : '') + '" data-nudge="' + kind + '" title="' + esc(nudgeTip(b, kind)) + '">' + ic('bell') + esc(nudgeTxt(b, kind)) + '</span>'; }
+  // the template that reminds this guest about one thing
+  function nudgeTpl(b, kind) { return kind === 'pay' ? (extraDue(b) ? 'extra' : b.status === 'pending' ? 'eft' : 'balance') : kind === 'ind' ? 'indemnity' : kind === 'fin' ? (paidUp(b) ? 'finalise' : 'link') : defaultTemplate(b); }
+  // once, for data from before b.nudges: worked out from what is stored (what was sent, invoices, codes, WhatsApp notes, emails).
+  // The made-up demo bookings also get a believable spread: some reminded yesterday, some 5 days ago, some never.
+  function nudgeSubject(s) { s = String(s || ''); var ks = []; if (/deposit reminder|stay is coming up|\((quotation|invoice)[^)]*\)|updated Kyleu invoice|^Send (quote|invoice)/i.test(s)) ks.push('pay'); if (/indemnity/i.test(s)) ks.push('ind'); if (/Dinokeng (discount voucher|code)/i.test(s)) ks.push('dgr'); if (/^Finalise your Kyleu booking|^Your Kyleu booking KY|vehicle details please/i.test(s)) ks.push('fin'); return ks; }
+  function nudgeFill(b) {
+    var ev = {}, put = function (k, at, by, via) { if (!at) return; var id = String(at).slice(0, 16); ev[k] = ev[k] || {}; if (!ev[k][id]) ev[k][id] = { at: String(at), by: by || '', via: /whats/i.test(via || '') ? 'WhatsApp' : /auto/i.test(via || '') ? 'Email (automatic)' : 'Email' }; };
+    var s = b.sends || {};
+    if (s.doc) put('pay', s.doc.at, s.doc.by, s.doc.via); if (s.link) put('fin', s.link.at, s.link.by, s.link.via); if (s.ind) put('ind', s.ind.at, s.ind.by, s.ind.via);
+    (b.invoices || []).forEach(function (x) { if (x.sent) put('pay', x.sent.at, x.sent.by || (/auto/i.test(x.sent.via || '') ? 'Website' : x.by), x.sent.via); });
+    (b.cars || []).forEach(function (c) { if (c.dgrSent) put('dgr', c.dgrSent.at, c.dgrSent.by, c.dgrSent.via); });
+    (b.notes || []).forEach(function (n) { var m = /^Sent "([^"]*)" on WhatsApp/.exec(n.text || ''); if (m) nudgeSubject(m[1]).forEach(function (k) { put(k, n.at, n.by, 'WhatsApp'); }); });
+    (DB.threads || []).forEach(function (t) { if (t.ref !== b.ref) return; (t.msgs || []).forEach(function (m) {
+      if (m.from !== 'staff') return; var sj = /^Subject: (.*)/.exec(m.body || ''), ks = nudgeSubject(sj ? sj[1] : m === t.msgs[0] || t.auto ? t.subject : '');
+      nudgeKinds(b, '', m.body, (m.att || []).map(function (a) { return { inv: a.inv || /quotation|invoice/i.test(a.name || ''), name: a.name }; })).forEach(function (k) { if (ks.indexOf(k) < 0) ks.push(k); });
+      ks.forEach(function (k) { put(k, m.at, t.auto ? 'Website' : m.by, t.auto ? 'Email (automatic)' : 'Email'); });
+    }); });
+    b.nudges = b.nudges || {};
+    NUDGE_KINDS.forEach(function (k) { var ids = Object.keys(ev[k] || {}).sort(); if (!ids.length || b.nudges[k]) return; var last = ev[k][ids[ids.length - 1]]; b.nudges[k] = { at: last.at < b.created ? b.created : last.at, by: last.by, via: last.via, n: ids.length }; });   // some made-up demo codes are dated before the booking: never earlier than the day it was made
+    // the demo spread: only bookings the demo made up itself (their references stay below the real counter), and only what is still coming
+    var sm = /^KY\d\d (\d+)$/.exec(b.ref);
+    if (!DB.seeded || !sm || +sm[1] >= 5901 || !live(b) || b.status === 'out' || b.co < TODAY) return;
+    var h = +sm[1], cday = b.created.slice(0, 10), age = diff(cday, TODAY), wa = !b.guest.email || h % 2 === 0 ? 'WhatsApp' : 'Email', ts = b.toSend || {};
+    var mk = function (k, ago, time, via, n, from) { var d = add(TODAY, -ago); if (from && d < from) d = from; if (d < cday) d = cday; b.nudges[k] = { at: d + ' ' + time, by: 'Sherri', via: via, n: n }; };
+    // the quotation went out when the booking was made: by the website itself, or by Sherri for a phone or WhatsApp booking
+    var first = b.source === 'Website' ? { at: b.created, by: 'Website', via: 'Email (automatic)', n: 1 } : { at: b.created, by: b.madeBy || 'Sherri', via: wa, n: 1 };
+    if (!b.nudges.pay && !ts.doc) b.nudges.pay = JSON.parse(JSON.stringify(first));
+    if (!b.nudges.fin && !ts.link && b.source === 'Website') b.nudges.fin = JSON.parse(JSON.stringify(first));   // the quotation email carries the link to the booking
+    var chase = b.status === 'pending' ? age >= 2 : diff(TODAY, balanceDue(b)) <= 10;
+    if (balance(b) > 0 && !b.onArrival && !ts.doc && chase && (!b.nudges.pay || b.nudges.pay.n < 2)) { if (h % 3 === 0 && age > 1) mk('pay', 1, '09:20', 'WhatsApp', 2); else if (h % 3 === 1 && age > 5) mk('pay', 5, '16:45', 'Email', 3); }
+    if (!ts.ind && (!b.nudges.ind) && b.status !== 'in' && (b.status !== 'pending' || b.noRelease) && diff(TODAY, b.ci) <= 21) { var q = Math.floor(h / 2) % 3; if (q === 0 && age > 1) mk('ind', 1, '10:05', 'WhatsApp', h % 4 < 2 ? 1 : 2); else if (q === 1 && age > 5) mk('ind', 5, '08:40', 'Email', 3); }
+    if (paidUp(b) && !b.finalised && b.ci > TODAY && !ts.link && (!b.nudges.fin || b.nudges.fin.n < 2)) { var f = Math.floor(h / 5) % 3, lastPay = (b.payments || []).map(function (p) { return p.d; }).sort().pop() || cday, had = b.nudges.fin ? 1 : 0; if (f === 0 && age > 1) mk('fin', 1, '11:30', wa, 1 + had, lastPay); else if (f === 1 && age > 5) mk('fin', 5, '14:10', 'Email', 2 + had, lastPay); }
+  }
+
   /* ---------- the send box ---------- */
   // o: { b, title, choices: [[key, label]], value, load(key) -> { subject, text, docs }, onSent(via, current) }
   function sendBox(o) {
-    var b = o.b, cur = null;
+    var b = o.b, cur = null, nudged = {};
     modal(esc(o.title), '<div class="sx">' +
       '<div class="grid2"><label class="fld"><span>Email to</span><input name="to" type="email" value="' + esc(b.guest.email) + '"></label><label class="fld"><span>WhatsApp to</span><input name="wa" inputmode="tel" value="' + esc(b.guest.phone) + '"></label></div>' +
       (o.choices && o.choices.length > 1 ? '<label class="fld"><span>What are you sending?</span><select name="tpl">' + o.choices.map(function (c) { return '<option value="' + c[0] + '"' + (c[0] === o.value ? ' selected' : '') + '>' + esc(c[1]) + '</option>'; }).join('') + '</select></label>' : '') +
@@ -3616,6 +3787,7 @@
           $(via === 'wa' ? '[data-sx-wa]' : '[data-sx-mail]', f).innerHTML = ic(via === 'wa' ? 'wa' : 'mail') + (via === 'wa' ? 'WhatsApp again' : 'Email again');
           if (o.onSent) o.onSent(via, cur);
           noteSent(b, via, f.elements.b.value, docs());
+          nudgeMark(b, nudgeKinds(b, cur && cur.key, f.elements.b.value, docs()), via === 'wa' ? 'WhatsApp' : 'Email', nudged);   // the one place every list reads "last reminded" from
           docs().forEach(function (d) { if (d.inv) recordInv(b, d.inv, via === 'wa' ? 'WhatsApp' : 'Email', via === 'wa' ? fval(f, 'wa') : fval(f, 'to')); });
           log((via === 'wa' ? 'WhatsApp' : 'Email') + ' sent to ' + guestName(b) + ': ' + fval(f, 's'), b.ref); save(); refresh();
         }
@@ -3754,6 +3926,7 @@
     if (!body || body === 'Hi ' + t.name.split(' ')[0] + ',') { toast('Write a reply first'); return; }
     t.msgs.push({ from: 'staff', by: ME.name, at: nowStamp(), body: body + '\n\n' + ME.name + '\nKyleu Bush Camp', att: CMP_ATT.slice() });
     t.status = close ? 'closed' : 'waiting'; t.unread = false; CMP_ATT = [];
+    var rb = t.ref ? byRef(t.ref) : null; if (rb) nudgeMark(rb, nudgeKinds(rb, '', body, []), 'Email');   // a reply that carries the booking link, the signing link or the codes counts too
     log('Emailed ' + t.name + ': ' + t.subject, t.ref); save(); render();
     toast('Reply sent to ' + esc(t.email) + (close ? ' and marked as done' : '') + ' (demo)');
   }
@@ -3766,6 +3939,7 @@
         if (!s || !body) { toast('Add a subject and a message'); return false; }
         var g = gs.filter(function (x) { return x.email === to; })[0], bk = DB.bookings.filter(function (x) { return x.guest.email === to && live(x) && x.co >= TODAY; })[0];
         var t = { id: uid('t'), subject: s, name: g ? g.name : to, email: to, phone: g ? g.phone : '', status: 'waiting', unread: false, ref: bk ? bk.ref : '', msgs: [{ from: 'staff', by: ME.name, at: nowStamp(), body: body + '\n\n' + ME.name + '\nKyleu Bush Camp', att: [] }] };
+        if (bk) nudgeMark(bk, nudgeKinds(bk, '', body, []), 'Email');
         DB.threads.push(t); IN.id = t.id; IN.box = 'waiting'; log('Emailed ' + t.name + ': ' + s, t.ref); save(); render(); toast('Email sent to ' + esc(to) + ' (demo)');
       }, { wide: true });
   }
@@ -3811,11 +3985,11 @@
   function owedHTML(owed) {
     var late = owed.filter(function (o) { return o.late; }), soon = owed.filter(function (o) { return !o.late && diff(TODAY, o.due) <= 7; }), later = owed.filter(function (o) { return !o.late && diff(TODAY, o.due) > 7; });
     var tot = function (l) { return money(l.reduce(function (a, o) { return a + o.amt; }, 0)); };
-    var rows = function (l) { return l.map(function (o) { var b = o.b, st = standById(b.stand); return '<tr data-open="' + b.ref + '" tabindex="0"><td data-l="Guest"><b>' + esc(guestName(b)) + '</b><small>' + esc(b.ref) + '</small></td><td data-l="Stay" data-s="' + b.ci + '">' + esc(st.name) + '<small>' + fd(b.ci) + ' to ' + fd(b.co) + '</small></td><td data-l="For">' + o.what + '<small>Pays by ' + methodLabel(b.method) + '</small></td><td data-l="Due" data-s="' + o.due + '" class="' + (o.late ? 'bad-t' : '') + '">' + fd(o.due) + '<small>' + (o.late ? 'Overdue ' + -diff(TODAY, o.due) + ' days' : rel(o.due)) + '</small></td><td data-l="Amount" class="r amt">' + money(o.amt) + '</td><td class="r row-btn"><button class="btn sm ghost" data-act="remind" data-ref="' + b.ref + '">' + ic('send') + 'Remind</button><button class="btn sm" data-act="pay" data-ref="' + b.ref + '">Record payment</button></td></tr>'; }).join(''); };
-    var sec = function (title, l) { return l.length ? '<tr class="day"><td colspan="4">' + title + ' · ' + l.length + '</td><td class="r">' + tot(l) + '</td><td></td></tr>' + rows(l) : ''; };
+    var rows = function (l) { return l.map(function (o) { var b = o.b, st = standById(b.stand), nx = nudgeOf(b, 'pay'), stale = o.late && nudgeStale(b, 'pay'); return '<tr data-open="' + b.ref + '" tabindex="0"' + (stale ? ' class="stale"' : '') + '><td data-l="Guest"><b>' + esc(guestName(b)) + '</b><small>' + esc(b.ref) + '</small></td><td data-l="Stay" data-s="' + b.ci + '">' + esc(st.name) + '<small>' + fd(b.ci) + ' to ' + fd(b.co) + '</small></td><td data-l="For">' + o.what + '<small>Pays by ' + methodLabel(b.method) + '</small></td><td data-l="Due" data-s="' + o.due + '" class="' + (o.late ? 'bad-t' : '') + '">' + fd(o.due) + '<small>' + (o.late ? 'Overdue ' + -diff(TODAY, o.due) + ' days' : rel(o.due)) + '</small></td><td data-l="Last reminded" class="td-nudge" data-s="' + (nx ? esc(String(nx.at)) : '0000-00-00') + '"><span class="nudge-t' + (stale ? ' stale' : '') + '" data-nudge="pay" title="' + esc(nudgeTip(b, 'pay')) + '">' + esc(nudgeTxt(b, 'pay')) + '</span></td><td data-l="Amount" class="r amt">' + money(o.amt) + '</td><td class="r row-btn"><button class="btn sm ghost" data-act="remind" data-kind="pay" data-ref="' + b.ref + '">' + ic('send') + 'Remind</button><button class="btn sm" data-act="pay" data-ref="' + b.ref + '">Record payment</button></td></tr>'; }).join(''); };
+    var sec = function (title, l) { return l.length ? '<tr class="day"><td colspan="5">' + title + ' · ' + l.length + '</td><td class="r">' + tot(l) + '</td><td></td></tr>' + rows(l) : ''; };
     return '<div class="kpis">' + tile('Overdue', tot(late), late.length + ' booking' + (late.length === 1 ? '' : 's'), null, late.length ? 'warn' : 'ok') + tile('Due in the next 7 days', tot(soon), soon.length + ' booking' + (soon.length === 1 ? '' : 's')) + tile('Due later', tot(later), later.length + ' booking' + (later.length === 1 ? '' : 's')) + '</div>' +
-      '<div class="card flush"><table class="tbl ledger owed" data-sort-key="owed"><thead><tr><th>Guest</th><th>Stay</th><th>For</th><th>Due</th><th class="r">Amount</th><th></th></tr></thead><tbody>' +
-      (owed.length ? sec('Overdue', late) + sec('Due in the next 7 days', soon) + sec('Due later', later) : '<tr><td colspan="6" class="empty">Nothing owed. Everyone has paid.</td></tr>') + '</tbody></table></div>' +
+      '<div class="card flush"><table class="tbl ledger owed" data-sort-key="owed"><thead><tr><th>Guest</th><th>Stay</th><th>For</th><th>Due</th><th>Last reminded</th><th class="r">Amount</th><th></th></tr></thead><tbody>' +
+      (owed.length ? sec('Overdue', late) + sec('Due in the next 7 days', soon) + sec('Due later', later) : '<tr><td colspan="7" class="empty">Nothing owed. Everyone has paid.</td></tr>') + '</tbody></table></div>' +
       '<p class="demo-note">' + ic('info') + 'Deposits are due ' + num('Booking rules', 'Deposit due within days of invoice', 5) + ' days after the invoice, balances ' + num('Booking rules', 'Balance due days before arrival', 7) + ' days before arrival.</p>';
   }
 
@@ -4734,7 +4908,7 @@
   }
   function indNames(b) { var out = []; ensureCars(b).forEach(function (c, i) { if (c.driver) out.push({ name: c.driver, reg: c.reg, car: 'Vehicle ' + (i + 1), role: 'Driver' }); (c.guests || []).filter(Boolean).forEach(function (n) { var p = { name: n, reg: c.reg, car: 'Vehicle ' + (i + 1), role: 'Passenger' }; if (isMinor(c, n)) p.minor = true; out.push(p); }); }); if (!out.some(function (p) { return K.ind.nkey(p.name) === K.ind.nkey(guestName(b)); })) out.unshift({ name: guestName(b), reg: '', car: '', role: '' }); return out; }
   function carSigned(b, c) { var ns = [c.driver].concat(c.guests || []).filter(Boolean), cov = K.ind.status(b.ref, people(b)).cov; return ns.length > 0 && ns.every(function (n) { return cov[K.ind.nkey(n)]; }); }
-  function indPill(b) { var s = K.ind.status(b.ref, people(b)); return '<span class="pill ' + (s.done ? 'ok' : s.covered ? 'warn' : 'muted') + '">' + (s.done ? ic('check') + 'Everyone signed for' : Math.min(s.covered, s.total) + ' of ' + s.total + ' signed for') + '</span>'; }
+  function indPill(b) { var s = indStat(b); return '<span class="pill ' + (s.done ? 'ok' : s.covered ? 'warn' : 'muted') + '">' + (s.done ? ic('check') + 'Everyone signed for' : Math.min(s.covered, s.total) + ' of ' + s.total + ' signed for') + '</span>'; }
   function indHTML(b) {
     if (b.status === 'cancelled') return '';
     var s = K.ind.status(b.ref, people(b)), left = indNames(b).filter(function (p) { return !s.cov[K.ind.nkey(p.name)]; }), unnamed = Math.max(0, s.total - s.covered - left.length);
@@ -4800,8 +4974,8 @@
   }
   function vIndemnities() {
     var all = K.ind.all().filter(function (r) { return !r.voided; }), month = TODAY.slice(0, 7);
-    var soon = DB.bookings.filter(function (b) { return live(b) && b.status !== 'out' && b.status !== 'pending' && b.co >= TODAY && diff(TODAY, b.ci) <= 30; }).sort(function (a, b) { return a.ci < b.ci ? -1 : 1; });
-    var todo = soon.filter(function (b) { return !K.ind.status(b.ref, people(b)).done; }), week = todo.filter(function (b) { return diff(TODAY, b.ci) <= 7; });
+    var soon = DB.bookings.filter(function (b) { return live(b) && b.status !== 'out' && (b.status !== 'pending' || b.noRelease) && b.co >= TODAY && diff(TODAY, b.ci) <= 30; }).sort(function (a, b) { return a.ci < b.ci ? -1 : 1; });   // a stand kept without a payment needs the indemnity too
+    var todo = soon.filter(function (b) { return !indStat(b).done; }), week = todo.filter(function (b) { return diff(TODAY, b.ci) <= 7; });
     var online = all.filter(function (r) { return !/reception/i.test(r.via); }).length, pTodo = all.filter(function (r) { return isPaper(r) && !r.scan; });
     var head = '<div class="page-h"><div><h1>Indemnities</h1><p class="muted">Every guest signs Kyleu\'s indemnity before arriving: online when they finalise the booking, with the signing link, or here at reception. Each signed form keeps the exact wording, the signature, and the date and time. Filter below and download the forms for the insurer.</p></div>' +
       '<div class="ph-act"><button class="btn ghost" data-act="ind-csv">' + ic('download') + 'Spreadsheet</button><button class="btn" data-act="ind-pdf-all">' + ic('download') + 'Download PDF</button></div></div>' +
@@ -4809,9 +4983,8 @@
       '<div class="chips">' + [['signed', 'Signed forms', all.length], ['todo', 'Still to sign', todo.length], ['paper', 'Paper forms to upload', pTodo.length]].map(function (x) { return '<button class="chip' + (INDF.tab === x[0] ? ' on' : '') + '" data-indtab="' + x[0] + '">' + x[1] + ' <span>' + x[2] + '</span></button>'; }).join('') + '</div>';
     if (INDF.tab === 'todo') {
       var row = function (b) {
-        var s = K.ind.status(b.ref, people(b));
-        return '<div class="brow vrow"><span class="brow-st">' + fd(b.ci) + '</span><span class="brow-g" data-open="' + b.ref + '"><b>' + esc(guestName(b)) + '</b><small>' + esc(standById(b.stand).name) + ' · ' + esc(b.ref) + ' · ' + (paidUp(b) || b.onArrival ? 'finalising is open' : 'not paid in full yet') + '</small></span>' + indPill(b) +
-          '<span class="row-btns"><button class="btn sm ghost" data-act="send-doc" data-ref="' + b.ref + '|indemnity">' + ic('send') + 'Send link</button><button class="btn sm ghost" data-act="ind-sign" data-ref="' + b.ref + '">' + ic('edit') + 'Sign here</button></span></div>';
+        return '<div class="brow vrow" data-ind-todo="' + b.ref + '"><span class="brow-st">' + fd(b.ci) + '</span><span class="brow-g" data-open="' + b.ref + '"><b>' + esc(guestName(b)) + '</b><small>' + esc(b.ref) + ' · ' + esc(standById(b.stand).name) + ' · ' + fd(b.ci) + ' to ' + fd(b.co) + ' · ' + (paidUp(b) || b.onArrival ? 'finalising is open' : 'not paid in full yet') + '</small>' + nudgeNote(b, 'ind') + '</span>' + indPill(b) +
+          '<span class="row-btns"><button class="btn sm ghost" data-act="send-doc" data-ref="' + b.ref + '|indemnity">' + ic('send') + 'Send the signing link</button><button class="btn sm ghost" data-act="ind-sign" data-ref="' + b.ref + '">' + ic('edit') + 'Sign here</button></span></div>';
       };
       return head + '<section class="card"><header class="card-h"><h3>Arriving in the next 30 days, not everyone signed</h3><span class="count">' + todo.length + '</span></header>' + (todo.length ? todo.map(row).join('') : '<p class="empty">Everyone arriving in the next 30 days is signed for.</p>') + '</section>';
     }
@@ -4863,7 +5036,7 @@
     var row = function (b) {
       var n = ensureCars(b).length, t = codesTodo(b);
       return '<div class="brow vrow"><span class="brow-st">' + fd(b.ci) + '</span><span class="brow-g" data-open="' + b.ref + '"><b>' + esc(guestName(b)) + '</b><small>' + esc(b.guest.email || 'No email') + ' · ' +
-        (!vehKnown(b) ? (t ? VEH_ASSUMED + ', not sent' : 'vehicles not given yet, 1 code sent') : !t ? 'all ' + n + ' sent' : t === n ? n + ' vehicle' + (n === 1 ? '' : 's') + ', none sent' : t + ' of ' + n + ' vehicles still to send') + '</small></span>' +
+        (!vehKnown(b) ? (t ? VEH_ASSUMED + ', not sent' : 'vehicles not given yet, 1 code sent') : !t ? 'all ' + n + ' sent' : t === n ? n + ' vehicle' + (n === 1 ? '' : 's') + ', none sent' : t + ' of ' + n + ' vehicles still to send') + '</small>' + (nudgeOf(b, 'dgr') || t ? nudgeNote(b, 'dgr', !t) : '') + '</span>' +
         vPay(b).html + (t ? '<button class="btn sm ghost" data-act="dgr" data-ref="' + b.ref + '">' + ic('gift') + 'Add codes</button>' : '<span class="pill ok vsent">' + ic('check') + 'Codes sent</span>') + '</div>';
     };
     return '<div class="page-h"><div><h1>Dinokeng vouchers</h1><p class="muted">Kyleu is a proud DGR CP member, so overnight guests qualify for Conservation Fee Discount Vouchers and pay R85 instead of R100 per adult per night. Make one code per vehicle on the Dinokeng site, paste it on the booking and send it to the client yourself by WhatsApp or email. Dinokeng does not send them.</p></div><div class="ph-act"><a class="btn ghost" href="' + esc(dgrLink()) + '" target="_blank" rel="noopener">' + ic('ext') + 'Open Dinokeng site</a></div></div>' +
@@ -4877,7 +5050,7 @@
      25 rows a page. Filters: <select data-fk="OBJ:key">, <input data-q="OBJ:key">
      ========================================================= */
   var SORT = {}, TPG = {}, PG_SIZE = 25;
-  function FO(n) { return { GATE: GATE, INDF: INDF, F: F, IN: IN, GF: GF, SHOP: SHOP, PROD: PROD, CAL: CAL, STF: STF, GD: GD, LOGF: LOGF, PAYF: PAYF }[n]; }
+  function FO(n) { return { GATE: GATE, INDF: INDF, F: F, EF: EF, IN: IN, GF: GF, SHOP: SHOP, PROD: PROD, CAL: CAL, STF: STF, GD: GD, LOGF: LOGF, PAYF: PAYF }[n]; }
   function fsel(fk, cur, opts, label) { return '<select data-fk="' + fk + '" aria-label="' + esc(label || opts[0][1]) + '"' + (cur ? ' class="on"' : '') + '>' + opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (String(o[0]) === String(cur) ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select>'; }
   function fsearch(fk, cur, ph) { return '<label class="search">' + ic('search') + '<input type="search" data-q="' + fk + '" placeholder="' + esc(ph) + '" value="' + esc(cur) + '" aria-label="' + esc(ph) + '"></label>'; }
   function fclear(obj, keys) { var n = keys.filter(function (k) { return FO(obj)[k]; }).length; return n ? '<button class="btn ghost sm" data-fclear="' + obj + ':' + keys.join(',') + '">' + ic('x') + 'Clear ' + n + ' filter' + (n > 1 ? 's' : '') + '</button>' : ''; }
@@ -4947,7 +5120,8 @@
     var v = route(), el = $('#view'); if (!el) return;
     var bd = badges();
     $$('[data-nav]').forEach(function (a) { a.classList.toggle('on', a.dataset.nav === v); var em = $('em', a), n = bd[a.dataset.nav]; if (n) { if (!em) { em = document.createElement('em'); a.appendChild(em); } em.textContent = n; } else if (em) em.remove(); });
-    el.innerHTML = VIEWS[v]();
+    closeRowMenu(); STG = {};   // each booking's steps are worked out once per draw (stageOf, indStat)
+    try { el.innerHTML = VIEWS[v](); } finally { STG = null; }
     applyTables();
     if (v === 'reports') rpFill();
     document.title = NAV.filter(function (n) { return n.id === v; })[0].t + ' · Kyleu admin';
@@ -4973,6 +5147,7 @@
   function onClick(e) {
     var t = e.target;
     if (!ME) return;
+    if (!t.closest('[data-act="row-menu"]')) closeRowMenu();   // the small menu on a bookings row closes on any other click
     var go = t.closest('[data-go]'); if (go) {
       var itab = /^indemnities:(\w+)$/.exec(go.dataset.go); if (itab) { INDF.tab = itab[1]; if (route() === 'indemnities') render(); else location.hash = '#/indemnities'; return; }
       var tday = /^today:(\w+)$/.exec(go.dataset.go);
@@ -4983,6 +5158,8 @@
     var nav = t.closest('[data-nav]'); if (nav) { document.body.classList.remove('nav-open'); }
     var tab = t.closest('[data-tab]'); if (tab) { var card = tab.closest('.card'); $$('[data-tab]', card).forEach(function (x) { x.classList.toggle('on', x === tab); }); $$('[data-pane]', card).forEach(function (p) { p.hidden = p.dataset.pane !== tab.dataset.tab; }); return; }
     var fst = t.closest('[data-fst]'); if (fst) { F.st = fst.dataset.fst; render(); return; }
+    var ftd = t.closest('[data-ftodo]'); if (ftd) { F.todo = F.todo === ftd.dataset.ftodo ? '' : ftd.dataset.ftodo; resetPages(); render(); return; }   // press the chosen one again to switch it off
+    var fsl = t.closest('[data-fstale]'); if (fsl) { F.stale = F.stale ? '' : '1'; resetPages(); render(); return; }
     var cal = t.closest('[data-cal]'); if (cal) { var n = +cal.dataset.cal; CAL.start = n ? add(CAL.start, n) : add(TODAY, -2); render(); return; }
     var na = t.closest('[data-newat]'); if (na) { var p = na.dataset.newat.split('|'); actNew({ stand: p[0], ci: p[1], co: add(p[1], 2) }); return; }
     var gr = t.closest('[data-guest]'); if (gr) { openGuest(gr.dataset.guest); return; }
@@ -5043,7 +5220,7 @@
     var a = t.closest('[data-act]'); if (!a) return;
     var act = a.dataset.act, ref = a.dataset.ref;
     if (act === 'menu') { document.body.classList.toggle('nav-open'); return; }
-    if (act === 'logout') { try { sessionStorage.removeItem(SESS); } catch (x) {} ME = null; F.q = ''; F.area = ''; F.stand = ''; F.src = ''; F.m = ''; F.from = ''; F.to = ''; location.hash = ''; login(); return; }
+    if (act === 'logout') { try { sessionStorage.removeItem(SESS); } catch (x) {} ME = null; F.q = ''; F.area = ''; F.stand = ''; F.src = ''; F.m = ''; F.from = ''; F.to = ''; F.todo = ''; F.stale = ''; location.hash = ''; login(); return; }
     if (act === 'new') return actNew();
     if (act === 'client-add') return actClient(null);
     if (act === 'news-new') return actPost(null);
@@ -5176,7 +5353,14 @@
         log('Payment of ' + money(pp0.amt) + ' removed from ' + pb.ref, pb.ref); save(); refresh(); toast('Payment removed');
       }, { danger: true });
     }
-    if (act === 'remind') return actRemind(ref);
+    if (act === 'remind') return a.dataset.kind ? sendTemplate(byRef(ref), nudgeTpl(byRef(ref), a.dataset.kind)) : actRemind(ref);   // data-kind="pay": straight to the payment reminder
+    if (act === 'row-menu') return rowMenu(a, ref);
+    if (act === 'row-copy') { var rcb = byRef(ref); if (rcb) copyText(bookingLink(rcb), (stageOf(rcb).fin ? 'Booking link' : 'Finalise link') + ' for ' + esc(rcb.guest.first) + ' copied. Paste it in a message.'); return; }
+    if (act === 'row-dgr') {   // codes typed in and not sent yet: the send box. No codes yet: the booking's Vehicles tab, where they are pasted
+      var rdb = byRef(ref), rdc = rdb ? ensureCars(rdb).filter(function (c) { return c.dgr && !c.dgrSent; }) : []; if (!rdb) return;
+      if (rdc.length) return sendCodes(rdb, rdc);
+      openBooking(ref); PTAB = 'vehicles'; refresh(); toast('Make the codes on the Dinokeng site and paste them here, then send'); return;
+    }
     if (act === 'cancel') return actCancel(ref);
     if (act === 'release') return actCancel(ref);
     if (act === 'credit-new') return actCreditNew();
@@ -5370,6 +5554,7 @@
     document.addEventListener('submit', onSubmit);
     document.addEventListener('mouseover', onOver);
     document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && $('.row-menu')) { var rmb = $('[data-act="row-menu"][aria-expanded="true"]'); closeRowMenu(); if (rmb) rmb.focus(); return; }
       if (e.key === 'Escape') { if (!$('#modal') || $('#modal').hidden) { if ($('#drawer') && !$('#drawer').hidden) closeDrawer(); } else closeModal(); }
       // "/" or Ctrl+K (Cmd+K on a Mac) jumps to the booking search, like most modern tools
       var typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable;
@@ -5379,7 +5564,8 @@
       if (e.key === 'Enter' && e.target.matches('tr[data-open],tr[data-guest],tr[data-client],tr[data-post],tr[data-sale],tr[data-prod],tr[data-voucher],th.sortable')) e.target.click();
     });
     document.addEventListener('focusout', function (e) { if (e.target.matches('[data-global]')) setTimeout(function () { var s = $('[data-sugg]'); if (s) s.hidden = true; }, 200); });
-    var rsz; window.addEventListener('resize', function () { clearTimeout(rsz); rsz = setTimeout(function () { if ($('[data-rpc]')) rpDrawCharts(true); }, 120); });
+    window.addEventListener('scroll', function (e) { if (!(e.target && e.target.closest && e.target.closest('.row-menu'))) closeRowMenu(); }, true);   // the row menu is placed by hand, so it closes when the page moves
+    var rsz; window.addEventListener('resize', function () { closeRowMenu(); clearTimeout(rsz); rsz = setTimeout(function () { if ($('[data-rpc]')) rpDrawCharts(true); }, 120); });
     window.addEventListener('hashchange', function () { document.body.classList.remove('nav-open'); if (!$('#modal').hidden) closeModal(true); if (drawerRef) closeDrawer(true); if (ME) { render(); window.scrollTo(0, 0); } });
     // pick up website demo bookings made in another tab
     window.addEventListener('storage', function (e) { if (e.key === WEB && ME && importWeb()) { render(); toast('New booking from the website'); } if (e.key === POPK && ME && importPop()) { render(); toast('Proof of payment uploaded on the website'); } });

@@ -1799,3 +1799,54 @@ button.site-tick:focus-visible { outline: 3px solid #f4b740; outline-offset: 2px
 .keep-row small { font-size: .8rem; }
 .tag-kept { display: inline-flex; align-items: center; gap: 3px; font-size: .66rem; font-weight: 900; text-transform: uppercase; letter-spacing: .05em; background: var(--info-bg); color: var(--info); padding: 1px 6px; border-radius: 5px; vertical-align: 2px; }
 .tag-kept .ic { width: 10px; height: 10px; }
+
+/* ---------- Still to do and last reminded: the bookings list, EFT payments, payments owed, indemnities, vouchers and the booking ---------- */
+.chips.todo-f { align-items: center; margin-top: -6px; gap: 6px; }
+.chips-l { flex: none; font-size: .72rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-right: 2px; }
+.todo-f .chip { padding: 5px 11px; font-size: .8rem; }
+.card.flush.bk-card { overflow-x: auto; }
+.tbl.bk th, .tbl.bk td { padding-left: 10px; padding-right: 10px; }
+.tbl.bk th:first-child, .tbl.bk td:first-child { padding-left: 14px; }
+.td-todo { min-width: 150px; max-width: 230px; }
+.td-todo .fin-tag, .td-todo .todo-c { margin: 0 4px 4px 0; }
+.fin-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px 2px 7px; border-radius: 30px; font-size: .74rem; font-weight: 800; white-space: nowrap; }
+.fin-tag .ic { width: 12px; height: 12px; }
+.fin-tag.ok { background: var(--ok-bg); color: var(--ok); }
+.fin-tag.warn { background: var(--warn-bg); color: var(--warn); padding-left: 9px; }
+.todo-c { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 30px; border: 1px solid var(--line); background: #fff; font-size: .72rem; font-weight: 800; color: var(--ink-2); white-space: nowrap; }
+.todo-c b { font-weight: 900; }
+.todo-c.todo { color: var(--warn); border-color: #f0d9ad; background: #fffaf0; }
+.todo-c.part { color: var(--info); border-color: #c9dff0; background: #f3f8fc; }
+.td-nudge { max-width: 170px; }
+.nudge-t { font-size: .84rem; }
+.nudge-t.stale { color: var(--warn); font-weight: 700; }
+.td-acts { white-space: nowrap; }
+.td-acts .icon-btn { margin-left: 4px; }
+.td-acts .icon-btn .ic { width: 16px; height: 16px; }
+.d-menu.row-menu { position: fixed; right: auto; top: auto; z-index: 45; width: 300px; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); overflow-y: auto; }
+.row-menu .rm-h { margin: 0 0 4px; padding: 6px 12px 8px; font-size: .72rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line-2); }
+.row-menu button span { flex: 1; min-width: 0; }
+.row-menu button small { display: block; font-weight: 600; color: var(--muted); }
+.nudge-n { display: flex; align-items: center; gap: 5px; margin-top: 2px; font-size: .8rem; font-weight: 600; color: var(--muted); }
+.nudge-n .ic { width: 13px; height: 13px; flex: none; }
+.nudge-n.stale { color: var(--warn); }
+.bp-d p.bp-n { margin-top: 6px; }
+.bp-d .nudge-n { color: var(--ink-2); font-weight: 700; }
+.eft-nudge { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: -2px 0 10px; font-size: .8rem; }
+.eft-nl { font-size: .68rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.eft-nudge .nudge-n { margin-top: 0; }
+.eft-late { font-weight: 800; color: var(--warn); }
+.eft-card.stale { background: #fffaf0; }
+.tbl.ledger.owed tr.stale td { background: #fffaf0; }
+.attn-n { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.attn-n .ic { width: 12px; height: 12px; }
+@media (max-width: 700px) {
+  .chips.todo-f { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-top: 0; margin-inline: -4px; padding: 2px 4px; }
+  .chips.todo-f::-webkit-scrollbar { display: none; }
+  .tbl td[data-l="Still to do"] { grid-column: 1 / -1; min-width: 0; max-width: none; margin-top: 4px; }
+  .tbl td[data-l="Last reminded"] { grid-column: 1; max-width: none; font-size: .82rem; }
+  .tbl td[data-l="Last reminded"] small { display: inline; margin-left: 6px; }
+  .tbl td[data-l="Actions"] { grid-column: 2; text-align: right; }
+  .tbl.ledger td[data-l="Last reminded"] { grid-column: 1 / -1; }
+  .tbl.ledger td[data-l="Last reminded"]::before { content: 'Last reminded: '; color: var(--muted); }
+}
