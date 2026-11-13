@@ -748,7 +748,10 @@
     { id: 'thabo', name: 'Thabo', role: 'Worker', email: 'thabo@kyleu.co.za' },   // site workers: the site jobs only, never guest names or money
     { id: 'sipho', name: 'Sipho', role: 'Worker', email: 'sipho@kyleu.co.za' }
   ];
-  // What each role may open. "cap:guests" = may see guest names, contact details, bookings and money.
+  var STAFF0 = JSON.stringify(STAFF);   // the people the demo starts with. The live list is kept in DB.staff (staffSync) and STAFF always holds those same people
+  // What each role may open: the standard settings of the five built-in roles. "cap:guests" = may open a booking and see guest details;
+  // "cap:money" = may take off a payment, refund and change a credit. Owners can adjust the last four and make their own roles:
+  // those are kept in DB.roles, so always ask roleGet(), roleCan() or can(), never ROLES[...] directly.
   var ROLES = {
     Owner: ['dashboard', 'gate', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'indemnities', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'rates', 'settings', 'news', 'dgrnews', 'social', 'webtext', 'cap:guests', 'cap:money', 'cap:setup'],
     Manager: ['dashboard', 'gate', 'bookings', 'calendar', 'enquiries', 'clients', 'vouchers', 'indemnities', 'eft', 'payments', 'reports', 'shop', 'drives', 'products', 'stands', 'news', 'dgrnews', 'social', 'webtext', 'cap:guests', 'cap:money'],
@@ -787,7 +790,18 @@
     { id: 'social', t: 'Social media', i: 'image', g: 'Website' },
     { id: 'webtext', t: 'Website wording', i: 'edit', g: 'Website' }
   ];
-  function can(view) { return ME && ROLES[ME.role].indexOf(view) >= 0; }
+  // every role there is: the built-in ones first, then the ones the Owners made (DB.roles[key] = { name, info, can, custom: true };
+  // an adjusted built-in role is DB.roles[its name] = { info, can }). The Owner role is never read from DB.roles, so nobody can lock themselves out.
+  function roleKeys() { var own = (DB && DB.roles) || {}; return Object.keys(ROLES).concat(Object.keys(own).filter(function (k) { return !ROLES[k] && own[k] && own[k].custom; })); }
+  function roleGet(k) {
+    var std = ROLES[k], o = (k !== 'Owner' && DB && DB.roles && DB.roles[k]) || null; if (!std && !(o && o.custom)) return null;
+    return { key: k, name: std ? k : o.name, info: o && o.info != null ? o.info : std ? ROLE_INFO[k] : '', can: o && o.can ? o.can : std, builtin: !!std, fixed: k === 'Owner', changed: !!(std && o) };
+  }
+  function roleName(k) { var r = roleGet(k); return r ? r.name : String(k || ''); }
+  function roleCan(k) { var r = roleGet(k); return r ? r.can : []; }
+  function roleHas(k, what) { return roleCan(k).indexOf(what) >= 0; }
+  function isOwner(s) { s = s || ME; return !!s && s.role === 'Owner'; }   // "is an Owner": only for people and roles. Everything else asks can()
+  function can(view) { return !!ME && roleHas(ME.role, view); }
   function ic(n, cls) { return '<svg class="ic' + (cls ? ' ' + cls : '') + '" aria-hidden="true"><use href="#i-' + n + '"/></svg>'; }
 
   /* ---------- toast, modal, drawer ---------- */
@@ -931,7 +945,7 @@
         (pd > b.total && b.total > 0 ? '<p class="note bad-t">' + ic('alert') + '<span><b>' + money(pd - b.total) + ' more was paid than the total.</b> Keep it as credit or refund it, or remove a payment that was entered by mistake.</span></p>' : '') +
         (!cancelled && creditLeft(b.guest.email) ? '<p class="note cr">' + ic('gift') + '<span>' + esc(b.guest.first) + ' has credit to use: ' + creditList(b.guest.email) + '.</span></p>' : '') + '</section>' +
         '<section class="d-sec"><h4>Payments</h4>' + ((b.pops || []).length ? '<h5>Proof of payment</h5>' + popChips(b) : '') +
-        ((b.payments || []).length ? '<ul class="timeline">' + b.payments.map(function (p, i) { return '<li><span class="dot ' + (p.amt < 0 ? 'bad' : 'pm-' + p.m) + '"></span><div><b>' + money(p.amt) + '</b> ' + esc(p.type) + ' · ' + methodLabel(p.m) + '<div class="muted small">' + fd(p.d, { day: 'numeric', month: 'short', year: 'numeric' }) + (p.ref ? ' · ' + esc(p.ref) : '') + '</div></div>' + (can('payments') && b.status !== 'cancelled' ? '<button type="button" class="icon-btn sm" data-act="pay-del" data-ref="' + b.ref + '|' + i + '" aria-label="Remove this payment" title="Remove this payment (entered by mistake)">' + ic('x') + '</button>' : '') + '</li>'; }).join('') + '</ul>' : '<p class="muted small">No payments yet.</p>') + '</section>' +
+        ((b.payments || []).length ? '<ul class="timeline">' + b.payments.map(function (p, i) { return '<li><span class="dot ' + (p.amt < 0 ? 'bad' : 'pm-' + p.m) + '"></span><div><b>' + money(p.amt) + '</b> ' + esc(p.type) + ' · ' + methodLabel(p.m) + '<div class="muted small">' + fd(p.d, { day: 'numeric', month: 'short', year: 'numeric' }) + (p.ref ? ' · ' + esc(p.ref) : '') + '</div></div>' + (can('cap:money') && b.status !== 'cancelled' ? '<button type="button" class="icon-btn sm" data-act="pay-del" data-ref="' + b.ref + '|' + i + '" aria-label="Remove this payment" title="Remove this payment (entered by mistake)">' + ic('x') + '</button>' : '') + '</li>'; }).join('') + '</ul>' : '<p class="muted small">No payments yet.</p>') + '</section>' +
         invSec(b);
     } else {
       var ts = DB.threads.filter(function (t) { return t.ref === b.ref || t.email === b.guest.email; });
@@ -1167,29 +1181,181 @@
         f.elements.amt.addEventListener('input', setType); setType();
       } });
   }
+  var THANKS_DEF = 'Hi {first}, thank you for staying with us at Kyleu Bush Camp. We appreciate you choosing Kyleu and hope you loved the bush.\n\nDid you enjoy your stay? We would love to hear what was good and what we can do better. It takes a minute to leave us a Google review:\n{link}\n\nWe hope to see you again soon.\nThe Kyleu team';
+  // The messages staff send. Each has a name (t), when it is used (w), a subject (s), the details it must keep (need) and its wording:
+  // one text, or a few versions (v) with pick(b) choosing the one for a booking. This is the STANDARD wording. Owners change the words under
+  // Settings > Message templates (kept in DB.settings.templates; the thank-you text in DB.settings.thanksText), so always build a message with
+  // tplSubject(key) and tplText(key, b), or TEMPLATES[key].b(b), never from the texts below.
   var TEMPLATES = {
-    eft: { t: 'EFT deposit reminder', s: 'Your Kyleu booking: deposit reminder', b: function (b) { return 'Hi {first},\n\nThank you for booking {stand} from {ci} to {co}. ' + (b && b.noRelease ? 'We are keeping the stand for you. Please pay the deposit of {deposit} using reference {ref}.' : 'To secure your stand please pay the deposit of {deposit} using reference {ref}. Your quotation is valid for {qdays}; after that the stand is released.') + '\n\nBank: {bank}\n\nUpload your proof of payment at www.kyleu.co.za/pop.html, or reply to this email with it attached.\n\nSee you in the bush!\nThe Kyleu team'; } },
-    balance: { t: 'Balance reminder', s: 'Your Kyleu stay is coming up', b: function (b) { return 'Hi {first},\n\nYour stay at {stand} starts on {ci}. The balance of {balance} is due by {baldue}. Pay by EFT with reference {ref}, or reply and we will send a card payment link.\n\nThe Kyleu team'; } },
-    arrival: { t: 'Pre-arrival information', s: 'Getting to Kyleu Bush Camp', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}.\n\nDirections: enter Dinokeng at Tau Gate, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km.\n\nKyleu is a proud DGR CP member, so we send you a Conservation Fee Discount Voucher code for each vehicle. Enter it when you buy your conservation fees at https://dinokeng.plnktn.io to pay R85 instead of R100 per adult per night. To use the self-drive route, each vehicle also needs a Self Drive Permit (R250 once off).\n\nEveryone in your group signs our indemnity online before arriving (each adult for themselves, a parent or guardian for anyone under 18). If not everyone has signed yet, here is the link: {signlink}\n\nYou can check in from {checkin}, and check-out on your last day is by {checkout}. Let us know roughly when you will arrive and we will have your stand ready. Gate questions: 060 458 4478.\n\nThe Kyleu team'; } },
-    thanks: { t: 'Thank you & review', s: 'Thank you for staying at Kyleu', b: function (b) { return b && b.guest ? thanksMsg(b) : thanksTpl(); } },   // the words and the Google review link: Settings > Check-in & Dinokeng
-    invoice: { t: 'Quotation or invoice', s: 'Your Kyleu reservation {ref} ({doc})', b: function (b) { return b && b.payments && paid(b) > 0 ? 'Hi {first},\n\nPlease find your invoice for {stand}, {ci} to {co}, attached.\n\nTotal {total}, paid so far {paid}, balance {balance}. Pay by EFT using reference {ref}.\n\nThe Kyleu team'
-      : 'Hi {first},\n\nThank you for booking {stand}, {ci} to {co}. Please find your quotation attached, with our bank details and your booking reference {ref}.\n\n' + (b && b.noRelease ? 'We are keeping the stand for you. Please pay {deposit} using reference {ref}.' : 'This quotation is valid for {qdays}. After that the stand is released. To secure your stand, please pay {deposit} using reference {ref}.') + '\n\nOnce payment has been made, upload your proof of payment directly to your booking:\n{link}\n\nThe Kyleu team'; } },
-    indemnity: { t: 'Sign the indemnity (link)', s: 'Please sign the Kyleu indemnity for {ref}', b: function (b) { return 'Hi {first},\n\nKyleu is inside the Dinokeng Big 5 Game Reserve, so everyone in your group signs our indemnity before arriving: each adult for themselves, and a parent or guardian for anyone under 18. It takes about a minute per person:\n{signlink}\n\nYou can sign for everyone who is with you on one phone, or forward the link so each person signs on their own phone. Everyone gets a copy of what they signed.\n\nSee you on {ci}!\nThe Kyleu team'; } },
-    update: { t: 'Booking updated', s: 'Your Kyleu booking {ref} has been updated', b: function (b) { return 'Hi {first},\n\nWe have updated your booking {ref}: {stand}, {ci} to {co}.\nTotal {total}, paid {paid}, balance {balance}.\n\nIf anything looks wrong, just reply to this email.\n\nThe Kyleu team'; } },
-    extra: { t: 'Extra amount to pay', s: 'Your updated Kyleu invoice {ref}', b: function (b) { return 'Hi {first},\n\nThank you for letting us know about the change to your booking {ref}. Your new total is {total}. You have already paid {paid}, so {balance} is still to pay.\n\nThe updated invoice is attached. Please pay the {balance} by EFT using reference {ref} before you arrive on {ci}.\n\nThe Kyleu team'; } },
-    finalise: { t: 'Finalise your booking (link)', s: 'Finalise your Kyleu booking {ref}', b: function (b) { return 'Hi {first},\n\nThank you, your booking {ref} for {stand}, {ci} to {co}, is paid in full.\n\nPlease finalise it here: tell us your vehicles and who is in each one, sign the indemnity, roughly when you arrive, and anything you want waiting from the camp shop.\n{link}\n\nRather not use the website? Just reply with the details and we will add them for you.\n\nThe Kyleu team'; } },
-    link: { t: 'Link to the booking', s: 'Your Kyleu booking {ref}', b: function (b) { return 'Hi {first},\n\nHere is the link to your booking {ref} ({stand}, {ci} to {co}):\n{link}\n\nUse it to tell us when you have paid, or to change the number of guests or your contact details. Once your booking is paid in full, the same link lets you finalise it: vehicles, passengers and arrival time.\n\nThe Kyleu team'; } },
-    details: { t: 'Ask for vehicle details', s: 'Your Kyleu stay: vehicle details please', b: function (b) { return 'Hi {first},\n\nWe look forward to welcoming you on {ci}. Before you arrive, please send us each vehicle\'s registration, the driver and everyone travelling in it. Everyone also signs our indemnity online, and we send one Dinokeng Conservation Fee Discount Voucher per vehicle, so this makes your arrival much quicker.\n\nYou can add them yourself here: {link}\nOr simply reply to this message.\n\nThe Kyleu team'; } },
-    confirm: { t: 'Booking confirmation', s: 'Booking confirmed: {ref}', b: function (b) { return 'Hi {first},\n\nYour booking {ref} is confirmed: {stand}, {ci} to {co}.\n' + (b && b.onArrival && balance(b) > 0 ? 'Total {total}. As arranged with Kyleu, you pay {balance} when you arrive (' + (/card/i.test(b.onArrival.how) ? 'by card' : 'in cash') + ').' : 'Total {total}, paid {paid}, balance {balance} due by {baldue}.') + '\n\nThe Kyleu team'; } }
+    eft: { t: 'EFT deposit reminder', w: 'A reminder to pay the deposit, for a booking that is not paid yet.', s: 'Your Kyleu booking: deposit reminder', need: ['deposit', 'ref', 'bank'], pick: function (b) { return b && b.noRelease ? 'kept' : ''; },
+      v: [{ k: '', n: 'The usual wording', d: 'The stand is released when the quotation runs out.', b: 'Hi {first},\n\nThank you for booking {stand} from {ci} to {co}. To secure your stand please pay the deposit of {deposit} using reference {ref}. Your quotation is valid for {qdays}; after that the stand is released.\n\nBank: {bank}\n\nUpload your proof of payment at www.kyleu.co.za/pop.html, or reply to this email with it attached.\n\nSee you in the bush!\nThe Kyleu team' },
+        { k: 'kept', n: 'Stand kept for the guest', d: 'For a booking where Kyleu keeps the stand, so there is no last day.', b: 'Hi {first},\n\nThank you for booking {stand} from {ci} to {co}. We are keeping the stand for you. Please pay the deposit of {deposit} using reference {ref}.\n\nBank: {bank}\n\nUpload your proof of payment at www.kyleu.co.za/pop.html, or reply to this email with it attached.\n\nSee you in the bush!\nThe Kyleu team' }] },
+    balance: { t: 'Balance reminder', w: 'A reminder to pay the balance before the guest arrives.', s: 'Your Kyleu stay is coming up', need: ['balance', 'ref'],
+      v: [{ k: '', b: 'Hi {first},\n\nYour stay at {stand} starts on {ci}. The balance of {balance} is due by {baldue}. Pay by EFT with reference {ref}, or reply and we will send a card payment link.\n\nThe Kyleu team' }] },
+    arrival: { t: 'Pre-arrival information', w: 'A few days before arrival: directions, the Dinokeng fees, the indemnity link and the check-in time.', s: 'Getting to Kyleu Bush Camp', need: ['signlink'],
+      v: [{ k: '', b: 'Hi {first},\n\nWe look forward to welcoming you on {ci}.\n\nDirections: enter Dinokeng at Tau Gate, follow the main road 4.8 km, turn right onto Kaallaagte Road and continue 2 km.\n\nKyleu is a proud DGR CP member, so we send you a Conservation Fee Discount Voucher code for each vehicle. Enter it when you buy your conservation fees at https://dinokeng.plnktn.io to pay R85 instead of R100 per adult per night. To use the self-drive route, each vehicle also needs a Self Drive Permit (R250 once off).\n\nEveryone in your group signs our indemnity online before arriving (each adult for themselves, a parent or guardian for anyone under 18). If not everyone has signed yet, here is the link: {signlink}\n\nYou can check in from {checkin}, and check-out on your last day is by {checkout}. Let us know roughly when you will arrive and we will have your stand ready. Gate questions: 060 458 4478.\n\nThe Kyleu team' }] },
+    thanks: { t: 'Thank you & review', w: 'Right after check-out: a thank-you with the link to review Kyleu on Google.', s: 'Thank you for staying at Kyleu', need: ['link'],
+      v: [{ k: '', b: THANKS_DEF }] },   // {link} here is the Google review link (Settings > Check-in & Dinokeng)
+    invoice: { t: 'Quotation or invoice', w: 'Goes with a quotation or an invoice that is attached.', s: 'Your Kyleu reservation {ref} ({doc})', need: ['ref', 'deposit', 'link', 'balance'], pick: function (b) { return b && b.payments && paid(b) > 0 ? 'inv' : b && b.noRelease ? 'kept' : ''; },
+      v: [{ k: '', n: 'With a quotation', d: 'Nothing is paid yet. The stand is released when the quotation runs out.', b: 'Hi {first},\n\nThank you for booking {stand}, {ci} to {co}. Please find your quotation attached, with our bank details and your booking reference {ref}.\n\nThis quotation is valid for {qdays}. After that the stand is released. To secure your stand, please pay {deposit} using reference {ref}.\n\nOnce payment has been made, upload your proof of payment directly to your booking:\n{link}\n\nThe Kyleu team' },
+        { k: 'kept', n: 'With a quotation, stand kept', d: 'Nothing is paid yet, and Kyleu keeps the stand for the guest.', b: 'Hi {first},\n\nThank you for booking {stand}, {ci} to {co}. Please find your quotation attached, with our bank details and your booking reference {ref}.\n\nWe are keeping the stand for you. Please pay {deposit} using reference {ref}.\n\nOnce payment has been made, upload your proof of payment directly to your booking:\n{link}\n\nThe Kyleu team' },
+        { k: 'inv', n: 'With an invoice', d: 'The guest has already paid something.', b: 'Hi {first},\n\nPlease find your invoice for {stand}, {ci} to {co}, attached.\n\nTotal {total}, paid so far {paid}, balance {balance}. Pay by EFT using reference {ref}.\n\nThe Kyleu team' }] },
+    indemnity: { t: 'Sign the indemnity (link)', w: 'When people in the group still have to sign the indemnity.', s: 'Please sign the Kyleu indemnity for {ref}', need: ['signlink'],
+      v: [{ k: '', b: 'Hi {first},\n\nKyleu is inside the Dinokeng Big 5 Game Reserve, so everyone in your group signs our indemnity before arriving: each adult for themselves, and a parent or guardian for anyone under 18. It takes about a minute per person:\n{signlink}\n\nYou can sign for everyone who is with you on one phone, or forward the link so each person signs on their own phone. Everyone gets a copy of what they signed.\n\nSee you on {ci}!\nThe Kyleu team' }] },
+    update: { t: 'Booking updated', w: 'After you changed a booking, to show the guest the new details.', s: 'Your Kyleu booking {ref} has been updated', need: ['ref'],
+      v: [{ k: '', b: 'Hi {first},\n\nWe have updated your booking {ref}: {stand}, {ci} to {co}.\nTotal {total}, paid {paid}, balance {balance}.\n\nIf anything looks wrong, just reply to this email.\n\nThe Kyleu team' }] },
+    extra: { t: 'Extra amount to pay', w: 'When a change makes the booking cost more and the guest must pay the difference.', s: 'Your updated Kyleu invoice {ref}', need: ['balance', 'ref'],
+      v: [{ k: '', b: 'Hi {first},\n\nThank you for letting us know about the change to your booking {ref}. Your new total is {total}. You have already paid {paid}, so {balance} is still to pay.\n\nThe updated invoice is attached. Please pay the {balance} by EFT using reference {ref} before you arrive on {ci}.\n\nThe Kyleu team' }] },
+    finalise: { t: 'Finalise your booking (link)', w: 'When a booking is paid in full: asks for vehicles, passengers, arrival time and the indemnity.', s: 'Finalise your Kyleu booking {ref}', need: ['link'],
+      v: [{ k: '', b: 'Hi {first},\n\nThank you, your booking {ref} for {stand}, {ci} to {co}, is paid in full.\n\nPlease finalise it here: tell us your vehicles and who is in each one, sign the indemnity, roughly when you arrive, and anything you want waiting from the camp shop.\n{link}\n\nRather not use the website? Just reply with the details and we will add them for you.\n\nThe Kyleu team' }] },
+    link: { t: 'Link to the booking', w: 'When a guest needs the link to their booking again.', s: 'Your Kyleu booking {ref}', need: ['link'],
+      v: [{ k: '', b: 'Hi {first},\n\nHere is the link to your booking {ref} ({stand}, {ci} to {co}):\n{link}\n\nUse it to tell us when you have paid, or to change the number of guests or your contact details. Once your booking is paid in full, the same link lets you finalise it: vehicles, passengers and arrival time.\n\nThe Kyleu team' }] },
+    details: { t: 'Ask for vehicle details', w: 'When the vehicle details are still missing before arrival.', s: 'Your Kyleu stay: vehicle details please', need: ['link'],
+      v: [{ k: '', b: 'Hi {first},\n\nWe look forward to welcoming you on {ci}. Before you arrive, please send us each vehicle\'s registration, the driver and everyone travelling in it. Everyone also signs our indemnity online, and we send one Dinokeng Conservation Fee Discount Voucher per vehicle, so this makes your arrival much quicker.\n\nYou can add them yourself here: {link}\nOr simply reply to this message.\n\nThe Kyleu team' }] },
+    confirm: { t: 'Booking confirmation', w: 'When the first payment is in and the booking is confirmed.', s: 'Booking confirmed: {ref}', need: ['ref'], pick: function (b) { return b && b.onArrival && balance(b) > 0 ? 'arr' : ''; },
+      v: [{ k: '', n: 'The usual wording', d: 'The balance is paid before arrival.', b: 'Hi {first},\n\nYour booking {ref} is confirmed: {stand}, {ci} to {co}.\nTotal {total}, paid {paid}, balance {balance} due by {baldue}.\n\nThe Kyleu team' },
+        { k: 'arr', n: 'Pays on arrival', d: 'For a guest who arranged with Kyleu to pay the rest at the gate.', b: 'Hi {first},\n\nYour booking {ref} is confirmed: {stand}, {ci} to {co}.\nTotal {total}. As arranged with Kyleu, you pay {balance} when you arrive ({payhow}).\n\nThe Kyleu team' }] }
   };
+  Object.keys(TEMPLATES).forEach(function (k) { TEMPLATES[k].b = function (b) { return tplText(k, b); }; });   // the wording for a booking, as it is now
   function fill(t, b) {
     var dcodes = (b.cars || []).map(function (c) { return c.dgr; }).filter(Boolean);
-    var map = { checkin: checkInTime(), checkout: checkOutTime(), qdays: validDays(String(b.created || TODAY).slice(0, 10), depositDue(b)), doc: b && b.payments && paid(b) > 0 ? 'invoice' : 'quotation', bank: bankLine(), qvalid: fd(depositDue(b), { weekday: 'long', day: 'numeric', month: 'long' }), link: bookingLink(b), signlink: signLink(b), voucher: dcodes.length ? dcodes.join(', ') : 'the codes we send you', first: b.guest.first, stand: standById(b.stand).name, ci: fd(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }), co: fd(b.co, { weekday: 'long', day: 'numeric', month: 'long' }), deposit: money(deposit(b)), depdue: fd(depositDue(b), { day: 'numeric', month: 'long' }), ref: b.ref, balance: money(balance(b)), baldue: fd(balanceDue(b), { day: 'numeric', month: 'long' }), total: money(b.total), paid: money(paid(b)) };
+    var map = { payhow: b.onArrival ? (/card/i.test(b.onArrival.how || '') ? 'by card' : 'in cash') : 'in cash or by card', checkin: checkInTime(), checkout: checkOutTime(), qdays: validDays(String(b.created || TODAY).slice(0, 10), depositDue(b)), doc: b && b.payments && paid(b) > 0 ? 'invoice' : 'quotation', bank: bankLine(), qvalid: fd(depositDue(b), { weekday: 'long', day: 'numeric', month: 'long' }), link: bookingLink(b), signlink: signLink(b), voucher: dcodes.length ? dcodes.join(', ') : 'the codes we send you', first: b.guest.first, stand: standById(b.stand).name, ci: fd(b.ci, { weekday: 'long', day: 'numeric', month: 'long' }), co: fd(b.co, { weekday: 'long', day: 'numeric', month: 'long' }), deposit: money(deposit(b)), depdue: fd(depositDue(b), { day: 'numeric', month: 'long' }), ref: b.ref, balance: money(balance(b)), baldue: fd(balanceDue(b), { day: 'numeric', month: 'long' }), total: money(b.total), paid: money(paid(b)) };
     return t.replace(/\{(\w+)\}/g, function (_, k) { return map[k] != null ? map[k] : _; });
   }
+  /* ---------- message templates: the wording (Settings > Message templates) ----------
+     The list of messages is fixed (TEMPLATES); only the words change. What an Owner typed is kept in
+     DB.settings.templates[key] = { subject, body, alt: { versionKey: text } }: only the parts that differ from the standard wording.
+     The thank-you text is the old DB.settings.thanksText, so there is one place for it. tplText() and tplSubject() give the
+     wording as it is now; sendTemplate() and the thank-you step use them. */
+  // every detail fill() can put into a message, with one plain line each
+  var TPL_PH = [
+    ['first', 'The guest\'s first name'], ['ref', 'The booking reference'], ['stand', 'The name of the stand'], ['ci', 'The day they arrive'], ['co', 'The day they leave'],
+    ['total', 'The total for the booking'], ['paid', 'What they have paid so far'], ['balance', 'What is still to pay'], ['baldue', 'The day the balance must be paid by'],
+    ['deposit', 'The deposit amount'], ['depdue', 'The day the deposit must be paid by'], ['qdays', 'How long the quotation is valid'], ['qvalid', 'The last day the quotation is valid'],
+    ['bank', 'Kyleu\'s bank details'], ['link', 'The link to their booking on the website'], ['signlink', 'The link to sign the indemnity'],
+    ['checkin', 'The earliest check-in time'], ['checkout', 'The latest check-out time'], ['voucher', 'Their Dinokeng discount codes'],
+    ['doc', 'The word "quotation" or "invoice"'], ['payhow', '"by card" or "in cash", when they pay on arrival']
+  ];
+  // what a guest loses when one of the important details is taken out
+  var TPL_WHAT = { link: 'the link to the booking', signlink: 'the link to sign the indemnity', deposit: 'the deposit amount', balance: 'the amount still to pay', ref: 'the booking reference', bank: 'the bank details' };
+  function tplPhLabel(k, ph) { if (k === 'thanks' && ph === 'link') return 'The link to review Kyleu on Google'; var x = TPL_PH.filter(function (p) { return p[0] === ph; })[0]; return x ? x[1] : ''; }
+  function tplWhat(k, ph) { return k === 'thanks' && ph === 'link' ? 'the Google review link' : TPL_WHAT[ph] || '{' + ph + '}'; }
+  function tplStore(k) { return (DB && DB.settings && DB.settings.templates && DB.settings.templates[k]) || null; }
+  function tplVar(k, vk) { var v = TEMPLATES[k].v; return v.filter(function (x) { return x.k === (vk || ''); })[0] || v[0]; }
+  function tplStd(k, vk) { return tplVar(k, vk).b; }
+  // what was typed instead of the standard wording ('' = nothing, the standard wording is used)
+  function tplOver(k, vk) { if (k === 'thanks') return (DB && DB.settings && DB.settings.thanksText) || ''; var o = tplStore(k); return !o ? '' : vk ? (o.alt && o.alt[vk]) || '' : o.body || ''; }
+  function tplBody(k, vk) { return tplOver(k, vk) || tplStd(k, vk); }
+  function tplSubject(k) { var o = tplStore(k); return (o && o.subject) || TEMPLATES[k].s; }
+  function tplChanged(k) { var o = tplStore(k); return !!((o && o.subject) || TEMPLATES[k].v.some(function (x) { return tplOver(k, x.k); })); }
+  function tplPick(k, b) { var T = TEMPLATES[k]; return T.pick ? T.pick(b) : ''; }
+  // the wording for this booking, before fill(). The thank-you already has the review link in it.
+  function tplText(k, b) { return k === 'thanks' ? (b && b.guest ? thanksMsg(b) : thanksTpl()) : tplBody(k, tplPick(k, b)); }
+  function tplUsed(text) { var out = []; String(text).replace(/\{(\w+)\}/g, function (_, p) { if (out.indexOf(p) < 0) out.push(p); return _; }); return out; }
+  // the important details of this version that the new text no longer has
+  function tplMissing(k, vk, text) { var std = tplUsed(tplStd(k, vk)), now = tplUsed(text); return TEMPLATES[k].need.filter(function (p) { return std.indexOf(p) >= 0 && now.indexOf(p) < 0; }); }
+  // words in curly brackets that are not a detail Kyleu can fill in
+  function tplUnknown(text) { return tplUsed(text).filter(function (p) { return !TPL_PH.some(function (x) { return x[0] === p; }); }); }
+  // a booking to show the wording with: a real demo booking, made to fit the version (stand kept, paid or not, pays on arrival)
+  function tplSample(k, vk) {
+    var src = DB.bookings.filter(function (b) { return live(b) && b.status === 'confirmed' && b.ci > TODAY && paid(b) > 0 && balance(b) > 0 && !b.onArrival && !b.noRelease; })[0] || DB.bookings.filter(live)[0] || DB.bookings[0]; if (!src) return null;
+    var b = JSON.parse(JSON.stringify(src));
+    if (vk === 'kept') b.noRelease = true;
+    if ((k === 'eft' || k === 'invoice') && vk !== 'inv') { b.payments = []; b.status = 'pending'; }
+    if (vk === 'arr') b.onArrival = { how: 'Cash' };
+    return b;
+  }
+  function tplPreview(k, text, b) { if (!b) return text; return fill(k === 'thanks' ? String(text).replace(/\{first\}/g, b.guest.first || 'there').replace(/\{link\}/g, reviewLink() || '(the Google review link, once you add it under Check-in & Dinokeng)') : text, b); }
+  // save the wording of one message. bodies = { versionKey: text }; a version that is left out stays as it is. Returns what is wrong, or ''.
+  function tplSave(k, subject, bodies) {
+    var T = TEMPLATES[k]; if (!T) return 'That message does not exist';
+    var s = DB.settings = DB.settings || {}, o = {}, tidy = function (x) { return String(x == null ? '' : x).replace(/\r/g, '').trim(); };
+    s.templates = s.templates || {}; var was = JSON.stringify([s.templates[k] || null, k === 'thanks' ? s.thanksText || '' : '']);
+    var texts = T.v.map(function (x) { return bodies && bodies[x.k] != null ? tidy(bodies[x.k]) : tplBody(k, x.k); });
+    if (texts.some(function (t) { return !t; })) return 'The message is empty. Type the wording, or put back the standard wording.';
+    subject = tidy(subject).replace(/\s*\n\s*/g, ' '); if (subject && subject !== T.s) o.subject = subject;
+    T.v.forEach(function (x, i) { var t = texts[i] === x.b ? '' : texts[i]; if (k === 'thanks') { if (t) s.thanksText = t; else delete s.thanksText; } else if (t) { if (x.k) { o.alt = o.alt || {}; o.alt[x.k] = t; } else o.body = t; } });
+    if (Object.keys(o).length) s.templates[k] = o; else delete s.templates[k];
+    if (was === JSON.stringify([s.templates[k] || null, k === 'thanks' ? s.thanksText || '' : ''])) return '';   // nothing changed
+    log(tplChanged(k) ? 'Changed the wording of the message "' + T.t + '"' : 'Put back the standard wording of the message "' + T.t + '"'); save(); return '';
+  }
+  function tplReset(k) {
+    var T = TEMPLATES[k]; if (!T || !tplChanged(k)) return 'Nothing to put back';
+    if (DB.settings.templates) delete DB.settings.templates[k]; if (k === 'thanks') delete DB.settings.thanksText;
+    log('Put back the standard wording of the message "' + T.t + '"'); save(); return '';
+  }
+  function tplPage() {
+    return '<p class="muted small stf-intro">These are the messages the team sends to guests, by email or WhatsApp. You can change the words of each one. Words in {curly brackets} are filled in for each guest, for example {first} becomes the guest\'s first name.</p>' +
+      '<section class="card flush tpl-list">' + Object.keys(TEMPLATES).map(function (k) {
+        var T = TEMPLATES[k], ch = tplChanged(k), line = tplBody(k, '').replace(/\s+/g, ' ');
+        return '<button type="button" class="tpl-row" data-act="tpl-edit" data-ref="' + k + '"><span class="tpl-row-t"><b>' + esc(T.t) + '</b>' + (ch ? ' <span class="tag warn" data-tpl-changed>Changed</span>' : '') + (T.v.length > 1 ? ' <span class="tag">' + T.v.length + ' versions</span>' : '') + '<small>' + esc(T.w) + '</small></span>' +
+          '<span class="tpl-row-p">' + esc(line.slice(0, 110)) + (line.length > 110 ? '...' : '') + '</span><span class="tpl-row-go">' + ic('edit') + 'Change the wording</span></button>';
+      }).join('') + '</section>' +
+      '<p class="demo-note">' + ic('info') + 'Staff can still change a message in the send box before it goes out. Quotations, invoices and other documents are not messages: their details are under Quotes &amp; invoices.</p>';
+  }
+  function actTpl(k) {
+    var T = TEMPLATES[k]; if (!T) return;
+    var vars = T.v, ch = tplChanged(k), stdAll = T.s + ' ' + vars.map(function (x) { return x.b; }).join(' '), first = tplUsed(stdAll);
+    var st = { cur: vars[0].k, draft: {}, sure: '', samp: {}, paint: function () {} };
+    var phBtn = function (p) { return '<button type="button" class="tpl-ph-b" data-tpl-ph="' + p + '"><b>{' + p + '}</b><small>' + esc(tplPhLabel(k, p)) + '</small></button>'; };
+    var more = TPL_PH.map(function (p) { return p[0]; }).filter(function (p) { return first.indexOf(p) < 0 && !(k === 'thanks' && (p === 'doc' || p === 'payhow')); });
+    modal('Change the wording: ' + esc(T.t),
+      '<p class="muted small tpl-when">' + ic('clock') + ' ' + esc(T.w) + '</p>' +
+      (vars.length > 1 ? '<div class="tpl-vars"><span class="fld-l">This message has ' + vars.length + ' versions. Kyleu picks the right one for each booking.</span><div class="seg">' + vars.map(function (x, i) { return '<label><input type="radio" name="ver" value="' + x.k + '"' + (i ? '' : ' checked') + '><span>' + esc(x.n) + '</span></label>'; }).join('') + '</div><p class="hint" data-tpl-vd>' + esc(vars[0].d) + '</p></div>' : '') +
+      '<div class="tpl-ed"><div class="tpl-ed-l">' +
+      '<label class="fld"><span>Subject (for email)</span><input name="s" maxlength="140" value="' + esc(tplSubject(k)) + '" autocomplete="off"></label>' +
+      '<label class="fld"><span>Message</span><textarea name="b" rows="15" spellcheck="true">' + esc(tplBody(k, vars[0].k)) + '</textarea></label>' +
+      '<div class="callout warn cflex" data-tpl-warn hidden></div>' +
+      '<div class="tpl-ph"><span class="fld-l">Add a detail of the booking. Click where it must go, then press one of these:</span><div class="tpl-ph-list">' + first.map(phBtn).join('') + '</div>' +
+      (more.length ? '<details><summary>More details you can add</summary><div class="tpl-ph-list">' + more.map(phBtn).join('') + '</div></details>' : '') + '</div></div>' +
+      '<div class="tpl-ed-r"><span class="fld-l">How a guest sees it <small class="muted" data-tpl-who></small></span><div class="tpl-prev"><b data-tpl-ps></b><pre class="tpl" data-tpl-pb></pre></div>' +
+      (ch ? '<button type="button" class="btn ghost sm" data-act="tpl-std" data-ref="' + k + '">' + ic('return') + 'Put back the standard wording</button>' : '<p class="muted small" data-tpl-isstd>' + ic('check') + ' This is the standard wording.</p>') + '</div></div>',
+      'Save', function (f) {
+        st.draft[st.cur] = f.elements.b.value;
+        var miss = []; vars.forEach(function (x) { tplMissing(k, x.k, st.draft[x.k]).forEach(function (p) { if (miss.indexOf(p) < 0) miss.push(p); }); });
+        if (miss.length && st.sure !== miss.join()) { st.sure = miss.join(); st.paint(true); toast('This message no longer includes ' + esc(listAnd(miss.map(function (p) { return tplWhat(k, p); }))) + '. Save anyway?'); return false; }
+        var err = tplSave(k, f.elements.s.value, st.draft); if (err) { toast(esc(err)); return false; }
+        render(); toast('Wording of "' + esc(T.t) + '" saved');
+      }, { xl: true, noFocus: true, onOpen: function (f) {
+        var ta = f.elements.b, su = f.elements.s, last = ta, touched = false;
+        vars.forEach(function (x) { st.draft[x.k] = tplBody(k, x.k); });
+        st.paint = function (asking) {
+          st.draft[st.cur] = ta.value; if (!asking) st.sure = '';
+          var sb = st.samp[st.cur] || (st.samp[st.cur] = tplSample(k, st.cur)), miss = tplMissing(k, st.cur, ta.value), odd = tplUnknown(su.value + ' ' + ta.value);
+          var ps = $('[data-tpl-ps]', f), pb = $('[data-tpl-pb]', f), w = $('[data-tpl-warn]', f), who = $('[data-tpl-who]', f), ok = $('button[type=submit]', f);
+          if (ps) ps.textContent = sb ? fill(su.value, sb) : su.value;
+          if (pb) pb.textContent = tplPreview(k, ta.value, sb);
+          if (who && sb) who.textContent = '(sample: ' + guestName(sb) + ', ' + sb.ref + ')';
+          if (w) {
+            w.hidden = !miss.length && !odd.length;
+            w.innerHTML = ic('alert') + '<div>' + (miss.length ? '<b>This message no longer includes ' + esc(listAnd(miss.map(function (p) { return tplWhat(k, p); }))) + '.' + (asking ? ' Save anyway?' : '') + '</b> The guest needs it. ' + miss.map(function (p) { return '<button type="button" class="link-btn" data-tpl-ph="' + p + '">Put {' + p + '} back</button>'; }).join(' ') : '') +
+              (odd.length ? '<p>' + esc(odd.map(function (p) { return '{' + p + '}'; }).join(', ')) + (odd.length === 1 ? ' is not a detail' : ' are not details') + ' Kyleu can fill in. It will be sent exactly as typed. Use the buttons to add a detail.</p>' : '') + '</div>';
+          }
+          if (ok) ok.textContent = asking && st.sure ? 'Save anyway' : 'Save';
+        };
+        f.addEventListener('input', function (e) { if (e.target === ta || e.target === su) st.paint(); });
+        f.addEventListener('focusin', function (e) { if (e.target === ta || e.target === su) { last = e.target; if (e.target === ta) touched = true; } });
+        f.addEventListener('change', function (e) {
+          if (e.target.name !== 'ver') return;
+          st.draft[st.cur] = ta.value; st.cur = e.target.value; ta.value = st.draft[st.cur]; var vd = $('[data-tpl-vd]', f); if (vd) vd.textContent = tplVar(k, st.cur).d; st.paint();
+        });
+        f.addEventListener('click', function (e) {
+          var pb = e.target.closest('[data-tpl-ph]'); if (!pb) return;
+          var el = pb.closest('[data-tpl-warn]') ? ta : last, ins = '{' + pb.dataset.tplPh + '}', a = el.selectionStart == null ? el.value.length : el.selectionStart, z = el.selectionEnd == null ? a : el.selectionEnd;
+          if (el === ta && !touched) { a = z = el.value.length; if (a && !/\n$/.test(el.value)) ins = '\n' + ins; }   // never clicked in the message: it goes at the end
+          el.value = el.value.slice(0, a) + ins + el.value.slice(z); el.focus(); el.setSelectionRange(a + ins.length, a + ins.length); st.paint();
+        });
+        st.paint();
+      } });
+  }
+  function actTplStd(k) {
+    var T = TEMPLATES[k]; if (!T || !tplChanged(k)) return;
+    modal('Put back the standard wording?', '<p>The message <b>' + esc(T.t) + '</b> goes back to the words Kyleu started with. What you typed for this message is dropped.</p>', 'Put back', function () { var err = tplReset(k); if (err) { toast(esc(err)); return false; } render(); toast('"' + esc(T.t) + '" is back on the standard wording'); });
+  }
+
   function actRemind(ref) { var b = byRef(ref); sendTemplate(b, defaultTemplate(b)); }
   function actCancel(ref) {
-    var b = byRef(ref), pd = paid(b), mayRefund = pd > 0 && can('payments'), first = b.guest.first;
+    var b = byRef(ref), pd = paid(b), mayRefund = pd > 0 && can('cap:money'), first = b.guest.first;
     modal('Cancel ' + esc(b.ref) + '?', '<p>' + esc(guestName(b)) + ' · ' + esc(standById(b.stand).name) + ' · arriving ' + fdw(b.ci) + ' (' + rel(b.ci) + ').</p>' +
       '<div class="callout"><b>Cancellation policy</b><br>No refunds. What the guest has paid is kept as a credit to use on another date that suits Kyleu and the guest. Offer to move the booking first.</div>' +
       (pd > 0 ? '<div class="lines"><div class="ln tot"><span>Paid so far</span><span>' + money(pd) + '</span></div></div>' +
@@ -1275,7 +1441,7 @@
         '<br>Code ' + creditCopy(c) + '<br>' +
         (c.void ? 'This credit was cancelled' + (c.voided ? ' by ' + esc(c.voided.by) + ' (' + esc(atNice(c.voided.at)) + ')' + (c.voided.why ? ': ' + esc(c.voided.why) : '') : '') + '.'
           : '<b>' + money(creditRest(c)) + ' left</b>' + (c.used ? ', ' + money(c.used) + ' used' + (uses.length ? ' on ' + uses.map(function (u) { return '<button type="button" class="link-btn" data-open="' + esc(u.ref) + '">' + esc(u.ref) + '</button>'; }).join(', ') : '') : '') + ' · ' + (c.until ? 'use by ' + fdy(c.until) : 'no end date')) +
-        (s.k === 'open' && c.email || (can('payments') && !c.void) ? '<div class="row-btns">' + (s.k === 'open' && c.email ? '<button type="button" class="btn ghost sm" data-act="credit-mail" data-ref="' + esc(c.id) + '">' + ic('send') + 'Email the code again</button>' : '') + (can('payments') && !c.void ? '<button type="button" class="btn ghost sm" data-act="credit-edit" data-ref="' + esc(c.id) + '">' + ic('edit') + 'Change</button>' : '') + '</div>' : '') + '</div></div>';
+        (s.k === 'open' && c.email || (can('cap:money') && !c.void) ? '<div class="row-btns">' + (s.k === 'open' && c.email ? '<button type="button" class="btn ghost sm" data-act="credit-mail" data-ref="' + esc(c.id) + '">' + ic('send') + 'Email the code again</button>' : '') + (can('cap:money') && !c.void ? '<button type="button" class="btn ghost sm" data-act="credit-edit" data-ref="' + esc(c.id) + '">' + ic('edit') + 'Change</button>' : '') + '</div>' : '') + '</div></div>';
     }).join('');
   }
   function creditLink(c) { return new URL('../stay.html?credit=' + encodeURIComponent(c.code), location.href).href; }
@@ -1314,7 +1480,7 @@
     }, { noFocus: true });
   }
   function actCreditEdit(id) {
-    var c = creditById(id); if (!c || !can('payments')) return;
+    var c = creditById(id); if (!c || !can('cap:money')) return;
     modal('Change credit ' + esc(c.code), '<p class="muted small">' + esc(c.name || c.email) + ' · ' + (c.from ? 'from booking ' + esc(c.from) : 'given by hand') + ' · ' + money(c.used) + ' used so far</p>' +
       '<div class="grid2"><label class="fld"><span>Amount (R)</span><input name="amt" inputmode="decimal" value="' + c.amt + '"></label><label class="fld"><span>Use by (empty = no end date)</span><input type="date" name="until" value="' + esc(c.until) + '"></label></div>' +
       '<label class="fld"><span>Note (only staff see it)</span><input name="note" value="' + esc(c.note) + '" placeholder="e.g. Agreed with Sherri"></label>',
@@ -1331,7 +1497,7 @@
       });
   }
   function actCreditVoid(id) {
-    var c = creditById(id); if (!c || c.void || !can('payments')) return;
+    var c = creditById(id); if (!c || c.void || !can('cap:money')) return;
     var rest = creditRest(c), who = c.name || c.email;
     modal('Cancel credit ' + esc(c.code) + '?', '<p><b>' + money(rest) + '</b> of ' + esc(who) + '\'s credit can then no longer be used, and the code stops working on the website.' + (c.used ? ' The ' + money(c.used) + ' already used stays as it is.' : '') + '</p>' +
       '<label class="fld"><span>Reason</span><input name="why" placeholder="e.g. Refunded instead, given by mistake"></label>',
@@ -1344,7 +1510,7 @@
   }
   // a goodwill credit that does not come from a cancelled booking
   function actCreditNew() {
-    if (!can('payments')) return;
+    if (!can('cap:money')) return;
     var gs = guestsList().filter(function (g) { return g.email; });
     modal('Give a credit', '<p class="muted small">For a goodwill credit that does not come from a cancelled booking. The guest gets a code to use on their next booking.</p>' +
       '<label class="fld"><span>Guest\'s email</span><input name="email" type="email" list="credit-emails" autocomplete="off" placeholder="Pick a client or type an email address"><datalist id="credit-emails">' + gs.map(function (g) { return '<option value="' + esc(g.email) + '">' + esc(g.name) + '</option>'; }).join('') + '</datalist></label>' +
@@ -2236,7 +2402,7 @@
   function standNotes(id) { return notesDB().filter(function (n) { return n.stand === id; }); }
   function siteLog(standId, text) {
     DB.siteLog = DB.siteLog || [];
-    DB.siteLog.unshift({ at: nowStamp(), by: ME ? ME.name : 'System', role: ME ? ME.role : '', stand: standId, text: text });
+    DB.siteLog.unshift({ at: nowStamp(), by: ME ? ME.name : 'System', role: ME ? roleName(ME.role) : '', stand: standId, text: text });
     DB.siteLog = DB.siteLog.slice(0, 3000);
     log((standId === 'camp' ? 'Camp' : standById(standId).name) + ': ' + text);
   }
@@ -2385,7 +2551,7 @@
       };
       var noteLine = function (n, withStand) {
         return '<p class="site-note">' + (withStand ? '<b class="site-note-st">' + esc(n.stand === 'camp' ? 'Camp' : standById(n.stand).name) + '</b>' : '') + '<span>' + esc(n.text) + '</span><small>' + esc(n.by) + ' · ' + esc(atNice(n.at)) + '</small>' +
-          (n.by === ME.name || ME.role === 'Owner' || ME.role === 'Manager' ? '<button type="button" class="icon-btn sm" data-act="stand-note-del" data-ref="' + n.id + '" aria-label="Remove this note" title="Remove this note">' + ic('x') + '</button>' : '') + '</p>';
+          (n.by === ME.name || can('stands') ? '<button type="button" class="icon-btn sm" data-act="stand-note-del" data-ref="' + n.id + '" aria-label="Remove this note" title="Remove this note">' + ic('x') + '</button>' : '') + '</p>';
       };
       var nOpen = 0, shownIds = {};
       var cardsHtml = rows.map(function (r) {
@@ -2897,7 +3063,8 @@
     // demo data from before a stand could be kept for a guest: add the two demo bookings that show it, once
     if ((DB.keepV || 0) < 1) { DB.keepV = 1; if (DB.seeded && !DB.bookings.some(function (b) { return b.noRelease; })) { keptDemo(DB, function () { var r; do { r = K.takeNo('Ref'); } while (byRef(r)); return r; }); DB.bookings.sort(function (a, b) { return a.ci < b.ci ? -1 : 1; }); } }
     ensureClients(); DB.settings = DB.settings || {}; gateSeed();
-    Object.keys(DB.staffRoles || {}).forEach(function (id) { var su = STAFF.filter(function (x) { return x.id === id; })[0]; if (su && ROLES[DB.staffRoles[id]]) su.role = DB.staffRoles[id]; });   // roles the Owner changed
+    staffSync();   // the people and the roles the Owners changed or added
+    if ((DB.bizV || 0) < 1) { DB.bizV = 1; bizDemo(); save(); }   // two example businesses and a few sales to them, for the shop's "A business or neighbour"
     DB.vouchers = [];   // Kyleu discount vouchers were removed; only Dinokeng partner codes are used
     DB.bookings.forEach(ensureCars);
     // vehicles nobody gave: one empty car and "not given yet", instead of made-up cars (older demo data had some)
@@ -3007,7 +3174,7 @@
     return '<div class="hello"><div><h1>' + (h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening') + ', ' + esc(ME.name) + '</h1><p class="muted">' + fd(TODAY, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + ' · ' + nT + ' of ' + STANDS.length + ' stands occupied tonight</p></div><div class="hello-acts">' + (can('gate') ? '<a class="btn ghost" href="#/gate">' + ic('clip') + 'Check-in sheet</a>' : '') + '<button class="btn" data-act="new">' + ic('plus') + 'New booking</button></div></div>' +
       '<div class="kpis">' + tile('Arriving today', arr.length, arr.filter(function (b) { return b.status === 'in'; }).length + ' checked in', 'today:arr') + tile('Departing today', dep.length, dep.filter(function (b) { return b.status === 'out'; }).length + ' checked out', 'today:dep') +
       tile('In camp tonight', nT + '<small>/' + STANDS.length + '</small>', Math.round(nT / STANDS.length * 100) + '% occupied', 'calendar') + tile('Awaiting EFT', pend.length, money(pendAmt) + ' to come in', can('eft') ? 'eft' : 'bookings', pend.length ? 'warn' : '') +
-      tile('Balances due in 7 days', money(balAmt), balSoon.length + ' booking' + (balSoon.length === 1 ? '' : 's'), can('eft') ? 'eft' : 'bookings') + (can('payments') ? tile('Received this month', money(recv), 'bookings and shop', 'payments', 'ok') : '') + '</div>' +
+      tile('Balances due in 7 days', money(balAmt), balSoon.length + ' booking' + (balSoon.length === 1 ? '' : 's'), can('eft') ? 'eft' : 'bookings') + (can('cap:money') ? tile('Received this month', money(recv), 'bookings and shop', can('payments') ? 'payments' : '', 'ok') : '') + '</div>' +
       (function () {
         var inList = Object.keys(tonight).map(function (id) { return tonight[id]; });
         var lists = { arr: arr, dep: dep, in: inList }, pg = pageOf(lists[DP.tab], DP.tab, 6), at = pageOf(attention, 'attn', 6), ac = pageOf(DB.log.slice().sort(function (a, b) { return String(b.at) > String(a.at) ? 1 : String(b.at) < String(a.at) ? -1 : 0; }), 'act', 7);
@@ -3323,7 +3490,7 @@
   function initials(n) { var p = String(n || '?').trim().split(/\s+/); return (p[0][0] + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase(); }
   function when(at) { var d = at.slice(0, 10); return d === TODAY ? at.slice(11, 16) : d === add(TODAY, -1) ? 'Yesterday' : fd(d); }
   function whenSaid(at) { var w = when(at); return w === 'Yesterday' ? 'yesterday' : /:/.test(w) ? 'today at ' + w : 'on ' + w; }
-  function saleMethod(m) { return m === 'bill' ? 'On bill' : methodLabel(m); }
+  function saleMethod(m) { return m === 'bill' ? 'On bill' : m === 'account' ? 'On account' : methodLabel(m); }
   function byRefLoose(s) { var k = String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); return k ? DB.bookings.filter(function (b) { return b.ref.replace(/[^A-Z0-9]/g, '') === k; })[0] : null; }
   var PAY_RANGES = [['today', 'Today'], ['yesterday', 'Yesterday'], ['last_7', 'Last 7 days'], ['this_month', 'This month'], ['last_month', 'Last month'], ['last_90', 'Last 90 days']];
   function simpleRange(k) {
@@ -3343,7 +3510,7 @@
     var map = {}, out = [];
     DB.sales.forEach(function (s) {
       var r = map[s.sid];
-      if (!r) { r = map[s.sid] = { sid: s.sid, d: s.d, t: s.t || '', m: s.m, stand: s.stand || '', ref: s.ref || '', by: s.by || '', lines: [], amt: 0, qty: 0, refundOf: s.refundOf || '', refunded: false }; out.push(r); }
+      if (!r) { r = map[s.sid] = { sid: s.sid, d: s.d, t: s.t || '', m: s.m, stand: s.stand || '', ref: s.ref || '', by: s.by || '', lines: [], amt: 0, qty: 0, refundOf: s.refundOf || '', refunded: false, cust: s.cust || '', custName: s.cust ? bizName(s.cust, s.custName) : '', paid: s.paid || '' }; out.push(r); }
       r.lines.push(s); r.amt += s.amt; r.qty += s.qty;
     });
     out.forEach(function (r) { r.summary = r.lines.map(function (l) { return Math.abs(l.qty) + ' × ' + l.item; }).join(', '); var b = r.ref ? byRef(r.ref) : null; r.guest = b ? guestName(b) : ''; if (r.refundOf && map[r.refundOf]) map[r.refundOf].refunded = true; });
@@ -3353,7 +3520,9 @@
   function allTx() {
     var out = [], fee = function (a) { return Math.round(a - a / (1 + cardFee() / 100)); };
     DB.bookings.forEach(function (b) { (b.payments || []).forEach(function (p) { if (p.m === 'credit') return; out.push({ d: p.d, t: '', kind: p.amt < 0 ? 'refund' : 'booking', type: p.amt < 0 ? 'Refund' : p.type, who: guestName(b), what: standById(b.stand).name + ' · ' + b.ref, m: p.m, amt: p.amt, ref: b.ref, fee: p.m === 'card' && p.amt > 0 ? fee(p.amt) : 0, note: p.ref || '' }); }); });
-    receipts().forEach(function (r) { if (r.m === 'bill') return; out.push({ d: r.d, t: r.t, kind: r.amt < 0 ? 'refund' : 'shop', type: r.amt < 0 ? 'Shop refund' : 'Shop sale', who: r.stand ? r.stand + (r.guest ? ' · ' + r.guest : '') : 'Walk-in', what: r.summary, m: r.m, amt: r.amt, sid: r.sid, fee: r.m === 'card' && r.amt > 0 ? fee(r.amt) : 0 }); });
+    receipts().forEach(function (r) { if (r.m === 'bill' || r.m === 'account') return; out.push({ d: r.d, t: r.t, kind: r.amt < 0 ? 'refund' : 'shop', type: r.amt < 0 ? 'Shop refund' : 'Shop sale', who: r.cust ? r.custName : r.stand ? r.stand + (r.guest ? ' · ' + r.guest : '') : 'Walk-in', what: r.summary, m: r.m, amt: r.amt, sid: r.sid, fee: r.m === 'card' && r.amt > 0 ? fee(r.amt) : 0 }); });
+    // a business paid what it bought on account: money in on the day it paid
+    (DB.shopPaid || []).forEach(function (p) { out.push({ d: p.d, t: p.t || '', kind: 'shop', type: 'Shop account paid', who: bizName(p.cust, p.custName), what: p.sids.length + ' sale' + (p.sids.length === 1 ? '' : 's') + ' on account', m: p.m, amt: p.amt, sid: p.sids[0], fee: p.m === 'card' ? fee(p.amt) : 0 }); });
     return out.sort(function (a, b) { return (a.d + (a.t || '99')) < (b.d + (b.t || '99')) ? 1 : -1; });
   }
   // money still to come in, soonest due first
@@ -3824,24 +3993,23 @@
   function sendTemplate(b, key) {
     sendBox({ b: b, title: 'Send to ' + guestName(b), value: key, choices: Object.keys(TEMPLATES).map(function (k) { return [k, TEMPLATES[k].t]; }),
       load: function (k) {
-        var T = TEMPLATES[k], codes = ensureCars(b).filter(function (c) { return c.dgr; });
+        var codes = ensureCars(b).filter(function (c) { return c.dgr; });
         var docs = (SEND_DOCS[k] || []).map(function (d) { return d === 'indemnity' ? docIndemnity(b) : d === 'codes' ? (codes.length ? docCodes(b, codes) : null) : docBooking(b, d); }).filter(Boolean);
-        return { subject: fill(T.s, b), text: fill(T.b(b), b), docs: docs };
+        return { subject: fill(tplSubject(k), b), text: fill(tplText(k, b), b), docs: docs };
       }, onSent: function (via, cur) { if (cur && cur.key === 'thanks' && b.status === 'out') thanksMark(b, via === 'wa' ? 'WhatsApp' : 'Email'); } });
   }
   function defaultTemplate(b) { return paidUp(b) && !b.finalised && b.ci >= TODAY ? 'finalise' : b.status === 'pending' ? 'eft' : balance(b) && b.ci > TODAY ? 'balance' : diff(TODAY, b.ci) <= 10 && b.ci >= TODAY ? 'arrival' : b.status === 'out' ? 'thanks' : 'confirm'; }
 
   /* ---------- the thank-you after a stay, with a link to review Kyleu on Google ----------
      Not a form on the website: only a link to Kyleu's Google reviews. The link and the words are set under
-     Settings > Check-in & Dinokeng (DB.settings.thanksLink, DB.settings.thanksText). Staff send it right after
+     Settings > Check-in & Dinokeng (DB.settings.thanksLink) and the words under Settings > Message templates (DB.settings.thanksText). Staff send it right after
      check-out, by WhatsApp or email. b.thanks = { at, by, via: 'WhatsApp' | 'Email' } once it is sent. */
-  var THANKS_DEF = 'Hi {first}, thank you for staying with us at Kyleu Bush Camp. We appreciate you choosing Kyleu and hope you loved the bush.\n\nDid you enjoy your stay? We would love to hear what was good and what we can do better. It takes a minute to leave us a Google review:\n{link}\n\nWe hope to see you again soon.\nThe Kyleu team';
   var THANKS_DAYS = 14;   // the dashboard reminds about check-outs this many days back, not older ones
   var SITE_REVIEW = '';   // the "Google reviews" link in the website's own settings, used until staff type another one
   if (K.settingsFile) K.settingsFile().then(function (S) { if (S) SITE_REVIEW = S.get('Google reviews', '') || ''; if (SITE_REVIEW && ME && route() === 'settings' && SET === 'camp' && !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '')) render(); }).catch(function () {});
   function reviewLink() { var s = DB.settings || {}; return String(s.thanksLink != null ? s.thanksLink : (webDB().settings['Google reviews'] || SITE_REVIEW || '')).trim(); }
   function thanksTpl() { return (DB.settings && DB.settings.thanksText) || THANKS_DEF; }
-  function thanksMsg(b) { return thanksTpl().replace(/\{first\}/g, (b.guest && b.guest.first) || 'there').replace(/\{link\}/g, reviewLink()); }
+  function thanksMsg(b) { var t = thanksTpl().replace(/\{first\}/g, (b.guest && b.guest.first) || 'there').replace(/\{link\}/g, reviewLink()); return b && b.ref && b.stand && b.guest ? fill(t, b) : t; }   // {link} is the review link here; the other details are filled in as in any message
   function outDay(b) { var d = ''; (b.cars || []).forEach(function (c) { if (c.outAt && c.outAt.slice(0, 10) > d) d = c.outAt.slice(0, 10); }); return d || b.co; }
   function thanksDue(b) { return b.status === 'out' && !b.thanks && outDay(b) >= add(TODAY, -THANKS_DAYS); }
   function thanksLine(b) { var t = b.thanks, d = String(t.at).slice(0, 10), tm = String(t.at).slice(11, 16); return 'Thank-you sent by ' + t.via + ' ' + (d === TODAY ? 'today' : 'on ' + fd(d)) + (tm ? ' at ' + tm : '') + (t.by ? ' by ' + t.by : ''); }
@@ -3868,7 +4036,7 @@
           if (!via) return;
           if (!txt) { toast('The message is empty'); return; }
           if (via === 'WhatsApp') openWhatsApp(ph, txt);   // straight from the click, so the browser lets WhatsApp open
-          else logEmail(b, 'Thank you for staying at Kyleu', txt + (mySig() ? '\n\n--\n' + sigText(mySig()) : ''), [], em);
+          else logEmail(b, fill(tplSubject('thanks'), b), txt + (mySig() ? '\n\n--\n' + sigText(mySig()) : ''), [], em);
           thanksMark(b, via, via === 'WhatsApp' ? ph : em);
           log('Thank-you sent to ' + guestName(b) + ' by ' + via, b.ref); save(); closeModal(); refresh();
           toast(via === 'WhatsApp' ? 'WhatsApp is opening with the thank-you' : 'Thank-you emailed to ' + esc(em) + ' (demo: nothing really leaves this browser)');
@@ -3996,9 +4164,122 @@
   /* =========================================================
      Shop: a till like Square or Yoco, and the sales history
      ========================================================= */
-  var SHOP = { tab: 'till', cat: '', q: '', who: '', range: 'today', sm: '', sq: '' };
+  var SHOP = { tab: 'till', cat: '', q: '', who: '', biz: '', range: 'today', sm: '', sq: '', sc: '' };   // who: '' walk-in, 'biz' a business (its name in biz), or a booking ref (| vehicle id)
   var CART = {};   // product id → how many
   function bookingsHere() { return DB.bookings.filter(function (b) { return live(b) && b.status !== 'pending' && b.status !== 'out' && b.ci <= TODAY && TODAY <= b.co && (b.status === 'in' || TODAY < b.co); }).sort(function (a, b) { return standById(a.stand).name < standById(b.stand).name ? -1 : 1; }); }
+  /* ---------- selling to a business or a neighbour (for example firewood in bulk to the camp next door) ----------
+     DB.shopCustomers = [{ id, name, phone, note }]: remembered the first time a name is used on the till.
+     A sale to one carries cust (the id) and custName on every line. It is paid now (cash, card or EFT) or put "on account"
+     (m: 'account'): then it is not money received yet, like a sale on a guest's bill. When the business pays, "Mark as paid"
+     adds one line to DB.shopPaid = [{ id, d, t, m, amt, sum, cust, custName, sids, by, at }] and sets paid (that id) on the
+     sale lines, so the money shows in Payments and Reports on the day it was paid, and only once. */
+  function bizList() { if (!DB.shopCustomers) DB.shopCustomers = []; return DB.shopCustomers; }
+  function bizBy(id) { return id ? bizList().filter(function (c) { return c.id === id; })[0] || null : null; }
+  function bizKey(n) { return String(n || '').replace(/\s+/g, ' ').trim().toLowerCase(); }
+  function bizFind(name) { var k = bizKey(name); return k ? bizList().filter(function (c) { return bizKey(c.name) === k; })[0] || null : null; }
+  function bizName(id, was) { var c = bizBy(id); return c ? c.name : was || 'A business'; }
+  // sales on account that are not paid yet, oldest first (all of them, or of one business)
+  function bizOwed(custId) { return receipts().filter(function (r) { return r.m === 'account' && r.amt > 0 && !r.refunded && !r.paid && (!custId || r.cust === custId); }).reverse(); }
+  function bizOwes(custId) { return bizOwed(custId).reduce(function (a, r) { return a + r.amt; }, 0); }
+  function shopPaidBy(id) { return (DB.shopPaid || []).filter(function (p) { return p.id === id; })[0] || null; }
+  // the business paid: sids = the sales it paid for, m = eft, cash or card, d = the day the money came in. Returns what is wrong, or ''.
+  function bizPay(custId, sids, m, d) {
+    var owed = bizOwed(custId).filter(function (r) { return (sids || []).indexOf(r.sid) >= 0; }), set = {};
+    if (!owed.length) return 'Tick at least one sale';
+    if (['eft', 'cash', 'card'].indexOf(m) < 0) return 'Choose how they paid';
+    if (!/^\d{4}-\d\d-\d\d$/.test(d || '') || d > TODAY) return 'Choose the day they paid. It cannot be in the future.';
+    if (owed.some(function (r) { return r.d > d; })) return 'The day they paid cannot be before the day of the sale';
+    var sum = owed.reduce(function (a, r) { return a + r.amt; }, 0), amt = m === 'card' ? toCard(sum) : sum, id = uid('A'), name = bizName(custId, owed[0].custName);
+    owed.forEach(function (r) { set[r.sid] = 1; });
+    DB.shopPaid = DB.shopPaid || []; DB.shopPaid.push({ id: id, d: d, t: d === TODAY ? hhmm() : '', m: m, amt: amt, sum: sum, cust: custId, custName: name, sids: owed.map(function (r) { return r.sid; }), by: ME ? ME.name : '', at: nowStamp() });
+    DB.sales.forEach(function (s) { if (s.m === 'account' && set[s.sid]) s.paid = id; });
+    log(name + ' paid ' + money(amt) + ' by ' + methodLabel(m).toLowerCase().replace('eft', 'EFT') + ' for ' + owed.length + ' shop sale' + (owed.length === 1 ? '' : 's') + ' on account'); save(); return '';
+  }
+  // marked as paid by mistake: the sales are owed again and the payment line is taken away
+  function bizUnpay(payId) {
+    var p = shopPaidBy(payId); if (!p) return 'That payment is not there any more';
+    DB.shopPaid.splice(DB.shopPaid.indexOf(p), 1); DB.sales.forEach(function (s) { if (s.paid === payId) delete s.paid; });
+    log('Took back "paid" for ' + bizName(p.cust, p.custName) + ': ' + money(p.sum) + ' is on account again'); save(); return '';
+  }
+  // rename or remove businesses. rows = [{ id, name, phone, note, remove }]. Returns what is wrong, or ''.
+  function bizSaveAll(rows) {
+    var seen = {}, err = '';
+    rows.forEach(function (r) {
+      var c = bizBy(r.id), nm = String(r.name || '').replace(/\s+/g, ' ').trim(); if (!c || err) return;
+      if (r.remove) { if (bizOwes(c.id)) err = c.name + ' still owes ' + money(bizOwes(c.id)) + '. Mark it as paid first.'; return; }
+      if (!nm) { err = 'A business needs a name'; return; }
+      if (seen[bizKey(nm)]) { err = 'Two businesses cannot have the same name: ' + nm; return; } seen[bizKey(nm)] = 1;
+    });
+    if (err) return err;
+    var ch = [];
+    rows.forEach(function (r) {
+      var c = bizBy(r.id); if (!c) return;
+      if (r.remove) { bizList().splice(bizList().indexOf(c), 1); ch.push('removed ' + c.name); return; }
+      var nm = String(r.name).replace(/\s+/g, ' ').trim(), ph = String(r.phone || '').trim(), nt = String(r.note || '').trim();
+      if (nm !== c.name) { ch.push(c.name + ' is now ' + nm); DB.sales.forEach(function (s) { if (s.cust === c.id) s.custName = nm; }); (DB.shopPaid || []).forEach(function (p) { if (p.cust === c.id) p.custName = nm; }); }
+      else if (ph !== (c.phone || '') || nt !== (c.note || '')) ch.push('details of ' + nm + ' changed');
+      c.name = nm; c.phone = ph; c.note = nt;
+    });
+    if (ch.length) { log('Shop businesses: ' + ch.join(', ')); save(); }
+    return '';
+  }
+  // two example businesses and a few sales to them, once (also for browsers that already have demo data): DB.bizV in migrate()
+  function bizDemo() {
+    if (bizList().length) return;
+    var items = shopItems().filter(function (p) { return p.id; }), find = function (re) { return items.filter(function (p) { return re.test(p.label); })[0]; };
+    var wood = find(/sekelbos|firewood/i) || items[0], ice = find(/\bice\b/i); if (!wood) return;
+    DB.shopCustomers = [{ id: 'mongena', name: 'Mongena Bush Lodge', phone: '', note: 'Our neighbour. Buys firewood in bulk for the boma.' }, { id: 'kameeldoring', name: 'Kameeldoring Camp', phone: '', note: 'Fetches wood and ice when they run out.' }];
+    var line = function (sid, d, t, p, q, m, c, paid) { var s = { sid: sid, d: d, t: t, item: p.label, pid: p.id, qty: q, m: m, amt: p.amount * q, stand: '', ref: '', by: 'Sherri', cust: c.id, custName: c.name }; if (paid) s.paid = paid; DB.sales.push(s); return s.amt; };
+    var mon = DB.shopCustomers[0], kam = DB.shopCustomers[1];
+    var a1 = line('SB1', add(TODAY, -16), '10:20', wood, 20, 'account', mon, 'AB1');
+    line('SB2', add(TODAY, -9), '09:40', wood, 10, 'cash', kam);
+    line('SB3', add(TODAY, -4), '15:05', wood, 20, 'account', mon); if (ice && ice !== wood) line('SB3', add(TODAY, -4), '15:05', ice, 6, 'account', mon);
+    DB.shopPaid = DB.shopPaid || []; DB.shopPaid.push({ id: 'AB1', d: add(TODAY, -12), t: '', m: 'eft', amt: a1, sum: a1, cust: mon.id, custName: mon.name, sids: ['SB1'], by: 'Sherri', at: add(TODAY, -12) + ' 09:15' });
+    DB.sales.sort(function (a, b) { return (a.d + a.t) < (b.d + b.t) ? -1 : (a.d + a.t) > (b.d + b.t) ? 1 : 0; });
+  }
+  // the small card on the Shop screen: what each business still owes, with "Mark as paid"
+  function owedBizHTML() {
+    var owed = bizOwed(''), by = {}, ids = [];
+    owed.forEach(function (r) { if (!by[r.cust]) { by[r.cust] = { n: 0, amt: 0, first: r.d, name: r.custName }; ids.push(r.cust); } by[r.cust].n++; by[r.cust].amt += r.amt; });
+    if (!ids.length && !bizList().length) return '';
+    var tot = owed.reduce(function (a, r) { return a + r.amt; }, 0);
+    return '<section class="card owed-biz" data-owed-biz><header class="card-h"><h3>Owed by businesses</h3>' + (ids.length ? '<b class="ob-tot" data-owed-total>' + money(tot) + '</b>' : '') + '</header>' +
+      (ids.length ? '<p class="muted small">Sold on account. It counts as money received on the day they pay.</p>' + ids.map(function (id) {
+        var o = by[id];
+        return '<div class="ob-row" data-owed="' + esc(id) + '"><div class="ob-n"><b>' + esc(o.name) + '</b><small>' + o.n + ' sale' + (o.n === 1 ? '' : 's') + ' on account, ' + (o.n === 1 ? '' : 'the oldest ') + (o.first === TODAY ? 'today' : 'on ' + fd(o.first)) + '</small></div><b class="ob-amt">' + money(o.amt) + '</b><button type="button" class="btn ghost sm" data-act="biz-paid" data-ref="' + esc(id) + '">' + ic('check') + 'Mark as paid</button></div>';
+      }).join('') : '<p class="empty">Nothing is owed. Every sale on account has been paid.</p>') + '</section>';
+  }
+  function actBizPaid(custId) {
+    var owed = bizOwed(custId); if (!owed.length) { toast('Nothing is owed by this business'); return; }
+    var name = owed[0].custName, sumOf = function (f) { return owed.filter(function (r, i) { return !f || f.elements['s' + i].checked; }).reduce(function (a, r) { return a + r.amt; }, 0); };
+    modal('Mark as paid: ' + esc(name), '<span class="fld-l">What did they pay for?</span><div class="ob-sales">' + owed.map(function (r, i) { return '<label class="check"><input type="checkbox" name="s' + i + '" checked><span><b>' + fd(r.d) + '</b> · ' + esc(r.summary) + '</span><b>' + money(r.amt) + '</b></label>'; }).join('') + '</div>' +
+      '<span class="fld-l">How did they pay?</span><div class="seg">' + [['eft', 'EFT'], ['cash', 'Cash'], ['card', 'Card']].map(function (o, i) { return '<label><input type="radio" name="m" value="' + o[0] + '"' + (i ? '' : ' checked') + '><span>' + o[1] + '</span></label>'; }).join('') + '</div>' +
+      '<label class="fld"><span>The day the money came in</span><input type="date" name="d" value="' + TODAY + '" max="' + TODAY + '"></label>' +
+      '<div class="sale-tot"><div><span>They paid</span><b data-ob-sum>' + money(sumOf()) + '</b></div><div class="muted" data-ob-fee hidden><span data-ob-fee-t></span></div></div>' +
+      '<p class="hint">' + ic('info') + ' The money shows in Payments and Reports on the day you choose, not on the day of the sale.</p>',
+      'Mark as paid', function (f) {
+        var sids = owed.filter(function (r, i) { return f.elements['s' + i].checked; }).map(function (r) { return r.sid; }), m = f.elements.m.value, err = bizPay(custId, sids, m, fval(f, 'd'));
+        if (err) { toast(esc(err)); return false; }
+        render(); toast(esc(name) + ' paid. ' + (bizOwes(custId) ? money(bizOwes(custId)) + ' is still on account.' : 'Nothing is owed any more.'));
+      }, { noFocus: true, onOpen: function (f) {
+        var upd = function () { var s = sumOf(f), card = f.elements.m.value === 'card' && hasFee(), el = $('[data-ob-sum]', f), fe = $('[data-ob-fee]', f), ft = $('[data-ob-fee-t]', f); if (el) el.textContent = money(card ? toCard(s) : s); if (fe) fe.hidden = !card; if (ft) ft.textContent = 'On account ' + money(s) + ', plus the ' + cardFee() + '% card fee'; };
+        f.addEventListener('change', upd); upd();
+      } });
+  }
+  function actBizManage() {
+    var list = bizList().slice();
+    modal('Businesses and neighbours', list.length ? '<p class="muted small">Kyleu remembers a business the first time you sell to it. Change a name here, or remove one you no longer sell to. Past sales stay in the sales history.</p>' + list.map(function (c, i) {
+      var owes = bizOwes(c.id);
+      return '<div class="biz-row" data-biz-row="' + esc(c.id) + '"><div class="grid2"><label class="fld"><span>Name</span><input name="n' + i + '" maxlength="60" value="' + esc(c.name) + '" autocomplete="off"></label><label class="fld"><span>Phone (optional)</span><input name="p' + i + '" maxlength="30" value="' + esc(c.phone || '') + '" inputmode="tel" autocomplete="off"></label></div>' +
+        '<label class="fld"><span>Note (optional)</span><input name="t' + i + '" maxlength="120" value="' + esc(c.note || '') + '" autocomplete="off"></label>' +
+        (owes ? '<p class="muted small">Still owes ' + money(owes) + ' on account, so it cannot be removed yet.</p>' : '<label class="check"><input type="checkbox" name="x' + i + '"><span>Remove ' + esc(c.name) + ' from the list</span></label>') + '</div>';
+    }).join('') : '<p class="empty">No businesses yet. Choose "A business or neighbour" on the till and type a name: Kyleu remembers it.</p>',
+      list.length ? 'Save' : null, function (f) {
+        var err = bizSaveAll(list.map(function (c, i) { return { id: c.id, name: fval(f, 'n' + i), phone: fval(f, 'p' + i), note: fval(f, 't' + i), remove: !!(f.elements['x' + i] && f.elements['x' + i].checked) }; }));
+        if (err) { toast(esc(err)); return false; }
+        render(); toast('Saved');
+      }, { wide: true, noFocus: true });
+  }
   function vShop() {
     return '<div class="page-h"><div><h1>Shop</h1><p class="muted">Ring up sales at reception and see everything the shop has sold.</p></div><div class="ph-act">' + (can('products') ? '<a class="btn ghost" href="#/products">' + ic('box') + 'Products and stock</a>' : '') + '</div></div>' +
       '<div class="rp-tabs page-tabs"><button class="' + (SHOP.tab === 'till' ? 'on' : '') + '" data-shoptab="till">Till</button><button class="' + (SHOP.tab === 'sales' ? 'on' : '') + '" data-shoptab="sales">Sales history</button></div>' +
@@ -4010,7 +4291,7 @@
     var cats = prodCats().filter(function (c) { return items.some(function (p) { return p.cat === c; }); });
     var lines = Object.keys(CART).filter(function (id) { return CART[id] > 0 && prodBy(id); });
     var tot = function (card) { return lines.reduce(function (a, id) { var p = prodBy(id); return a + (card ? toCard(p.amount) : p.amount) * CART[id]; }, 0); };
-    var here = bookingsHere(), wb = whoOf(), who = wb.b, dis = lines.length ? '' : ' disabled';
+    var here = bookingsHere(), wb = whoOf(), who = wb.b, dis = lines.length ? '' : ' disabled', biz = SHOP.who === 'biz', known = bizList(), bizC = biz ? bizFind(SHOP.biz) : null, bizOwe = bizC ? bizOwes(bizC.id) : 0;
     var todays = receipts().filter(function (r) { return r.d === TODAY && r.amt > 0; });
     return '<div class="pos-wrap"><section class="card pos-cat"><div class="pos-tools"><label class="search">' + ic('search') + '<input type="search" data-shopq placeholder="Search products" value="' + esc(SHOP.q) + '" aria-label="Search products"></label></div>' +
       '<div class="chips scroll"><button class="chip' + (!SHOP.cat ? ' on' : '') + '" data-pcat="">All</button>' + cats.map(function (c) { return '<button class="chip' + (SHOP.cat === c ? ' on' : '') + '" data-pcat="' + esc(c) + '">' + esc(c) + '</button>'; }).join('') + '</div>' +
@@ -4019,61 +4300,74 @@
         return '<button class="pos-it' + (CART[p.id] ? ' on' : '') + '" data-add="' + p.id + '"' + (out ? ' disabled' : '') + '>' + prodPicHTML(p, 'pos-img') + '<b>' + esc(p.label) + '</b><span class="pos-p">' + money(p.amount) + (hasFee() ? '<small>Card ' + money(toCard(p.amount)) + '</small>' : '') + '</span>' + (left !== null ? '<span class="pos-stock' + (left <= (p.lowAt || 5) ? ' low' : '') + '">' + (out ? 'Sold out' : left + ' left') + '</span>' : '') + (CART[p.id] ? '<em data-roll="b:' + p.id + '">' + CART[p.id] + '</em>' : '') + '</button>';
       }).join('') + (shown.length ? '' : '<p class="empty">No products match.</p>') + '</div></section>' +
       '<aside class="card pos-sale"><header class="card-h"><h3>Current sale</h3>' + (lines.length ? '<button class="btn ghost sm" data-act="cart-clear">Clear</button>' : '') + '</header>' +
-      (lines.length ? '<div class="sale-lines">' + lines.map(function (id) { var p = prodBy(id); return '<div class="sl"><div class="sl-n"><b>' + esc(p.label) + '</b><small>' + money(p.amount) + ' each</small></div><div class="qty"><button class="icon-btn sm" data-rem="' + id + '" aria-label="One less">' + ic('minus') + '</button><span data-roll="q:' + id + '">' + CART[id] + '</span><button class="icon-btn sm" data-add="' + id + '" aria-label="One more">' + ic('plus') + '</button></div><b class="sl-t" data-roll="t:' + id + '">' + money(p.amount * CART[id]) + '</b></div>'; }).join('') + '</div>' : '<div class="sale-empty">' + ic('cart') + '<p>Tap a product to add it to the sale.</p></div>') +
-      '<label class="fld"><span>Who is it for?</span><select data-who><option value="">Walk-in customer (pays now)</option>' + here.map(function (b) { var cs = ensureCars(b).filter(function (c) { return c.st === 'in'; }), nm = standById(b.stand).name + ' · ' + guestName(b); if (!cs.length) return '<option value="' + b.ref + '"' + (SHOP.who === b.ref ? ' selected' : '') + '>' + esc(nm) + '</option>'; return '<optgroup label="' + esc(nm) + '">' + cs.map(function (c) { var k = b.ref + '|' + c.id; return '<option value="' + k + '"' + (SHOP.who === k ? ' selected' : '') + '>' + esc(carLabel(c, b.cars.indexOf(c)) + (c.driver ? ' · ' + c.driver : '')) + '</option>'; }).join('') + '</optgroup>'; }).join('') + '</select></label>' +
+      (lines.length ? '<div class="sale-lines">' + lines.map(function (id) { var p = prodBy(id), full = p.stock != null && CART[id] >= p.stock; return '<div class="sl"><div class="sl-n"><b>' + esc(p.label) + '</b><small>' + money(p.amount) + ' each' + (p.stock != null ? ' · <span class="' + (full ? 'warn-t' : '') + '" data-sl-stock="' + id + '">' + (full ? 'that is all ' + p.stock + ' in stock' : p.stock + ' in stock') + '</span>' : '') + '</small></div><div class="qty"><button class="icon-btn sm" data-rem="' + id + '" aria-label="One less">' + ic('minus') + '</button><input class="qty-in" data-qty="' + id + '" inputmode="numeric" maxlength="4" value="' + CART[id] + '" autocomplete="off" aria-label="How many: ' + esc(p.label) + '"><button class="icon-btn sm" data-add="' + id + '" aria-label="One more"' + (full ? ' disabled' : '') + '>' + ic('plus') + '</button></div><b class="sl-t" data-roll="t:' + id + '">' + money(p.amount * CART[id]) + '</b></div>'; }).join('') + '</div>' : '<div class="sale-empty">' + ic('cart') + '<p>Tap a product to add it to the sale.</p></div>') +
+      '<label class="fld"><span>Who is it for?</span><select data-who><option value="">Walk-in customer (pays now)</option><option value="biz"' + (biz ? ' selected' : '') + '>A business or neighbour</option>' + here.map(function (b) { var cs = ensureCars(b).filter(function (c) { return c.st === 'in'; }), nm = standById(b.stand).name + ' · ' + guestName(b); if (!cs.length) return '<option value="' + b.ref + '"' + (SHOP.who === b.ref ? ' selected' : '') + '>' + esc(nm) + '</option>'; return '<optgroup label="' + esc(nm) + '">' + cs.map(function (c) { var k = b.ref + '|' + c.id; return '<option value="' + k + '"' + (SHOP.who === k ? ' selected' : '') + '>' + esc(carLabel(c, b.cars.indexOf(c)) + (c.driver ? ' · ' + c.driver : '')) + '</option>'; }).join('') + '</optgroup>'; }).join('') + '</select></label>' +
+      (biz ? '<div class="biz-box" data-biz-box><label class="fld"><span>Name of the business or neighbour</span><input data-biz maxlength="60" value="' + esc(SHOP.biz) + '" placeholder="' + (known.length ? 'Type a name, or pick one below' : 'For example: the bush camp next door') + '" autocomplete="off"></label>' +
+        (known.length ? '<div class="biz-pick"><span class="muted small">Sold to before:</span>' + known.map(function (c) { return '<button type="button" class="chip' + (bizC === c ? ' on' : '') + '" data-bizpick="' + esc(c.id) + '">' + esc(c.name) + '</button>'; }).join('') + '<button type="button" class="link-btn" data-act="biz-manage">Manage</button></div>' : '<p class="muted small">Kyleu remembers the name for next time.</p>') +
+        (bizOwe ? '<p class="muted small" data-biz-owes>' + esc(bizC.name) + ' still owes ' + money(bizOwe) + ' on account.</p>' : '') + '</div>' : '') +
       '<div class="sale-tot"><div><span>Cash or EFT</span><b data-roll="tot:cash">' + money(tot(false)) + '</b></div>' + (hasFee() ? '<div class="muted"><span>Card (+' + cardFee() + '%)</span><b data-roll="tot:card">' + money(tot(true)) + '</b></div>' : '') + '</div>' +
-      '<div class="pay-btns"><button class="btn" data-sell="cash"' + dis + '>' + ic('cash') + 'Cash ' + money(tot(false)) + '</button><button class="btn blue" data-sell="card"' + dis + '>' + ic('card') + 'Card ' + money(tot(true)) + '</button>' + (who ? '<button class="btn ghost full" data-sell="bill"' + dis + '>' + ic('list') + (wb.car ? 'Add to ' + esc(guestName(who)) + '\'s tab (' + esc(wb.label) + ')' : 'Add to ' + esc(guestName(who)) + '\'s bill') + '</button>' : '') + '</div>' +
-      (who && wb.car ? '<p class="muted small">Goes on this vehicle\'s tab. They settle it when the vehicle checks out.</p>' : who ? '<p class="muted small">"Add to bill" puts it on ' + esc(guestName(who)) + '\'s booking. They pay it with their balance.</p>' : '') + '</aside></div>' +
+      '<div class="pay-btns"><button class="btn" data-sell="cash"' + dis + '>' + ic('cash') + 'Cash ' + money(tot(false)) + '</button><button class="btn blue" data-sell="card"' + dis + '>' + ic('card') + 'Card ' + money(tot(true)) + '</button>' + (biz ? '<button class="btn ghost" data-sell="eft"' + dis + '>' + ic('bank') + 'EFT ' + money(tot(false)) + '</button><button class="btn ghost" data-sell="account"' + dis + '>' + ic('clock') + 'On account</button>' : '') + (who ? '<button class="btn ghost full" data-sell="bill"' + dis + '>' + ic('list') + (wb.car ? 'Add to ' + esc(guestName(who)) + '\'s tab (' + esc(wb.label) + ')' : 'Add to ' + esc(guestName(who)) + '\'s bill') + '</button>' : '') + '</div>' +
+      (who && wb.car ? '<p class="muted small">Goes on this vehicle\'s tab. They settle it when the vehicle checks out.</p>' : who ? '<p class="muted small">"Add to bill" puts it on ' + esc(guestName(who)) + '\'s booking. They pay it with their balance.</p>' : biz ? '<p class="muted small">"On account" means they pay later. The sale waits under "Owed by businesses" until you mark it as paid.</p>' : '') + '</aside></div>' +
       (lines.length ? '<button class="cart-bar" data-act="to-sale">' + ic('cart') + '<span>' + lines.reduce(function (a, id) { return a + CART[id]; }, 0) + ' item' + (lines.reduce(function (a, id) { return a + CART[id]; }, 0) === 1 ? '' : 's') + ' · <b>' + money(tot(false)) + '</b></span><span>View sale</span></button>' : '') +
+      owedBizHTML() +
       '<div class="today-strip">' + ic('clock') + '<span>Today so far: <b>' + todays.length + ' sale' + (todays.length === 1 ? '' : 's') + '</b>, <b>' + money(todays.reduce(function (a, r) { return a + r.amt; }, 0)) + '</b></span><button class="btn ghost sm" data-shoptab="sales">See all sales</button></div>';
   }
   function whoOf() { var p = (SHOP.who || '').split('|'), b = p[0] ? byRef(p[0]) : null, car = b && p[1] ? (b.cars || []).filter(function (c) { return c.id === p[1]; })[0] : null; return { b: b, car: car, label: car ? carLabel(car, b.cars.indexOf(car)) : '' }; }
   function sell(m) {
     var lines = Object.keys(CART).filter(function (id) { return CART[id] > 0 && prodBy(id); }); if (!lines.length) return;
     var wb = whoOf(), b = wb.b; if (m === 'bill' && !b) return;
+    var biz = SHOP.who === 'biz', bn = biz ? String(SHOP.biz || '').replace(/\s+/g, ' ').trim() : ''; if ((m === 'account' || m === 'eft') && !biz) return;
+    if (biz && !bn) { toast('Type the name of the business first'); var bi = $('[data-biz]'); if (bi) bi.focus(); return; }
+    var cust = biz ? bizFind(bn) : null; if (biz && !cust) { cust = { id: uid('C'), name: bn, phone: '', note: '' }; bizList().push(cust); }   // remembered from the first sale
     var sid = uid('S'), t = hhmm(), total = 0, eftT = 0, cardT = 0;
     lines.forEach(function (id) {
       var p = prodBy(id), q = CART[id], e = p.amount * q, c = toCard(p.amount) * q, amt = m === 'card' ? c : m === 'bill' ? (b.method === 'card' ? c : e) : e;
       total += amt; eftT += e; cardT += c;
-      DB.sales.push({ sid: sid, d: TODAY, t: t, item: p.label, pid: p.id, qty: q, m: m, amt: amt, stand: b ? standById(b.stand).name : '', ref: b ? b.ref : '', car: wb.car ? wb.label : '', by: ME.name });
+      var sl = { sid: sid, d: TODAY, t: t, item: p.label, pid: p.id, qty: q, m: m, amt: amt, stand: b ? standById(b.stand).name : '', ref: b ? b.ref : '', car: wb.car ? wb.label : '', by: ME.name };
+      if (cust) { sl.cust = cust.id; sl.custName = cust.name; }
+      DB.sales.push(sl);
       if (p.stock != null) p.stock = Math.max(0, p.stock - q);
     });
     if (m === 'bill') { b.charges = b.charges || []; b.charges.push({ d: TODAY, desc: 'Shop: ' + lines.map(function (id) { return CART[id] + ' × ' + prodBy(id).label; }).join(', '), e: eftT, c: cardT, sid: sid, car: wb.car ? wb.car.id : '' }); b.eft += eftT; b.card += cardT; b.total = b.method === 'card' ? b.card : b.eft; }
-    CART = {}; SHOP.who = ''; log('Shop sale ' + money(total) + ' (' + saleMethod(m) + ')' + (b ? ' for ' + guestName(b) : ''), b ? b.ref : ''); save(); render();
-    toast(m === 'bill' ? money(total) + ' added to ' + esc(guestName(b)) + (wb.car ? '\'s tab (' + esc(wb.label) + ', ' + esc(standById(b.stand).name) + ')' : '\'s bill') : 'Sale of ' + money(total) + ' recorded (' + saleMethod(m) + ')');
+    CART = {}; SHOP.who = ''; SHOP.biz = ''; log('Shop sale ' + money(total) + ' (' + saleMethod(m) + ')' + (b ? ' for ' + guestName(b) : cust ? ' for ' + cust.name : ''), b ? b.ref : ''); save(); render();
+    if (m === 'account') { toast(money(total) + ' put on the account of ' + esc(cust.name) + '. It waits under "Owed by businesses".'); return; }
+    toast(m === 'bill' ? money(total) + ' added to ' + esc(guestName(b)) + (wb.car ? '\'s tab (' + esc(wb.label) + ', ' + esc(standById(b.stand).name) + ')' : '\'s bill') : 'Sale of ' + money(total) + ' recorded (' + saleMethod(m) + ')' + (cust ? ' for ' + esc(cust.name) : ''));
   }
   function salesHTML() {
-    var rg = simpleRange(SHOP.range), sq = SHOP.sq.toLowerCase(), rs = receipts().filter(function (r) { return r.d >= rg[0] && r.d <= rg[1] && (!SHOP.sm || r.m === SHOP.sm) && (!sq || (r.summary + ' ' + r.stand + ' ' + r.guest + ' ' + r.by).toLowerCase().indexOf(sq) >= 0); });
+    var rg = simpleRange(SHOP.range), sq = SHOP.sq.toLowerCase(), rs = receipts().filter(function (r) { return r.d >= rg[0] && r.d <= rg[1] && (!SHOP.sm || r.m === SHOP.sm) && (!SHOP.sc || r.cust === SHOP.sc) && (!sq || (r.summary + ' ' + r.stand + ' ' + r.guest + ' ' + r.by + ' ' + r.custName).toLowerCase().indexOf(sq) >= 0); });
     var sales = rs.filter(function (r) { return r.amt > 0; }), refunds = rs.filter(function (r) { return r.amt < 0; });
     var total = rs.reduce(function (a, r) { return a + r.amt; }, 0), items = sales.reduce(function (a, r) { return a + r.qty; }, 0), onBill = sales.filter(function (r) { return r.m === 'bill'; }).reduce(function (a, r) { return a + r.amt; }, 0);
     var best = {}; sales.forEach(function (r) { r.lines.forEach(function (l) { best[l.item] = (best[l.item] || 0) + l.amt; }); });
     var top = Object.keys(best).sort(function (a, b) { return best[b] - best[a]; }).slice(0, 6);
     var days = [], byDay = {}; rs.forEach(function (r) { if (!byDay[r.d]) { byDay[r.d] = []; days.push(r.d); } byDay[r.d].push(r); });
-    return '<div class="filters">' + fsearch('SHOP:sq', SHOP.sq, 'Search item, stand, guest or staff') + rangeSelect('data-shopr', SHOP.range) + fsel('SHOP:sm', SHOP.sm, [['', 'Paid by: any'], ['cash', 'Cash'], ['card', 'Card'], ['bill', 'On a guest\'s bill']]) + '<button class="btn ghost" data-act="csv-sales">' + ic('download') + 'Export</button></div>' +
+    return '<div class="filters">' + fsearch('SHOP:sq', SHOP.sq, 'Search item, stand, guest, business or staff') + rangeSelect('data-shopr', SHOP.range) + fsel('SHOP:sm', SHOP.sm, [['', 'Paid by: any'], ['cash', 'Cash'], ['card', 'Card'], ['eft', 'EFT'], ['bill', 'On a guest\'s bill'], ['account', 'On account (a business)']]) + (bizList().length ? fsel('SHOP:sc', SHOP.sc, [['', 'For: anyone']].concat(bizList().map(function (c) { return [c.id, c.name]; }))) : '') + '<button class="btn ghost" data-act="csv-sales">' + ic('download') + 'Export</button></div>' +
       '<div class="kpis">' + tile('Shop sales', money(total), sales.length + ' sale' + (sales.length === 1 ? '' : 's') + (refunds.length ? ' · ' + refunds.length + ' refunded' : '')) + tile('Items sold', items, top[0] ? 'Most sold: ' + esc(top[0]) : '') + tile('Average sale', money(sales.length ? total / sales.length : 0), 'per customer') + tile('Put on guests\' bills', money(onBill), 'paid with their booking') + '</div>' +
       '<div class="cols"><section class="card flush"><table class="tbl ledger" data-sort-key="sales"><thead><tr><th>Time</th><th>Items</th><th>For</th><th>Paid by</th><th class="r">Amount</th></tr></thead><tbody>' +
       (days.length ? days.map(function (d) {
         return '<tr class="day"><td colspan="4">' + dayLabel(d) + '</td><td class="r">' + money(byDay[d].reduce(function (a, r) { return a + r.amt; }, 0)) + '</td></tr>' + byDay[d].map(function (r) {
-          return '<tr data-sale="' + r.sid + '" tabindex="0"><td data-l="Time" class="muted" data-s="' + r.d + ' ' + r.t + '">' + r.t + '</td><td data-l="Items"><b>' + esc(r.summary) + '</b>' + (r.refunded ? ' <span class="tag bad">Refunded</span>' : '') + (r.amt < 0 ? ' <span class="tag bad">Refund</span>' : '') + '<small>by ' + esc(r.by || 'staff') + '</small></td><td data-l="For">' + (r.stand ? esc(r.stand) + (r.guest ? '<small>' + esc(r.guest) + '</small>' : '') : '<span class="muted">Walk-in</span>') + '</td><td data-l="Paid by"><span class="mth pm-' + r.m + '"><i></i>' + saleMethod(r.m) + '</span></td><td data-l="Amount" class="r amt' + (r.amt < 0 ? ' bad-t' : '') + '">' + money(r.amt) + '</td></tr>';
+          return '<tr data-sale="' + r.sid + '" tabindex="0"><td data-l="Time" class="muted" data-s="' + r.d + ' ' + r.t + '">' + r.t + '</td><td data-l="Items"><b>' + esc(r.summary) + '</b>' + (r.refunded ? ' <span class="tag bad">Refunded</span>' : '') + (r.amt < 0 ? ' <span class="tag bad">Refund</span>' : '') + '<small>by ' + esc(r.by || 'staff') + '</small></td><td data-l="For">' + (r.cust ? '<span class="for-biz" data-for-biz="' + esc(r.cust) + '">For ' + esc(r.custName) + '</span>' : r.stand ? esc(r.stand) + (r.guest ? '<small>' + esc(r.guest) + '</small>' : '') : '<span class="muted">Walk-in</span>') + '</td><td data-l="Paid by"><span class="mth pm-' + r.m + '"><i></i>' + saleMethod(r.m) + '</span>' + (r.m === 'account' && r.amt > 0 && !r.refunded ? (r.paid ? ' <span class="tag ok">Paid</span>' : ' <span class="tag warn">Not paid yet</span>') : '') + '</td><td data-l="Amount" class="r amt' + (r.amt < 0 ? ' bad-t' : '') + '">' + money(r.amt) + '</td></tr>';
         }).join('');
       }).join('') : '<tr><td colspan="5" class="empty">No sales in this period.</td></tr>') + '</tbody></table></section>' +
-      '<section class="card"><header class="card-h"><h3>Best sellers</h3><span class="muted small">By money taken</span></header>' + (top.length ? hbars(top.map(function (k) { return { l: k, v: best[k], t: money(best[k]) }; })) : '<p class="empty">No sales yet.</p>') + '</section></div>';
+      '<section class="card"><header class="card-h"><h3>Best sellers</h3><span class="muted small">By money taken</span></header>' + (top.length ? hbars(top.map(function (k) { return { l: k, v: best[k], t: money(best[k]) }; })) : '<p class="empty">No sales yet.</p>') + '</section></div>' + owedBizHTML();
   }
   function openSale(sid) {
     var r = receipts().filter(function (x) { return x.sid === sid; })[0]; if (!r) return;
-    var canRefund = r.amt > 0 && !r.refunded && r.m !== 'bill';
+    var acc = r.m === 'account', pr = acc && r.paid ? shopPaidBy(r.paid) : null, canRefund = r.amt > 0 && !r.refunded && r.m !== 'bill' && !(acc && r.paid);
     modal(r.amt < 0 ? 'Refund' : 'Receipt', '<div class="receipt"><div class="rc-head"><img src="../assets/img/logo-small.png" alt="" width="40"><div><b>Kyleu Bush Camp shop</b><small>' + fdw(r.d) + ' at ' + r.t + ' · served by ' + esc(r.by || 'staff') + '</small></div></div>' +
       r.lines.map(function (l) { return '<div class="ln"><span>' + Math.abs(l.qty) + ' × ' + esc(l.item) + '</span><span>' + money(l.amt) + '</span></div>'; }).join('') +
       '<div class="ln tot"><span>Total · ' + saleMethod(r.m) + '</span><span>' + money(r.amt) + '</span></div>' +
-      (r.stand ? '<p class="muted small">For ' + esc(r.stand) + (r.guest ? ', ' + esc(r.guest) : '') + '</p>' : '<p class="muted small">Walk-in customer</p>') +
+      (r.cust ? '<p class="rc-for" data-rc-for><b>For ' + esc(r.custName) + '</b></p>' : r.stand ? '<p class="muted small">For ' + esc(r.stand) + (r.guest ? ', ' + esc(r.guest) : '') + '</p>' : '<p class="muted small">Walk-in customer</p>') +
+      (acc && r.amt > 0 && !r.refunded ? (pr ? '<p><span class="pill ok"><i></i>Paid by ' + (pr.m === 'eft' ? 'EFT' : methodLabel(pr.m).toLowerCase()) + ' on ' + fd(pr.d, { day: 'numeric', month: 'long' }) + '</span></p><p class="muted small">Marked as paid by ' + esc(pr.by || 'staff') + (pr.sids.length > 1 ? ', together with ' + (pr.sids.length - 1) + ' other sale' + (pr.sids.length === 2 ? '' : 's') + ' (' + money(pr.amt) + ' in all)' : '') + '. <button type="button" class="link-btn" data-act="biz-unpay" data-ref="' + esc(pr.id) + '">Not paid after all</button></p>'
+        : '<p><span class="pill warn"><i></i>On account: not paid yet</span></p><button type="button" class="btn ghost sm" data-act="biz-paid" data-ref="' + esc(r.cust) + '">' + ic('check') + 'Mark as paid</button>') : '') +
       (r.refunded ? '<p><span class="pill bad"><i></i>This sale was refunded</span></p>' : '') + (r.m === 'bill' ? '<p class="muted small">Put on the guest\'s bill. Change it from the booking.</p>' : '') + '</div>' +
       (r.ref ? '<button type="button" class="btn ghost sm" data-open="' + r.ref + '">' + ic('list') + 'Open booking ' + r.ref + '</button>' : ''),
-      canRefund ? 'Refund ' + money(r.amt) : null, canRefund ? function () { refundSale(r); } : null, { danger: true, noFocus: true });
+      canRefund ? (acc ? 'Cancel this sale' : 'Refund ' + money(r.amt)) : null, canRefund ? function () { refundSale(r); } : null, { danger: true, noFocus: true });
   }
   function refundSale(r) {
     var sid = uid('S');
-    r.lines.forEach(function (l) { DB.sales.push({ sid: sid, d: TODAY, t: hhmm(), item: l.item, pid: l.pid, qty: -l.qty, m: r.m, amt: -l.amt, stand: l.stand, ref: l.ref, by: ME.name, refundOf: r.sid }); var p = prodBy(l.pid); if (p && p.stock != null) p.stock += l.qty; });
-    log('Refunded shop sale of ' + money(r.amt) + ' (' + methodLabel(r.m) + ')'); save(); render(); toast(money(r.amt) + ' refunded (' + methodLabel(r.m) + '). Stock put back.');
+    r.lines.forEach(function (l) { var back = { sid: sid, d: TODAY, t: hhmm(), item: l.item, pid: l.pid, qty: -l.qty, m: r.m, amt: -l.amt, stand: l.stand, ref: l.ref, by: ME.name, refundOf: r.sid }; if (l.cust) { back.cust = l.cust; back.custName = l.custName; } DB.sales.push(back); var p = prodBy(l.pid); if (p && p.stock != null) p.stock += l.qty; });
+    if (r.m === 'account') { log('Cancelled the sale on account of ' + money(r.amt) + ' for ' + r.custName); save(); render(); toast('Sale cancelled. Nothing is owed for it and the stock is put back.'); return; }   // no money had come in yet
+    log('Refunded shop sale of ' + money(r.amt) + ' (' + methodLabel(r.m) + ')' + (r.custName ? ' for ' + r.custName : '')); save(); render(); toast(money(r.amt) + ' refunded (' + methodLabel(r.m) + '). Stock put back.');
   }
 
   /* =========================================================
@@ -4081,14 +4375,87 @@
      ========================================================= */
   var PROD = { q: '', cat: '', stock: '' };
   function soldSince(days) { var from = add(TODAY, -days + 1), m = {}; DB.sales.forEach(function (s) { if (s.d >= from && s.pid && s.m) { m[s.pid] = m[s.pid] || { q: 0, v: 0 }; m[s.pid].q += s.qty; m[s.pid].v += s.amt; } }); return m; }
+  /* ---------- counting stock ----------
+     "Count stock" on the Products page: one number box per product, the difference shown while typing, and one button saves
+     everything. Each change is kept on the product (p.stockLog: at, by, from, to, why, note; newest first) so there is a trail,
+     and the product form shows the last one. "Add a delivery" adds to the stock right away. Sales lower p.stock as always. */
+  var CNT = { vals: {}, start: {} };   // the count being typed: product id → what is in the box; and "Not counted" products ticked to start counting
+  function cntReset() { CNT = { vals: {}, start: {} }; PROD.count = false; }
+  function stockNote(p, from, to, why, note) { p.stockLog = p.stockLog || []; p.stockLog.unshift({ at: nowStamp(), by: ME ? ME.name : 'System', from: from, to: to, why: why, note: note || '' }); p.stockLog = p.stockLog.slice(0, 30); }
+  // "Counted on 13 Nov by Sherri: 40 to 52"
+  function stockLine(e) {
+    var on = ' on ' + fd(String(e.at).slice(0, 10)) + ' by ' + e.by;
+    if (e.to == null) return 'Counting stopped' + on;
+    if (e.from == null) return 'Counting started' + on + ': ' + e.to + ' in stock';
+    return (e.why === 'Stock count' ? 'Counted' : e.why === 'Delivery' ? 'Delivery' : 'Changed') + on + ': ' + e.from + ' to ' + e.to + (e.why === 'Delivery' ? ' (+' + (e.to - e.from) + ' delivered)' : '') + (e.note ? '. ' + e.note : '');
+  }
+  function cntVal(p) { var v = CNT.vals[p.id]; if (v == null || !/\d/.test(String(v))) return null; return Math.min(99999, parseInt(String(v).replace(/\D/g, ''), 10)); }
+  // what saving the count would change for this product (null = nothing)
+  function cntChange(p) { var n = cntVal(p); if (n === null) return null; if (p.stock == null) return CNT.start[p.id] ? { from: null, to: n } : null; return n === p.stock ? null : { from: p.stock, to: n }; }
+  function cntChanges() { var out = []; shopItems().forEach(function (p) { var c = cntChange(p); if (c) out.push({ p: p, from: c.from, to: c.to }); }); return out; }
+  function cntDiff(p) { var c = cntChange(p); if (!c) return CNT.vals[p.id] != null && cntVal(p) !== null ? '<span class="muted">The same</span>' : ''; if (c.from === null) return '<b class="cnt-d new">Starts at ' + c.to + '</b>'; var d = c.to - c.from; return '<b class="cnt-d ' + (d > 0 ? 'up' : 'dn') + '">' + (d > 0 ? '+' : '-') + Math.abs(d) + '</b>'; }
+  function cntBarTxt(n) { return n + ' product' + (n === 1 ? '' : 's') + ' changed. Not saved yet.'; }
+  // after typing in one box: only the difference and the bar are redrawn, so the cursor stays where it is
+  function cntPaint(id) {
+    var p = prodBy(id), d = $('[data-cnt-d="' + id + '"]'), bar = $('[data-cnt-bar]'), n = cntChanges().length;
+    if (d && p) { d.innerHTML = cntDiff(p); var row = d.closest('tr'); if (row) row.classList.toggle('chg', !!cntChange(p)); }
+    if (bar) { bar.hidden = !n; var t = $('[data-cnt-n]', bar); if (t) t.textContent = cntBarTxt(n); }
+  }
+  // save every changed count at once. Returns how many products changed.
+  function countSave() {
+    var ch = cntChanges();
+    ch.forEach(function (c) { c.p.stock = c.to; stockNote(c.p, c.from, c.to, 'Stock count'); });
+    if (ch.length) log('Stock count: ' + ch.length + ' product' + (ch.length === 1 ? '' : 's') + ' changed. ' + ch.slice(0, 8).map(function (c) { return c.p.label + ' ' + (c.from === null ? 'starts at ' + c.to : c.from + ' to ' + c.to); }).join(', ') + (ch.length > 8 ? ' and ' + (ch.length - 8) + ' more' : ''));
+    cntReset(); if (ch.length) save(); return ch.length;
+  }
+  // a delivery: added to the stock right away. Returns what is wrong, or ''.
+  function stockDeliver(id, n, note) {
+    var p = prodBy(id); n = parseInt(String(n).replace(/\D/g, ''), 10);
+    if (!p || p.stock == null) return 'This product is not counted yet. Tick "Start counting" first.';
+    if (!(n > 0)) return 'Type how many came in';
+    var from = p.stock, typed = CNT.vals[id] != null ? cntVal(p) : null; p.stock = Math.min(99999, from + n); stockNote(p, from, p.stock, 'Delivery', note);
+    if (typed !== null) CNT.vals[id] = String(typed + n);   // a count typed before the delivery keeps its difference
+    log('Delivery: +' + n + ' ' + p.label + ' (' + from + ' to ' + p.stock + ')' + (note ? '. ' + note : '')); save(); return '';
+  }
+  function actDelivery(id) {
+    var p = prodBy(id); if (!p || p.stock == null) return;
+    modal('Add a delivery', '<p><b>' + esc(p.label) + '</b><br><span class="muted">In stock now: ' + p.stock + '</span></p>' +
+      '<label class="fld"><span>How many came in?</span><input name="n" inputmode="numeric" data-stp min="1" max="9999" value="" placeholder="0" autocomplete="off"></label>' +
+      '<p class="hint" data-del-sum>Type the number that was delivered. It is added to the stock.</p>' +
+      '<label class="fld"><span>Note (optional)</span><input name="t" maxlength="80" placeholder="For example: from the wood supplier" autocomplete="off"></label>',
+      'Add to stock', function (f) { var n = parseInt(fval(f, 'n'), 10), err = stockDeliver(id, fval(f, 'n'), fval(f, 't')); if (err) { toast(esc(err)); return false; } render(); toast('+' + n + ' delivered. ' + esc(p.label) + ': ' + p.stock + ' in stock.'); },
+      { onOpen: function (f) { f.elements.n.addEventListener('input', function () { var n = parseInt(f.elements.n.value, 10), el = $('[data-del-sum]', f); if (el) el.innerHTML = n > 0 ? p.stock + ' + ' + n + ' = <b>' + (p.stock + n) + ' in stock</b>' : 'Type the number that was delivered. It is added to the stock.'; }); } });
+  }
+  function prodList(items) { var q = PROD.q.toLowerCase(); return items.filter(function (p) { return (!PROD.cat || p.cat === PROD.cat) && (!PROD.stock || (PROD.stock === 'low' ? lowStock(p) : PROD.stock === 'counted' ? p.stock != null : PROD.stock === 'uncounted' ? p.stock == null : PROD.stock === 'hidden' ? p.active === false : p.active !== false)) && (!q || (p.label + ' ' + (p.note || '')).toLowerCase().indexOf(q) >= 0); }); }
+  function prodFilters(items) {
+    return '<div class="filters"><label class="search">' + ic('search') + '<input type="search" data-prodq placeholder="Search products" value="' + esc(PROD.q) + '" aria-label="Search products"></label>' + fsel('PROD:stock', PROD.stock, [['', 'Any stock level'], ['low', 'Low on stock'], ['counted', 'Stock counted'], ['uncounted', 'Stock not counted'], ['on', 'On the till'], ['hidden', 'Hidden from the till']]) + '</div>' +
+      '<div class="chips scroll"><button class="chip' + (!PROD.cat ? ' on' : '') + '" data-prodcat="">All <span>' + items.length + '</span></button>' + prodCats().map(function (c) { var n = items.filter(function (p) { return p.cat === c; }).length; return n ? '<button class="chip' + (PROD.cat === c ? ' on' : '') + '" data-prodcat="' + esc(c) + '">' + esc(c) + ' <span>' + n + '</span></button>' : ''; }).join('') + '</div>';
+  }
+  function countHTML() {
+    var items = shopItems(), list = prodList(items), n = cntChanges().length;
+    return '<div class="page-h"><div><h1>Count stock</h1><p class="muted">Type how many of each product there are now. Nothing changes until you press "Save the count".</p></div><div class="ph-act"><button class="btn ghost" data-act="count-cancel">Cancel</button><button class="btn" data-act="count-save">' + ic('check') + 'Save the count</button></div></div>' +
+      '<div class="callout cflex">' + ic('info') + '<div><b>Tab or Enter jumps to the next product.</b> Plus and minus change the number by one. Did a delivery just come in? Press "Add a delivery" and type how many: it is added to the stock right away.</div></div>' +
+      prodFilters(items) +
+      '<div class="card flush"><table class="tbl prods cnt"><thead><tr><th>Product</th><th class="r">In stock before</th><th>Count now</th><th>Difference</th><th></th></tr></thead><tbody>' +
+      (list.length ? list.map(function (p) {
+        var counted = p.stock != null, on = counted || CNT.start[p.id], v = CNT.vals[p.id] != null ? CNT.vals[p.id] : counted ? p.stock : '';
+        return '<tr data-cnt-row="' + p.id + '"' + (cntChange(p) ? ' class="chg"' : '') + '><td data-l="Product"><div class="prod-cell">' + prodPicHTML(p, 'prod-thumb') + '<div><b>' + esc(p.label) + '</b><small>' + esc(p.cat || '') + '</small></div></div></td>' +
+          '<td data-l="Before" class="r">' + (counted ? (lowStock(p) ? '<span class="pill warn"><i></i>' + p.stock + ' left</span>' : p.stock) : '<span class="muted">Not counted</span>') + '</td>' +
+          '<td data-l="Count">' + (on ? '<input data-cnt="' + p.id + '" data-stp inputmode="numeric" min="0" max="99999" value="' + esc(v) + '" autocomplete="off" aria-label="How many ' + esc(p.label) + ' there are now">' : '') +
+          (counted ? '' : '<label class="check cnt-start"><input type="checkbox" data-cnt-start="' + p.id + '"' + (on ? ' checked' : '') + '><span>Start counting</span></label>') + '</td>' +
+          '<td data-l="Difference" data-cnt-d="' + p.id + '">' + cntDiff(p) + '</td>' +
+          '<td class="row-btn">' + (counted ? '<button type="button" class="btn ghost sm" data-act="stock-in" data-ref="' + p.id + '" tabindex="-1">' + ic('plus') + 'Add a delivery</button>' : '') + '</td></tr>';
+      }).join('') : '<tr><td colspan="5" class="empty">No products match.</td></tr>') + '</tbody></table></div>' +
+      '<div class="savebar" data-cnt-bar' + (n ? '' : ' hidden') + '><span>' + ic('info') + '<span data-cnt-n>' + cntBarTxt(n) + '</span></span><button class="btn ghost" data-act="count-cancel">Cancel</button><button class="btn" data-act="count-save">Save the count</button></div>';
+  }
   function vProducts() {
-    var items = shopItems(), sold = soldSince(30), q = PROD.q.toLowerCase(), cats = prodCats();
-    var list = items.filter(function (p) { return (!PROD.cat || p.cat === PROD.cat) && (!PROD.stock || (PROD.stock === 'low' ? lowStock(p) : PROD.stock === 'counted' ? p.stock != null : PROD.stock === 'uncounted' ? p.stock == null : PROD.stock === 'hidden' ? p.active === false : p.active !== false)) && (!q || (p.label + ' ' + (p.note || '')).toLowerCase().indexOf(q) >= 0); });
+    if (PROD.count) return countHTML();
+    var items = shopItems(), sold = soldSince(30);
+    var list = prodList(items);
     var low = items.filter(lowStock), sq = 0, sv = 0; Object.keys(sold).forEach(function (k) { sq += sold[k].q; sv += sold[k].v; });
-    return '<div class="page-h"><div><h1>Products</h1><p class="muted">Everything the camp shop sells. ' + (hasFee() ? 'Enter the cash and EFT price; card payments add ' + cardFee() + '%.' : 'One price, however the guest pays.') + '</p></div><div class="ph-act"><button class="btn" data-act="prod-add">' + ic('plus') + 'Add product</button></div></div>' +
+    return '<div class="page-h"><div><h1>Products</h1><p class="muted">Everything the camp shop sells. ' + (hasFee() ? 'Enter the cash and EFT price; card payments add ' + cardFee() + '%.' : 'One price, however the guest pays.') + '</p></div><div class="ph-act"><button class="btn ghost" data-act="count-start">' + ic('clip') + 'Count stock</button><button class="btn" data-act="prod-add">' + ic('plus') + 'Add product</button></div></div>' +
       '<div class="kpis">' + tile('Products', items.length, items.filter(function (p) { return p.active !== false; }).length + ' showing on the till') + tile('Low on stock', low.length, low.length ? low.map(function (p) { return esc(p.label); }).slice(0, 2).join(', ') : 'All stocked up', null, low.length ? 'warn' : 'ok') + tile('Sold in the last 30 days', sq + ' items', money(sv)) + '</div>' +
-      '<div class="filters"><label class="search">' + ic('search') + '<input type="search" data-prodq placeholder="Search products" value="' + esc(PROD.q) + '" aria-label="Search products"></label>' + fsel('PROD:stock', PROD.stock, [['', 'Any stock level'], ['low', 'Low on stock'], ['counted', 'Stock counted'], ['uncounted', 'Stock not counted'], ['on', 'On the till'], ['hidden', 'Hidden from the till']]) + '</div>' +
-      '<div class="chips scroll"><button class="chip' + (!PROD.cat ? ' on' : '') + '" data-prodcat="">All <span>' + items.length + '</span></button>' + cats.map(function (c) { var n = items.filter(function (p) { return p.cat === c; }).length; return n ? '<button class="chip' + (PROD.cat === c ? ' on' : '') + '" data-prodcat="' + esc(c) + '">' + esc(c) + ' <span>' + n + '</span></button>' : ''; }).join('') + '</div>' +
+      prodFilters(items) +
       '<div class="card flush"><table class="tbl prods"><thead><tr><th>Product</th><th>Category</th><th class="r">Price</th><th class="r">In stock</th><th class="r">Sold, 30 days</th><th>Status</th></tr></thead><tbody>' +
       (list.length ? list.map(function (p) {
         var s = sold[p.id] || { q: 0, v: 0 };
@@ -4096,7 +4463,7 @@
           '<td data-l="In stock" class="r" data-s="' + (p.stock == null ? -1 : p.stock) + '">' + (p.stock == null ? '<span class="muted">Not counted</span>' : lowStock(p) ? '<span class="pill warn"><i></i>' + p.stock + ' left</span>' : p.stock) + '</td><td data-l="Sold" class="r" data-s="' + s.q + '">' + s.q + '<small>' + money(s.v) + '</small></td>' +
           '<td data-l="Status">' + (p.active === false ? '<span class="pill muted"><i></i>Hidden</span>' : '<span class="pill ok"><i></i>On the till</span>') + '</td></tr>';
       }).join('') : '<tr><td colspan="6" class="empty">No products match.</td></tr>') + '</tbody></table></div>' +
-      '<p class="demo-note">' + ic('info') + 'Click a product to change its price, stock or category. In the live version these prices also show on the website\'s Rates page.</p>';
+      '<p class="demo-note">' + ic('info') + 'Click a product to change its price, stock or category. To say how many there are of many products at once, press "Count stock". In the live version these prices also show on the website\'s Rates page.</p>';
   }
   function actProduct(id, copyId) {
     var items = shopItems(), it = id ? prodBy(id) : null, src = it || (copyId ? prodBy(copyId) : null), cats = prodCats(), cat = src ? src.cat : SHOP.cat || PROD.cat || CATS[0];
@@ -4116,6 +4483,7 @@
       '<div class="prod-ph" data-prod-ph>' + phHTML(src ? src.label : '') + '</div>' +
       '<h5>Stock</h5><label class="check"><input type="checkbox" name="track" data-track' + (track ? ' checked' : '') + '><span>Count stock for this product</span></label>' +
       '<div class="grid2" data-stockf' + (track ? '' : ' hidden') + '><label class="fld"><span>In stock now</span><input name="s" inputmode="numeric" data-stp min="0" max="9999" value="' + (src && src.stock != null ? src.stock : '') + '"></label><label class="fld"><span>Warn me when it gets to</span><input name="l" inputmode="numeric" data-stp min="0" max="999" value="' + (src ? src.lowAt || 5 : 5) + '"></label></div>' +
+      (it && it.stockLog && it.stockLog.length ? '<p class="hint stock-last" data-stock-last>' + ic('clock') + ' ' + esc(stockLine(it.stockLog[0])) + '</p>' + (it.stockLog.length > 1 ? '<details class="stock-more"><summary>Earlier changes</summary><ul>' + it.stockLog.slice(1, 8).map(function (e) { return '<li>' + esc(stockLine(e)) + '</li>'; }).join('') + '</ul></details>' : '') : it && it.stock != null ? '<p class="hint stock-last" data-stock-last>' + ic('clock') + ' No stock count saved yet. Use "Count stock" on the Products page to count many products at once.</p>' : '') +
       '<label class="check"><input type="checkbox" name="on"' + (!src || src.active !== false ? ' checked' : '') + '><span>Show this product on the till</span></label>' +
       (it ? '<div class="m-extra"><button type="button" class="btn ghost sm" data-act="prod-dup" data-ref="' + it.id + '">Duplicate</button><button type="button" class="btn ghost sm danger-t" data-act="prod-del" data-ref="' + it.id + '">Delete product</button></div>' : ''),
       it ? 'Save' : 'Add product', function (f) {
@@ -4126,8 +4494,9 @@
         if (items.some(function (x) { return x !== it && K.norm(x.label) === K.norm(nm); })) { toast('There is already a product called ' + esc(nm)); return false; }
         var tr = fval(f, 'track'), s = parseInt(fval(f, 's'), 10);
         var row = { label: nm, amount: amt, note: fval(f, 't'), cat: c, active: fval(f, 'on'), stock: tr ? (isNaN(s) ? 0 : s) : null, lowAt: parseInt(fval(f, 'l'), 10) || 5, img: pic };
-        var tgt = it;
+        var tgt = it, wasS = it ? (it.stock == null ? null : it.stock) : null;
         if (it) Object.keys(row).forEach(function (k) { it[k] = row[k]; });
+        if (it && wasS !== row.stock) stockNote(it, wasS, row.stock, 'Changed in the product form');
         else { var base = slugify(nm), pid = base, n = 2; while (prodBy(pid)) pid = base + '-' + n++; row.id = pid; DB.products.push(row); tgt = row; }
         log((it ? 'Updated product ' : 'Added product ') + nm);
         if (!save()) { tgt.img = src && src.img && src.img !== pic ? src.img : ''; save(); render(); toast('Saved, but the photo is too big for this browser. Try a smaller photo.'); return; }
@@ -4350,6 +4719,7 @@
     });
     DB.sales.forEach(function (x) {
       if (!inR(x.d)) return;
+      if (x.m === 'account') { S.shop += x.amt; S.shopQ += x.qty; S.items[x.item] = (S.items[x.item] || 0) + x.amt; S.itemsQ[x.item] = (S.itemsQ[x.item] || 0) + x.qty; var ia = at(x.d); if (ia >= 0) S.s.shop[ia] += x.amt; return; }   // sold to a business on account: sold, but no money yet (a cancelled one takes itself off again)
       if (x.amt < 0) { S.refunds -= x.amt; return; }
       if (x.m === 'bill') { S.shop += x.amt; S.shopQ += x.qty; S.items[x.item] = (S.items[x.item] || 0) + x.amt; S.itemsQ[x.item] = (S.itemsQ[x.item] || 0) + x.qty; var ib = at(x.d); if (ib >= 0) S.s.shop[ib] += x.amt; return; }
       var i = at(x.d); S.shop += x.amt; S.shopN++; S.shopQ += x.qty; S.received += x.amt; S.nPay++; S[x.m] += x.amt;
@@ -4357,6 +4727,8 @@
       S.items[x.item] = (S.items[x.item] || 0) + x.amt; S.itemsQ[x.item] = (S.itemsQ[x.item] || 0) + x.qty;
       if (i >= 0) { S.s.received[i] += x.amt; S.s[x.m][i] += x.amt; S.s.shop[i] += x.amt; }
     });
+    // what businesses paid for their account sales: received on the day they paid
+    (DB.shopPaid || []).forEach(function (p) { if (!inR(p.d)) return; var ip = at(p.d); S.received += p.amt; S.nPay++; S[p.m] += p.amt; if (p.m === 'card') { S.shopCard += p.amt; S.fee += fee(p.amt); } if (ip >= 0) { S.s.received[ip] += p.amt; S.s[p.m][ip] += p.amt; } });
     S.days = diff(from, to) + 1; S.standNights = STANDS.length * S.days;
     S.occ = S.standNights ? S.nights / S.standNights * 100 : 0;
     S.booked = S.made - S.cancelled;
@@ -4638,7 +5010,7 @@
   function sigData(id) {
     DB.settings.sigs = DB.settings.sigs || {};
     var st = STAFF.filter(function (x) { return x.id === id; })[0] || STAFF[0];
-    if (!DB.settings.sigs[st.id]) DB.settings.sigs[st.id] = { name: SIG_NAMES[st.id] || st.name, title: st.role, mobile: '', email: 'info@kyleu.co.za', photo: true, dgr: true, social: true };
+    if (!DB.settings.sigs[st.id]) DB.settings.sigs[st.id] = { name: SIG_NAMES[st.id] || st.name, title: roleName(st.role), mobile: '', email: 'info@kyleu.co.za', photo: true, dgr: true, social: true };
     return DB.settings.sigs[st.id];
   }
   // the DGR Certified Partner logo as Dinokeng publishes it on its own website (approved dark green version)
@@ -4672,7 +5044,7 @@
     var fld = function (k, l, v, ph, shared) { return '<label class="fld"><span>' + l + '</span><input data-sig="' + (shared ? 'shared:' : '') + k + '" value="' + esc(v || '') + '" placeholder="' + esc(ph || '') + '"></label>'; };
     var chk = function (k, l) { return '<label class="check"><input type="checkbox" data-sig-chk="' + k + '"' + (d[k] ? ' checked' : '') + '><span>' + l + '</span></label>'; };
     return '<div class="cols"><section class="card"><header class="card-h"><h3>Email signature</h3></header>' +
-      '<label class="fld"><span>Whose signature?</span><select data-sig-who>' + STAFF.map(function (x) { return '<option value="' + x.id + '"' + (x.id === who ? ' selected' : '') + '>' + esc(sigData(x.id).name) + ' (' + esc(x.role) + ')</option>'; }).join('') + '</select></label>' +
+      '<label class="fld"><span>Whose signature?</span><select data-sig-who>' + STAFF.map(function (x) { return '<option value="' + x.id + '"' + (x.id === who ? ' selected' : '') + '>' + esc(sigData(x.id).name) + ' (' + esc(roleName(x.role)) + ')</option>'; }).join('') + '</select></label>' +
       '<div class="grid2">' + fld('name', 'Full name', d.name) + fld('title', 'Job title', d.title, 'e.g. Owner') + '</div>' +
       '<div class="grid2">' + fld('email', 'Email', d.email) + fld('mobile', 'Own mobile (optional)', d.mobile, 'e.g. 082 123 4567') + '</div>' +
       chk('photo', 'Show the Kyleu logo') + chk('dgr', 'Show "Proud DGR CP Member" (Dinokeng asks partners to use it in email signatures)') + chk('social', 'Show the Facebook and Instagram links (set under Social media)') +
@@ -4709,19 +5081,259 @@
       '<div class="grid2">' + bankF('bank', 'Bank') + bankF('accName', 'Account name') + '</div><div class="grid2">' + bankF('accNo', 'Account number') + bankF('branch', 'Branch code') + '</div><div class="grid2">' + bankF('accType', 'Account type') + bankF('swift', 'SWIFT code (for payments from abroad)') + '</div>' +
       '<p class="demo-note">' + ic('info') + 'Demo: kept in this browser and used by the website demo too. In the live version these are saved on the server.</p></section>';
   }
+  /* ---------- people and roles (Settings > Staff & access) ----------
+     The five built-in roles are in ROLES (their standard settings). Owners may adjust Manager, Front desk, Gate and Worker and
+     make roles of their own: both are kept in DB.roles. The Owner role is never changed, so nobody can lock themselves out.
+     The people are kept in DB.staff (name, email, role, paused). STAFF always holds those same people, so every list of staff
+     (sign-in, signatures, the activity log filter) shows added people too. Every change here is written to the activity log. */
+  var PPL = { tab: 'people' };
+  var SEEN = { sherri: 'Today, 07:12', devon: 'Yesterday', kyran: '3 days ago', leuan: 'Today, 09:40', gate: 'Today, 06:55', thabo: 'Today, 07:30', sipho: 'Yesterday' };   // demo only
+  var RL_HOME = 'Home';
+  // one plain line per screen, for the tick list
+  var RL_DESC = {
+    site: 'The list of jobs per stand: cleaning, wood, deliveries, repairs and stand notes. It never shows guest names, phone numbers or money.',
+    dashboard: 'The start page: who arrives and leaves today, and what needs attention.',
+    gate: 'Tick guests in and out at the gate, with their vehicles, indemnities and what they still owe.',
+    bookings: 'Every booking: make one, change it, cancel it and send the guest a message.',
+    calendar: 'Which stand is taken on which night, and blocks.',
+    enquiries: 'Messages from guests and the replies Kyleu sent.',
+    clients: 'Everyone who has booked, with their contact details and past stays.',
+    vouchers: 'The Dinokeng discount codes for each booking and sending them to guests.',
+    indemnities: 'The signed indemnity forms, and who still has to sign.',
+    eft: 'Bookings that wait for an EFT, proof of payment, and marking a booking as paid.',
+    payments: 'Every payment that came in, credits, and what is still owed.',
+    reports: 'Income, how full the camp is and what the shop sold.',
+    shop: 'The till: ring up a sale, put it on a guest\'s tab or sell to a business.',
+    drives: 'Game drive bookings and the time slots.',
+    products: 'What the shop sells: prices, photos and stock counts.',
+    stands: 'The stands and their details, closing a stand for some nights, and removing anyone\'s stand note.',
+    rates: 'Prices per night, fees, holidays and the booking rules.',
+    settings: 'Quotes and invoices, bank details, message wording, signatures and the indemnity. People and roles can only be changed by an Owner.',
+    news: 'Write and post the camp news on the website.',
+    dgrnews: 'Choose which Dinokeng news shows on the website.',
+    social: 'The social media posts shown on the website.',
+    webtext: 'Change the words and photos on the website pages.'
+  };
+  // what a person may see or do on top of the screens: these are checked in the code with can('cap:...')
+  var RL_CAPS = [
+    { id: 'cap:guests', t: 'Guest names, phone numbers and bookings', d: 'May open a booking to see the guest, their phone number, vehicles and payments, and use the "Find a booking" box at the top.' },
+    { id: 'cap:money', t: 'Money: refunds, credits and taking off a payment', d: 'May remove a payment that was entered by mistake, refund when a booking is cancelled, make or change a credit, and see "Received this month".' }
+  ];
+  // a screen that only makes sense with one of those: ticking the screen ticks it too
+  var RL_NEEDS = { dashboard: ['cap:guests'], gate: ['cap:guests'], bookings: ['cap:guests'], calendar: ['cap:guests'], enquiries: ['cap:guests'], clients: ['cap:guests'], vouchers: ['cap:guests'], indemnities: ['cap:guests'], shop: ['cap:guests'], drives: ['cap:guests'], eft: ['cap:guests', 'cap:money'], payments: ['cap:guests', 'cap:money'], reports: ['cap:money'] };
+  function rlGroups() { var out = []; NAV.forEach(function (n) { var g = n.g || RL_HOME, x = out.filter(function (o) { return o.g === g; })[0]; if (!x) out.push(x = { g: g, items: [] }); x.items.push(n); }); return out; }
+  function rlLabel(id) { var n = NAV.filter(function (x) { return x.id === id; })[0], c = RL_CAPS.filter(function (x) { return x.id === id; })[0]; return n ? n.t : c ? c.t : id; }
+  function listAnd(a, max) { a = a.slice(); if (max && a.length > max) a = a.slice(0, max - 1).concat([(a.length - max + 1) + ' more']); return a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1]; }
+  // a clean list for a role: only things that exist, in menu order, with what the ticked screens need added
+  function roleTidy(list) {
+    var has = {}; (list || []).forEach(function (x) { has[x] = 1; });
+    NAV.forEach(function (n) { if (has[n.id]) (RL_NEEDS[n.id] || []).forEach(function (c) { has[c] = 1; }); });
+    return NAV.map(function (n) { return n.id; }).concat(RL_CAPS.map(function (c) { return c.id; })).filter(function (x) { return has[x]; });
+  }
+  function roleScreens(list) { return (list || []).filter(function (x) { return x.indexOf('cap:') !== 0; }); }
+  function roleSummary(k) { var c = roleCan(k), n = roleScreens(c).length; return n + ' screen' + (n === 1 ? '' : 's') + ', ' + (c.indexOf('cap:guests') >= 0 ? 'sees guests' : 'no guest details') + ', ' + (c.indexOf('cap:money') >= 0 ? 'handles money' : 'no money'); }
+  function roleDiff(was, now) {
+    var a = now.filter(function (x) { return was.indexOf(x) < 0; }).map(rlLabel), r = was.filter(function (x) { return now.indexOf(x) < 0; }).map(rlLabel);
+    return (a.length ? ' Added: ' + a.join(', ') + '.' : '') + (r.length ? ' Taken away: ' + r.join(', ') + '.' : '');
+  }
+  function staffBy(id) { return STAFF.filter(function (x) { return x.id === id; })[0] || null; }
+  function staffWith(k) { return STAFF.filter(function (s) { return s.role === k; }); }
+  function activeOwners() { return STAFF.filter(function (s) { return s.role === 'Owner' && !s.paused; }); }
+  // DB.staff is the list of people; STAFF holds the same people so everything that lists staff keeps working
+  function staffSync() {
+    DB.roles = DB.roles || {};
+    if (!DB.staff) {
+      DB.staff = JSON.parse(STAFF0);
+      Object.keys(DB.staffRoles || {}).forEach(function (id) { var su = DB.staff.filter(function (x) { return x.id === id; })[0]; if (su && ROLES[DB.staffRoles[id]]) su.role = DB.staffRoles[id]; });   // roles changed before people were kept in DB.staff
+      delete DB.staffRoles;
+    }
+    DB.staff.forEach(function (s) { if (!roleGet(s.role)) s.role = 'Worker'; });   // a role that is gone: the role that sees the least
+    if (!DB.staff.some(function (s) { return s.role === 'Owner' && !s.paused; })) { var o = DB.staff.filter(function (s) { return s.role === 'Owner'; })[0]; if (o) delete o.paused; else DB.staff = [JSON.parse(STAFF0)[0]].concat(DB.staff.filter(function (s) { return s.id !== 'sherri'; })); }   // never without an Owner who can sign in
+    STAFF.length = 0; DB.staff.forEach(function (s) { STAFF.push(s); });
+    if (ME) ME = staffBy(ME.id) || ME;
+  }
+  // after "Reset demo data": the people and roles are the demo's again, so draw the menu again, or sign out someone who is no longer on the list
+  function staffAfterReset() { if (!ME) return; if (STAFF.indexOf(ME) < 0 || ME.paused) { try { sessionStorage.removeItem(SESS); } catch (x) {} ME = null; location.hash = ''; login(); return; } shell(); render(); }
+  // why this person cannot be paused, removed or given another role ('' = it is fine)
+  function staffLock(s, what) {
+    if (ME && s.id === ME.id) return what === 'role' ? 'You cannot change your own role' : what === 'pause' ? 'You cannot pause yourself' : 'You cannot remove yourself';
+    if (s.role === 'Owner' && !s.paused && activeOwners().length < 2) return 'Kyleu needs at least one Owner who can sign in';
+    return '';
+  }
+  // add a person (id '') or change one. Returns what is wrong, or '' when saved.
+  function staffSave(id, name, email, role) {
+    if (!isOwner()) return 'Only an Owner can change people';
+    var s = id ? staffBy(id) : null; if (id && !s) return 'That person is no longer on the list';
+    name = String(name || '').replace(/\s+/g, ' ').trim(); email = String(email || '').trim().toLowerCase();
+    if (!name) return 'Type the person\'s name';
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return 'Type an email address, like name@kyleu.co.za';
+    if (STAFF.some(function (x) { return x !== s && String(x.email).toLowerCase() === email; })) return 'Someone else already has that email address';
+    if (!roleGet(role)) return 'Choose a role';
+    if (s) {
+      if (s.role !== role) { var why = staffLock(s, 'role'); if (why) return why; }
+      var ch = []; if (s.name !== name) ch.push('name was ' + s.name); if (s.email !== email) ch.push('email is now ' + email); if (s.role !== role) ch.push('role changed from ' + roleName(s.role) + ' to ' + roleName(role));
+      if (!ch.length) return '';
+      s.name = name; s.email = email; s.role = role; log('Changed ' + name + ': ' + ch.join(', '));
+    } else { DB.staff.push({ id: uid('u'), name: name, email: email, role: role, added: nowStamp() }); log('Added ' + name + ' (' + email + ') as ' + roleName(role)); }
+    staffSync(); save(); return '';
+  }
+  function staffRole(id, role) {
+    var s = staffBy(id); if (!s || !isOwner() || !roleGet(role)) return 'That cannot be changed';
+    if (s.role === role) return ''; var why = staffLock(s, 'role'); if (why) return why;
+    var was = s.role; s.role = role; log('Role of ' + s.name + ' changed from ' + roleName(was) + ' to ' + roleName(role)); save(); return '';
+  }
+  function staffPause(id) {
+    var s = staffBy(id); if (!s || !isOwner()) return 'That cannot be changed';
+    if (!s.paused) { var why = staffLock(s, 'pause'); if (why) return why; s.paused = true; log('Paused ' + s.name + ': cannot sign in for now'); }
+    else { delete s.paused; log(s.name + ' can sign in again'); }
+    save(); return '';
+  }
+  function staffRemove(id) {
+    var s = staffBy(id); if (!s || !isOwner()) return 'That cannot be changed';
+    var why = staffLock(s, 'remove'); if (why) return why;
+    DB.staff.splice(DB.staff.indexOf(s), 1); staffSync(); log('Removed ' + s.name + ' (' + roleName(s.role) + ') from the staff list'); save(); return '';
+  }
+  // save a role (key '' = a new one). Returns what is wrong, or '' when saved.
+  function roleSave(key, name, info, list) {
+    if (!isOwner()) return 'Only an Owner can change roles';
+    var r = key ? roleGet(key) : null; if (key && !r) return 'That role is gone';
+    if (r && r.fixed) return 'The Owner role always has everything and cannot be changed';
+    name = String(name || '').replace(/\s+/g, ' ').trim(); info = String(info || '').replace(/\s+/g, ' ').trim(); list = roleTidy(list);
+    if (!roleScreens(list).length) return 'Tick at least one screen, or people with this role could not open anything';
+    DB.roles = DB.roles || {};
+    if (r && r.builtin) {
+      var was = roleTidy(r.can), std = roleTidy(ROLES[key]), same = std.join() === list.join() && (!info || info === ROLE_INFO[key]);
+      if (same) delete DB.roles[key]; else DB.roles[key] = { info: info || ROLE_INFO[key], can: list };
+      log(same && r.changed ? 'Role ' + key + ' is back on the standard settings' : 'Role ' + key + ' changed.' + (roleDiff(was, list) || ' Same screens, new description.'));
+    } else {
+      if (!name) return 'Give the role a name';
+      if (roleKeys().some(function (k) { return k !== key && roleName(k).toLowerCase() === name.toLowerCase(); })) return 'There is already a role called ' + name;
+      if (r) { var wasN = r.name, wasL = roleTidy(r.can); DB.roles[key] = { name: name, info: info, can: list, custom: true }; log('Role ' + name + ' changed.' + (wasN !== name ? ' It was called ' + wasN + '.' : '') + roleDiff(wasL, list)); }
+      else { key = uid('role'); DB.roles[key] = { name: name, info: info, can: list, custom: true }; log('New role ' + name + ': ' + roleSummary(key)); }
+    }
+    save(); return '';
+  }
+  function roleStd(key) {
+    var r = roleGet(key); if (!r || !r.builtin || !r.changed || !isOwner()) return 'Nothing to put back';
+    delete DB.roles[key]; log('Role ' + key + ' is back on the standard settings'); save(); return '';
+  }
+  // delete a role the Owners made. If people still have it they move to another role in the same step.
+  function roleDelete(key, moveTo) {
+    var r = roleGet(key); if (!r || !isOwner()) return 'That role is gone';
+    if (r.builtin) return 'The built-in roles cannot be deleted';
+    var ppl = staffWith(key), to = roleGet(moveTo);
+    if (ppl.length && (!to || moveTo === key)) return 'Choose the role these people move to';
+    ppl.forEach(function (s) { s.role = moveTo; });
+    delete DB.roles[key]; log('Role ' + r.name + ' deleted.' + (ppl.length ? ' ' + listAnd(ppl.map(function (s) { return s.name; })) + ' moved to ' + to.name + '.' : '')); save(); return '';
+  }
+  function staffPage() {
+    var own = isOwner(), keys = roleKeys(), tab = PPL.tab;
+    var head = '<div class="stf-bar"><div class="tabs page-tabs">' + [['people', 'People', STAFF.length], ['roles', 'Roles', keys.length], ['matrix', 'Who can do what', 0]].map(function (t) { return '<button class="' + (tab === t[0] ? 'on' : '') + '" data-stafftab="' + t[0] + '">' + t[1] + (t[2] ? ' <span class="tab-n">' + t[2] + '</span>' : '') + '</button>'; }).join('') + '</div>' +
+      (own && tab === 'people' ? '<button class="btn" data-act="staff-add">' + ic('plus') + 'Add a person</button>' : own && tab === 'roles' ? '<button class="btn" data-act="role-new">' + ic('plus') + 'New role</button>' : '') + '</div>' +
+      (own ? '' : '<p class="callout">' + ic('lock') + ' Only an Owner can change people and roles. You can look, but not change anything here.</p>');
+    if (tab === 'roles') return head + '<p class="muted small stf-intro">A role is a set of screens. Give each person the role that fits their work. The five built-in roles stay, and you can make your own, for example for a shop helper or a bookkeeper.</p><div class="role-grid">' + keys.map(function (k) {
+      var r = roleGet(k), ppl = staffWith(k);
+      return '<article class="card role-c" data-role="' + esc(k) + '"><header class="card-h"><h3>' + esc(r.name) + '</h3><span class="role-tags">' + (r.changed ? '<span class="tag warn">Changed</span>' : '') + '<span class="tag' + (r.builtin ? '' : ' ok') + '">' + (r.builtin ? 'Built in' : 'Your own') + '</span></span></header>' +
+        '<p class="small role-d">' + esc(r.info || 'No description yet.') + '</p>' +
+        '<ul class="role-facts"><li>' + ic('list') + '<span>' + esc(roleSummary(k)) + '</span></li><li>' + ic('users') + '<span>' + (ppl.length ? ppl.length + (ppl.length === 1 ? ' person: ' : ' people: ') + esc(listAnd(ppl.map(function (s) { return s.name; }), 5)) : 'Nobody has this role yet') + '</span></li></ul>' +
+        '<div class="row-btns">' + (!own || r.fixed ? '<button class="btn ghost sm" data-act="role-edit" data-ref="' + esc(k) + '">' + ic(r.fixed ? 'lock' : 'search') + 'See what it can do</button>' : '<button class="btn ghost sm" data-act="role-edit" data-ref="' + esc(k) + '">' + ic('edit') + 'Edit</button>') +
+        (own ? '<button class="btn ghost sm" data-act="role-copy" data-ref="' + esc(k) + '">' + ic('plus') + 'Copy</button>' + (r.builtin ? (r.changed ? '<button class="btn ghost sm" data-act="role-std" data-ref="' + esc(k) + '">' + ic('return') + 'Put back the standard settings</button>' : '') : '<button class="btn ghost sm danger-t" data-act="role-del" data-ref="' + esc(k) + '">' + ic('x') + 'Delete</button>') : '') + '</div></article>';
+    }).join('') + '</div><p class="hint">' + ic('info') + ' A change to a role applies the next time those people open the admin. The Owner role always has everything and cannot be changed.</p>';
+    if (tab === 'matrix') {
+      var cell = function (k, id) { return '<td>' + (roleHas(k, id) ? ic('check', 'ok-t') + '<span class="sr">Yes</span>' : '<span class="mx-no" aria-hidden="true">·</span><span class="sr">No</span>') + '</td>'; };
+      var line = function (id, t) { return '<tr data-mx="' + id + '"><th scope="row">' + esc(t) + '</th>' + keys.map(function (k) { return cell(k, id); }).join('') + '</tr>'; };
+      var gh = function (g) { return '<tr class="mx-g"><th colspan="' + (keys.length + 1) + '">' + esc(g) + '</th></tr>'; };
+      return head + '<p class="muted small stf-intro">Every role next to every screen, to check at a glance. To change a tick, open the role under Roles.</p><section class="card flush"><div class="mx-wrap"><table class="mx"><thead><tr><th>Screen</th>' + keys.map(function (k) { var n = staffWith(k).length; return '<th scope="col"><b>' + esc(roleName(k)) + '</b><small>' + n + (n === 1 ? ' person' : ' people') + '</small></th>'; }).join('') + '</tr></thead><tbody>' +
+        gh('What they may see') + RL_CAPS.map(function (c) { return line(c.id, c.t); }).join('') + rlGroups().map(function (g) { return gh(g.g) + g.items.map(function (n) { return line(n.id, n.t); }).join(''); }).join('') + '</tbody></table></div></section>';
+    }
+    return head + '<section class="card flush"><table class="tbl stf"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Last seen</th><th></th></tr></thead><tbody>' + STAFF.map(function (s) {
+      var me = ME.id === s.id;
+      return '<tr data-staff="' + esc(s.id) + '"' + (s.paused ? ' class="off"' : '') + '><td data-l="Name"><b>' + esc(s.name) + '</b>' + (me ? ' <span class="tag ok">You</span>' : '') + (s.paused ? ' <span class="tag bad">Paused</span>' : '') + '</td><td data-l="Email">' + esc(s.email) + '</td>' +
+        '<td data-l="Role"><select data-staff-role="' + esc(s.id) + '" aria-label="Role for ' + esc(s.name) + '"' + (!own || me ? ' disabled' : '') + '>' + keys.map(function (k) { return '<option value="' + esc(k) + '"' + (k === s.role ? ' selected' : '') + '>' + esc(roleName(k)) + '</option>'; }).join('') + '</select><small class="muted stf-sum">' + esc(roleSummary(s.role)) + '</small></td>' +
+        '<td data-l="Last seen">' + (s.paused ? 'Cannot sign in' : me ? 'Now' : s.seen ? esc(atNice(s.seen)) : SEEN[s.id] || 'Not signed in yet') + '</td>' +
+        '<td class="row-btn" data-l="">' + (own ? '<button class="btn ghost sm" data-act="staff-edit" data-ref="' + esc(s.id) + '">' + ic('edit') + 'Change</button>' + (me ? '' : '<button class="btn ghost sm" data-act="staff-pause" data-ref="' + esc(s.id) + '">' + (s.paused ? 'Let back in' : 'Pause') + '</button><button class="btn ghost sm danger-t" data-act="staff-del" data-ref="' + esc(s.id) + '">Remove</button>') : '') + '</td></tr>';
+    }).join('') + '</tbody></table></section>' +
+      '<p class="demo-note">' + ic('info') + 'Demo: there are no passwords here. Sign out and tap a name under "Demo: sign in as" to see the admin as that person. A paused person is not on that list. In the live version a new person gets an email to choose a password.</p>';
+  }
+  function actStaff(id) {
+    var s = id ? staffBy(id) : null; if ((id && !s) || !isOwner()) return;
+    var me = s && s.id === ME.id, keys = roleKeys(), cur = s ? s.role : 'Front desk';
+    modal(s ? 'Change ' + esc(s.name) : 'Add a person', '<label class="fld"><span>Name</span><input name="n" maxlength="40" value="' + esc(s ? s.name : '') + '" autocomplete="off"></label>' +
+      '<label class="fld"><span>Email (they sign in with it)</span><input name="e" type="email" maxlength="80" value="' + esc(s ? s.email : '') + '" placeholder="name@kyleu.co.za" autocomplete="off"></label>' +
+      '<label class="fld"><span>Role</span><select name="r"' + (me ? ' disabled' : '') + '>' + keys.map(function (k) { return '<option value="' + esc(k) + '"' + (k === cur ? ' selected' : '') + '>' + esc(roleName(k)) + '</option>'; }).join('') + '</select><small class="muted" data-staff-rinfo></small></label>' +
+      (me ? '<p class="hint">' + ic('info') + ' You cannot change your own role. Ask another Owner.</p>' : ''),
+      s ? 'Save' : 'Add person', function (f) {
+        var role = me ? s.role : f.elements.r.value, nm = fval(f, 'n'), err = staffSave(id || '', nm, fval(f, 'e'), role); if (err) { toast(esc(err)); return false; }
+        if (me) { var mb = $('.me-t b'), av = $('.me .avatar'); if (mb) mb.textContent = ME.name; if (av) av.textContent = ME.name.charAt(0); } render(); toast(s ? 'Saved' : esc(nm) + ' added as ' + esc(roleName(role)) + '. They are now on the sign-in screen.');
+      }, { onOpen: function (f) { var show = function () { var r = roleGet(f.elements.r.value), el = $('[data-staff-rinfo]', f); if (el && r) el.textContent = (r.info ? r.info + ' ' : '') + '(' + roleSummary(r.key) + ')'; }; f.elements.r.addEventListener('change', show); show(); } });
+  }
+  function actStaffDel(id) {
+    var s = staffBy(id); if (!s || !isOwner()) return; var why = staffLock(s, 'remove'); if (why) { toast(why); return; }
+    modal('Remove ' + esc(s.name) + '?', '<p>' + esc(s.name) + ' (' + esc(roleName(s.role)) + ') can no longer sign in and is taken off the staff list. What they did stays in the activity log.</p><p class="muted small">Only away for a while? Use Pause instead.</p>', 'Remove', function () { var err = staffRemove(id); if (err) { toast(esc(err)); return false; } render(); toast(esc(s.name) + ' removed'); }, { danger: true });
+  }
+  // the tick list of one role. key = the role to change (or look at); from = the role a new one starts as a copy of
+  function actRole(key, from) {
+    var r = key ? roleGet(key) : null; if (key && !r) return;
+    var ro = !isOwner() || !!(r && r.fixed), src = r || (from && roleGet(from)) || null, list = src ? roleTidy(src.can) : [];
+    var row = function (id, t, d) { return '<label class="rl-row"><input type="checkbox" data-rl="' + id + '"' + (list.indexOf(id) >= 0 ? ' checked' : '') + (ro ? ' disabled' : '') + '><span><b>' + esc(t) + '</b><small>' + esc(d || '') + '</small><em data-rl-why="' + id + '" hidden></em></span></label>'; };
+    var grp = function (g, rows, all) { return '<section class="rl-g" data-rl-g="' + esc(g) + '"><div class="rl-gh"><h4>' + esc(g) + '</h4>' + (ro || !all ? '' : '<button type="button" class="link-btn" data-rl-all>Tick all in this group</button>') + '</div>' + rows + '</section>'; };
+    var body = (ro ? '<p class="callout">' + ic('lock') + ' ' + (r && r.fixed ? 'The Owner role always has everything and cannot be changed, so nobody can lock themselves out.' : 'Only an Owner can change roles.') + '</p>' : '') +
+      (r && r.builtin ? '<div class="rl-top"><div><span class="tag">Built in</span>' + (r.changed ? '<span class="tag warn">Changed</span>' : '') + '<p class="muted small">A built-in role keeps its name and cannot be deleted.' + (r.fixed ? '' : ' You can change what it may open.') + '</p></div>' + (r.changed && !ro ? '<button type="button" class="btn ghost sm" data-act="role-std" data-ref="' + esc(key) + '">' + ic('return') + 'Put back the standard settings</button>' : '') + '</div>'
+        : ro ? '' : '<div class="grid2"><label class="fld"><span>Name of the role</span><input name="n" maxlength="30" value="' + esc(r ? r.name : from ? 'Copy of ' + roleName(from) : '') + '" placeholder="For example: Shop helper" autocomplete="off"></label>' +
+          (r ? '' : '<label class="fld"><span>Start from</span><select name="from"><option value="">Nothing ticked yet</option>' + roleKeys().map(function (k) { return '<option value="' + esc(k) + '"' + (k === from ? ' selected' : '') + '>A copy of ' + esc(roleName(k)) + '</option>'; }).join('') + '</select></label>') + '</div>') +
+      (ro ? '<p class="small">' + esc(r ? r.info : '') + '</p>' : '<label class="fld"><span>What is it for? One short line</span><input name="d" maxlength="160" value="' + esc(src ? src.info : '') + '" placeholder="For example: Helps in the shop on busy weekends" autocomplete="off"></label>') +
+      '<p class="rl-sum" data-rl-sum></p><div class="rl-groups">' + grp('What they may see', RL_CAPS.map(function (c) { return row(c.id, c.t, c.d); }).join(''), false) +
+      rlGroups().map(function (g) { return grp(g.g, g.items.map(function (n) { return row(n.id, n.t, RL_DESC[n.id]); }).join(''), g.items.length > 1); }).join('') + '</div>';
+    modal(r ? (ro ? 'What ' + esc(r.name) + ' can do' : 'Edit the role ' + esc(r.name)) : 'New role', body, ro ? '' : r ? 'Save role' : 'Add role', function (f) {
+      var nm = r && r.builtin ? r.name : fval(f, 'n'), err = roleSave(key || '', nm, fval(f, 'd'), $$('[data-rl]', f).filter(function (x) { return x.checked; }).map(function (x) { return x.dataset.rl; }));
+      if (err) { toast(esc(err)); return false; }
+      render(); toast(r ? 'Role ' + esc(nm) + ' saved. It applies the next time those people open the admin.' : 'Role ' + esc(nm) + ' added. Give it to someone under People.');
+    }, { xl: true, noFocus: !!r, onOpen: function (f) {
+      var boxes = function (c) { return $$('[data-rl]', c || f); }, auto = {};
+      var sync = function () {
+        var on = {}; boxes().forEach(function (x) { on[x.dataset.rl] = x; });
+        RL_CAPS.forEach(function (c) {
+          var need = NAV.filter(function (n) { return on[n.id] && on[n.id].checked && (RL_NEEDS[n.id] || []).indexOf(c.id) >= 0; }).map(function (n) { return n.t; }), box = on[c.id], why = $('[data-rl-why="' + c.id + '"]', f);
+          if (!box || !why) return;
+          if (need.length) { box.checked = true; auto[c.id] = 1; } else if (auto[c.id]) { box.checked = false; auto[c.id] = 0; }   // ticked for a screen: it goes again with the last screen that needs it
+          if (!ro) box.disabled = !!need.length;
+          why.hidden = !need.length || ro; why.textContent = need.length ? 'Ticked for you, because ' + listAnd(need, 4) + (need.length === 1 ? ' needs it.' : ' need it.') + ' Untick ' + (need.length === 1 ? 'that screen' : 'those screens') + ' first to switch this off.' : '';
+        });
+        $$('[data-rl-all]', f).forEach(function (b) { b.textContent = boxes(b.closest('.rl-g')).every(function (x) { return x.checked; }) ? 'Untick all in this group' : 'Tick all in this group'; });
+        var n = boxes().filter(function (x) { return x.checked && x.dataset.rl.indexOf('cap:') !== 0; }).length, sum = $('[data-rl-sum]', f);
+        sum.className = 'rl-sum' + (n ? '' : ' none'); sum.innerHTML = n ? ic('check') + '<span><b>' + n + ' screen' + (n === 1 ? '' : 's') + ' ticked.</b> People with this role see only these on their menu.</span>' : ic('alert') + '<span><b>Nothing is ticked yet.</b> A role needs at least one screen before it can be saved.</span>';
+      };
+      f.addEventListener('change', function (e) {
+        if (e.target.name === 'from') { var fr = roleGet(e.target.value), l = fr ? roleTidy(fr.can) : [], d = f.elements.d; boxes().forEach(function (x) { x.checked = l.indexOf(x.dataset.rl) >= 0; }); if (d && fr && (!d.value.trim() || roleKeys().some(function (k) { return roleGet(k).info === d.value.trim(); }))) d.value = fr.info; auto = {}; }
+        sync();
+      });
+      f.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-rl-all]'); if (!b) return;
+        var bx = boxes(b.closest('.rl-g')), all = bx.every(function (x) { return x.checked; }); bx.forEach(function (x) { x.checked = !all; }); sync();
+      });
+      sync();
+    } });
+  }
+  function actRoleDel(key) {
+    var r = roleGet(key); if (!r || r.builtin || !isOwner()) return;
+    var ppl = staffWith(key), others = roleKeys().filter(function (k) { return k !== key; });
+    modal('Delete the role ' + esc(r.name) + '?', ppl.length ? '<p><b>' + ppl.length + (ppl.length === 1 ? ' person has' : ' people have') + ' this role:</b> ' + esc(listAnd(ppl.map(function (s) { return s.name; }))) + '. Choose the role they get instead.</p><label class="fld"><span>Move ' + (ppl.length === 1 ? 'this person' : 'these people') + ' to</span><select name="to">' + others.map(function (k) { return '<option value="' + esc(k) + '"' + (k === 'Front desk' ? ' selected' : '') + '>' + esc(roleName(k)) + ' (' + esc(roleSummary(k)) + ')</option>'; }).join('') + '</select></label>' : '<p>Nobody has this role, so nothing else changes.</p>',
+      ppl.length ? 'Move and delete' : 'Delete role', function (f) { var err = roleDelete(key, ppl.length ? f.elements.to.value : ''); if (err) { toast(esc(err)); return false; } render(); toast('Role ' + esc(r.name) + ' deleted'); }, { danger: true });
+  }
+  function actRoleStd(key) {
+    var r = roleGet(key); if (!r || !r.changed || !isOwner()) return;
+    modal('Put back the standard settings?', '<p>The role <b>' + esc(key) + '</b> goes back to how Kyleu started with it:</p><p class="callout">' + esc(ROLE_INFO[key]) + '</p><p class="muted small">The changes you made to this role are dropped. The people who have it keep it.</p>', 'Put back', function () { var err = roleStd(key); if (err) { toast(esc(err)); return false; } render(); toast('Role ' + esc(key) + ' is back on the standard settings'); });
+  }
+
   function vSettings() {
-    var tabs = [['staff', 'Staff & access'], ['docs', 'Quotes & invoices'], ['payments', 'Payments'], ['camp', 'Check-in & Dinokeng'], ['maps', 'Maps'], ['emails', 'Email templates'], ['sig', 'Email signature'], ['data', 'Data & privacy']];
+    var tabs = [['staff', 'Staff & access'], ['docs', 'Quotes & invoices'], ['payments', 'Payments'], ['camp', 'Check-in & Dinokeng'], ['maps', 'Maps'], ['emails', 'Message templates'], ['sig', 'Email signature'], ['data', 'Data & privacy']];
     var body = '';
-    if (SET === 'staff') body = '<section class="card flush"><table class="tbl"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Last seen</th></tr></thead><tbody>' + STAFF.map(function (s, i) { return '<tr><td data-l="Name"><b>' + s.name + '</b>' + (ME.id === s.id ? ' <span class="tag ok">You</span>' : '') + '</td><td data-l="Email">' + s.email + '</td><td data-l="Role"><select data-staff-role="' + s.id + '" aria-label="Role for ' + s.name + '"' + (ME.role !== 'Owner' || ME.id === s.id ? ' disabled' : '') + '>' + Object.keys(ROLES).map(function (r) { return '<option' + (r === s.role ? ' selected' : '') + '>' + r + '</option>'; }).join('') + '</select></td><td data-l="Last seen">' + (ME.id === s.id ? 'Now' : ['Today 07:12', 'Yesterday', '3 days ago', 'Today 09:40', 'Today 06:55', 'Today 07:30', 'Yesterday'][i] || 'Yesterday') + '</td></tr>'; }).join('') + '</tbody></table></section>' +
-      '<section class="card"><header class="card-h"><h3>What each role is for</h3></header><dl class="role-info">' + Object.keys(ROLES).map(function (r) { return '<div><dt>' + r + '</dt><dd>' + ROLE_INFO[r] + '</dd></div>'; }).join('') + '</dl></section>' +
-      '<section class="card"><header class="card-h"><h3>What each role can see</h3></header><table class="tbl perm"><thead><tr><th>Section</th>' + Object.keys(ROLES).map(function (r) { return '<th>' + r + '</th>'; }).join('') + '</tr></thead><tbody>' + [{ t: 'Guest names, phone numbers and bookings', has: function (r) { return ROLES[r].indexOf('cap:guests') >= 0; } }, { t: 'Money: payments, reports and what was received', has: function (r) { return ROLES[r].indexOf('cap:money') >= 0; } }, { t: 'Site jobs: cleaning, deliveries, repairs, stand notes', has: function (r) { return ROLES[r].indexOf('gate') >= 0 || ROLES[r].indexOf('site') >= 0; } }]
-        .concat(NAV.filter(function (n) { return n.id !== 'site'; }).map(function (n) { return { t: n.t, has: function (r) { return ROLES[r].indexOf(n.id) >= 0; } }; }))
-        .map(function (row, ri) { return '<tr' + (ri < 3 ? ' class="perm-key"' : '') + '><td>' + row.t + '</td>' + Object.keys(ROLES).map(function (r) { return '<td>' + (row.has(r) ? ic('check', 'ok-t') : '<span class="muted">No</span>') + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table><button class="btn ghost" data-act="invite">' + ic('plus') + 'Invite a staff member</button></section>';
+    if (SET === 'staff') body = staffPage();
     if (SET === 'payments') body = '<div class="cols"><section class="card"><header class="card-h"><h3>Card payments</h3><span class="pill warn"><i></i>Not connected</span></header><p class="muted small">Guests pay on a secure page from the card company, so card numbers never touch the Kyleu website. Choose a South African provider:</p><div class="prov">' + ['Yoco', 'PayFast', 'Peach Payments', 'Paystack'].map(function (p) { return '<button class="prov-b" data-act="connect" data-ref="' + p + '"><b>' + p + '</b><small>Connect</small></button>'; }).join('') + '</div>' +
       '<div class="grid2"><label class="fld"><span>Card fee added to card prices</span><input value="' + cardFee() + '%" disabled></label><label class="fld"><span>Provider charges (for reports)</span><input data-provfee value="' + (DB.settings.providerFee || 2.95) + '" inputmode="decimal"></label></div><p class="muted small">Change the card fee on the Rates & fees page.</p></section>' +
       '<section class="card"><header class="card-h"><h3>EFT bank details</h3></header><p class="small">The bank details printed on quotations and invoices are under <button type="button" class="link-btn" data-set="docs">Quotes &amp; invoices</button>.</p></section></div>';
     if (SET === 'docs') body = docsPage();
-    if (SET === 'emails') body = '<div class="tpl-grid">' + Object.keys(TEMPLATES).map(function (k) { var t = TEMPLATES[k]; return '<section class="card"><header class="card-h"><h3>' + t.t + '</h3><span class="muted small">' + ({ confirm: 'Sent when a booking is made', eft: 'Sent 3 days after an unpaid quotation', balance: 'Sent 10 days before arrival', arrival: 'Sent 3 days before arrival', thanks: 'Sent by you right after check-out' })[k] + '</span></header><p class="small"><b>' + esc(t.s) + '</b></p><pre class="tpl">' + esc(t.b({})) + '</pre></section>'; }).join('') + '</div><p class="demo-note">' + ic('info') + 'Words in {curly brackets} are filled in for each guest. In the live version these send automatically.</p>';
+    if (SET === 'emails') body = tplPage();
     if (SET === 'maps') body = '<p class="muted small me-intro">Move campsites, text and buildings, draw roads and footpaths, add new campsites, and change the game drive route and story of the "A day at Kyleu" scroll map. Press Save in the editor when you are done.</p><div class="me-wrap"><iframe class="me-frame" src="map-editor.html" title="Map editor"></iframe></div><div class="row-btns"><a class="btn ghost sm" href="map-editor.html" target="_blank" rel="noopener">' + ic('ext') + 'Open the editor full screen</a></div><p class="demo-note">' + ic('info') + 'Demo: Save updates the website maps in this browser. For the live site, press "Download map file" in the editor and replace assets/js/campmap-layout.js with it (or the live version saves it on the server).</p>';
     if (SET === 'sig') body = sigPage();
     if (SET === 'camp') body = '<section class="card"><header class="card-h"><h3>Check-in and check-out times</h3><span class="muted small">Used on the website, in emails and on the printed sheets</span></header>' +
@@ -4729,8 +5341,8 @@
       '<p class="hint">' + ic('info') + ' Guests choose an arrival time from the earliest check-in onwards. Between check-out and check-in the team cleans the stands.</p></section>' +
       '<section class="card"><header class="card-h"><h3>Thank-you after the stay</h3><span class="muted small">You send it right after check-out, by WhatsApp or email</span></header>' +
       '<label class="fld"><span>Google review link</span><input data-thanks="link" inputmode="url" autocomplete="off" value="' + esc(reviewLink()) + '" placeholder="https://"><small class="muted">Paste the \'Ask for reviews\' link from your Google Business Profile.' + (DB.settings.thanksLink == null && reviewLink() ? ' For now this is the Google reviews link from the website.' : '') + '</small></label>' +
-      '<label class="fld"><span>Message</span><textarea data-thanks="text" rows="9">' + esc(thanksTpl()) + '</textarea></label>' +
-      '<p class="hint">' + ic('info') + ' <b>{first}</b> becomes the guest\'s first name and <b>{link}</b> becomes the review link. This is only a link to Kyleu\'s reviews on Google, not a form on the website. Both boxes save by themselves. Empty the message to get the first wording back.</p></section>' +
+      '<span class="fld-l">Message' + (tplChanged('thanks') ? ' <span class="tag warn">Changed</span>' : '') + '</span><pre class="tpl" data-thanks-prev>' + esc(thanksTpl()) + '</pre><div class="row-btns"><button type="button" class="btn ghost sm" data-act="tpl-edit" data-ref="thanks">' + ic('edit') + 'Change the wording</button></div>' +
+      '<p class="hint">' + ic('info') + ' <b>{first}</b> becomes the guest\'s first name and <b>{link}</b> becomes the review link. This is only a link to Kyleu\'s reviews on Google, not a form on the website. The link saves by itself. The words are one of the <button type="button" class="link-btn" data-set="emails">Message templates</button>.</p></section>' +
       '<div class="cols"><section class="card"><header class="card-h"><h3>Indemnity</h3><button class="btn ghost sm" data-act="ind-print" data-ref="">' + ic('note') + 'Print a blank paper form</button></header><p class="muted small">Guests sign this online when they finalise their booking, or with the signing link, or here at reception. Every signed form keeps its own copy of the exact wording that was signed, so changing it here only affects new signatures. See them all under <a href="#/indemnities">Indemnities</a>.</p><label class="fld"><span>Wording</span><textarea data-indemnity rows="14">' + esc(indText()) + '</textarea></label><p class="hint">' + ic('info') + ' Start a line with <b>##</b> for a heading and <b>-</b> for a bullet; put <b>**</b> around words to make them bold. Have Kyleu\'s lawyer or insurer check the wording.</p></section>' +
       '<section class="card"><header class="card-h"><h3>Dinokeng discount vouchers (DGR CP)</h3></header><p class="small">Kyleu is a proud DGR CP member, allowed to issue Conservation Fee Discount Vouchers. For each booking, staff make one code per vehicle on the Dinokeng partner site, paste the codes on the booking and send them to the client from here, by WhatsApp or email. Dinokeng does not send the codes.</p><p class="small">The guest enters the code when they buy conservation fees on Dinokeng\'s permit site (dinokeng.plnktn.io) and pays the partner rate: R85 instead of R100 per adult per night. Children, pensioners and international guests pay the same either way. Each vehicle that uses the self-drive route also needs a Self Drive Permit, R250 once off.</p><label class="fld"><span>Link to Dinokeng\'s partner site</span><input data-dgrlink value="' + esc(dgrLink()) + '" placeholder="https://"></label><p class="hint">Paste the link you use to request codes. The booking panel opens it for you.</p></section></div>';
     if (SET === 'data') body = '<div class="cols"><section class="card"><header class="card-h"><h3>Privacy (POPIA)</h3></header><p class="small">Guest details are only used to manage bookings. Guests can ask for their details to be removed; deleting a guest keeps the booking for tax records but removes their contact details.</p><p class="small">Only staff with an account can open this admin, and every change is logged.</p></section>' +
@@ -5070,7 +5682,7 @@
   function applyTables() {
     var v = route();
     $$('#view table.tbl').forEach(function (tb, ti) {
-      if (tb.matches('.perm, .rate-matrix, .rates') || tb.closest('details')) return;
+      if (tb.matches('.perm, .rate-matrix, .rates, .cnt, .stf') || tb.closest('details')) return;
       var ths = $$('thead th', tb), body = tb.tBodies[0]; if (!ths.length || !body) return;
       var key = v + '|' + (tb.dataset.sortKey || ti), st = SORT[key], rows = $$(':scope > tr', body), data = rows.filter(dataRow), cols = [];
       tb.dataset.sortKey = key;
@@ -5100,7 +5712,8 @@
   }
 
   var VIEWS = { site: vSite, gate: vGate, webtext: vWeb, dgrnews: vDgr, social: vSocial, dashboard: vDashboard, bookings: vBookings, eft: vEft, calendar: vCalendar, clients: vClients, payments: vPayments, shop: vShop, drives: vDrives, products: vProducts, vouchers: vVouchers, indemnities: vIndemnities, enquiries: vEnquiries, stands: vStands, rates: vRates, reports: vReports, news: vNews, settings: vSettings };
-  function route() { var v = (location.hash.match(/^#\/(\w+)/) || [])[1] || 'dashboard'; if (v === 'guests') v = 'clients'; return VIEWS[v] && can(v) ? v : can('dashboard') ? 'dashboard' : ROLES[ME.role][0]; }
+  function route() { var v = (location.hash.match(/^#\/(\w+)/) || [])[1] || 'dashboard'; if (v === 'guests') v = 'clients'; return VIEWS[v] && can(v) ? v : can('dashboard') ? 'dashboard' : firstView(); }
+  function firstView() { var n = NAV.filter(function (x) { return VIEWS[x.id] && can(x.id); })[0]; return n ? n.id : ''; }   // the first screen this role may open
 
   /* ---------- shell ---------- */
   function badges() {
@@ -5112,12 +5725,15 @@
       NAV.filter(function (n) { return can(n.id); }).map(function (n, i, arr) { return (n.g && (!i || arr[i - 1].g !== n.g) ? '<span class="nav-h">' + n.g + '</span>' : '') + '<a href="#/' + n.id + '" data-nav="' + n.id + '">' + ic(n.i) + '<span>' + n.t + '</span>' + (bd[n.id] ? '<em>' + bd[n.id] + '</em>' : '') + '</a>'; }).join('') +
       '</nav><div class="side-f"><a href="../index.html" target="_blank" rel="noopener">' + ic('ext') + 'View website</a><button data-act="logout">' + ic('out') + 'Sign out</button></div></aside><div class="scrim" data-act="menu"></div>' +
       '<div class="main"><header class="top"><button class="icon-btn menu-btn" data-act="menu" aria-label="Menu">' + ic('menu') + '</button>' + (can('cap:guests') ? '<label class="search top-search">' + ic('search') + '<input data-global placeholder="Find a booking: name, ref or phone" aria-label="Find a booking" aria-keyshortcuts="/ Control+K"><kbd class="kbd" title="Press / to search">/</kbd><div class="sugg" data-sugg hidden></div></label>' : '<span class="top-fill"></span>') +
-      '<span class="demo-badge">Demo data</span><div class="me"><span class="avatar">' + ME.name[0] + '</span><span class="me-t"><b>' + ME.name + '</b><small>' + ME.role + '</small></span></div></header><main id="view" tabindex="-1"></main></div>' +
-      '<nav class="bottom">' + (ME.role === 'Gate' ? ['gate', 'shop'] : ME.role === 'Worker' ? ['site'] : ['dashboard', 'bookings', 'eft', 'calendar']).filter(can).map(function (id) { var n = NAV.filter(function (x) { return x.id === id; })[0]; return '<a href="#/' + id + '" data-nav="' + id + '">' + ic(n.i) + '<span>' + (id === 'eft' ? 'EFT' : n.t) + '</span>' + (bd[id] ? '<em>' + bd[id] + '</em>' : '') + '</a>'; }).join('') + '<button data-act="menu">' + ic('menu') + '<span>More</span></button></nav>' +
+      '<span class="demo-badge">Demo data</span><div class="me"><span class="avatar">' + esc(ME.name.charAt(0)) + '</span><span class="me-t"><b>' + esc(ME.name) + '</b><small>' + esc(roleName(ME.role)) + '</small></span></div></header><main id="view" tabindex="-1"></main></div>' +
+      '<nav class="bottom">' + bottomNav().map(function (id) { var n = NAV.filter(function (x) { return x.id === id; })[0]; return '<a href="#/' + id + '" data-nav="' + id + '">' + ic(n.i) + '<span>' + (id === 'eft' ? 'EFT' : n.t) + '</span>' + (bd[id] ? '<em>' + bd[id] + '</em>' : '') + '</a>'; }).join('') + '<button data-act="menu">' + ic('menu') + '<span>More</span></button></nav>' +
       '<div id="drawer" hidden></div><div id="modal" hidden></div><div class="toasts" aria-live="polite"></div><div class="tip" hidden></div>';
   }
+  // the four buttons at the bottom of a phone: the everyday screens this role may open, or else the first ones on its menu
+  function bottomNav() { var ids = ['dashboard', 'bookings', 'eft', 'calendar'].filter(can); if (ids.length < 2) NAV.forEach(function (n) { if (ids.length < 4 && ids.indexOf(n.id) < 0 && can(n.id)) ids.push(n.id); }); return ids; }
   function render() {
     var v = route(), el = $('#view'); if (!el) return;
+    if (!v) { el.innerHTML = '<p class="empty">Your role cannot open any screen yet. Ask Sherri to change it under Settings, Staff and access.</p>'; return; }
     var bd = badges();
     $$('[data-nav]').forEach(function (a) { a.classList.toggle('on', a.dataset.nav === v); var em = $('em', a), n = bd[a.dataset.nav]; if (n) { if (!em) { em = document.createElement('em'); a.appendChild(em); } em.textContent = n; } else if (em) em.remove(); });
     closeRowMenu(); STG = {};   // each booking's steps are worked out once per draw (stageOf, indStat)
@@ -5131,13 +5747,13 @@
   function login() {
     app.innerHTML = '<div class="login"><form class="login-card" novalidate><img src="../assets/img/logo.png" alt="Kyleu Bush Camp" width="120"><h1>Staff sign in</h1><p class="muted">For the Kyleu team only.</p>' +
       '<label class="fld"><span>Email</span><input name="email" type="email" autocomplete="username" placeholder="you@kyleu.co.za"></label><label class="fld"><span>Password</span><input name="pw" type="password" autocomplete="current-password"></label>' +
-      '<button class="btn wide" type="submit">Sign in</button><div class="or"><span>Demo: sign in as</span></div><div class="quick">' + STAFF.map(function (s) { return '<button type="button" class="chip" data-as="' + s.id + '"><b>' + s.name + '</b> ' + s.role + '</button>'; }).join('') + '</div>' +
+      '<button class="btn wide" type="submit">Sign in</button><div class="or"><span>Demo: sign in as</span></div><div class="quick">' + STAFF.filter(function (s) { return !s.paused; }).map(function (s) { return '<button type="button" class="chip" data-as="' + esc(s.id) + '"><b>' + esc(s.name) + '</b> ' + esc(roleName(s.role)) + '</button>'; }).join('') + '</div>' +
       '<p class="muted small">This is a mock-up with made-up bookings. The live version uses proper staff accounts with a second sign-in step (a code on your phone).</p><a class="small" href="../index.html">Back to the website</a></form></div>';
     var f = $('.login-card');
-    f.addEventListener('submit', function (e) { e.preventDefault(); var em = fval(f, 'email').toLowerCase(), s = STAFF.filter(function (x) { return x.email === em; })[0]; if (!s) { toast('Use a kyleu.co.za staff email, or tap a name below'); return; } start(s); });
+    f.addEventListener('submit', function (e) { e.preventDefault(); var em = fval(f, 'email').toLowerCase(), s = STAFF.filter(function (x) { return String(x.email).toLowerCase() === em; })[0]; if (!s) { toast('Use a kyleu.co.za staff email, or tap a name below'); return; } if (s.paused) { toast(esc(s.name) + ' is paused and cannot sign in. Ask an Owner.'); return; } start(s); });
     $$('[data-as]', f).forEach(function (b) { b.addEventListener('click', function () { start(STAFF.filter(function (x) { return x.id === b.dataset.as; })[0]); }); });
   }
-  function start(s) { ME = s; try { sessionStorage.setItem(SESS, s.id); } catch (e) {} shell(); render(); }
+  function start(s) { ME = s; try { sessionStorage.setItem(SESS, s.id); } catch (e) {} s.seen = nowStamp(); save(); shell(); render(); }
 
   /* ---------- events (one listener for everything) ---------- */
   function csv(name, rows) {
@@ -5201,6 +5817,7 @@
     var rtb = t.closest('[data-ratetab]'); if (rtb) { var sb = $('[data-savebar]'); if (sb && !sb.hidden) { toast('Save or discard your changes first'); return; } RT.tab = rtb.dataset.ratetab; render(); return; }
     var hd = t.closest('[data-hol-del]'); if (hd) { var hdd = hd.dataset.holDel; if (DB.hol.add[hdd]) delete DB.hol.add[hdd]; else DB.hol.del[hdd] = 1; delete P.holidays[hdd]; log('Removed holiday ' + hdd); save(); render(); toast('Date removed'); return; }
     var se = t.closest('[data-set]'); if (se) { SET = se.dataset.set; render(); return; }
+    var stt = t.closest('[data-stafftab]'); if (stt) { PPL.tab = stt.dataset.stafftab; render(); return; }
     var dis = t.closest('[data-dismiss]'); if (dis) { DB.dismissed = DB.dismissed || {}; DB.dismissed[dis.dataset.dismiss] = TODAY; save(); render(); toast('Hidden. It comes back if anything changes.'); return; }
     var wsb = t.closest('[data-wstep]'); if (wsb && drawerRef) { var wsp = wsb.dataset.wstep.split('|'); WSEL[wsp[0]] = wsp[1]; refresh(); return; }
     var ptb = t.closest('[data-ptab]'); if (ptb && drawerRef) {
@@ -5212,6 +5829,7 @@
     var ad = t.closest('[data-add]'); if (ad) { var ap = prodBy(ad.dataset.add); if (ap && ap.stock != null && (CART[ap.id] || 0) >= ap.stock) { toast('Only ' + ap.stock + ' in stock'); return; } CART[ad.dataset.add] = (CART[ad.dataset.add] || 0) + 1; render(); return; }
     var rm = t.closest('[data-rem]'); if (rm) { CART[rm.dataset.rem]--; if (CART[rm.dataset.rem] <= 0) delete CART[rm.dataset.rem]; render(); return; }
     var sl = t.closest('[data-sell]'); if (sl) { sell(sl.dataset.sell); return; }
+    var bzp = t.closest('[data-bizpick]'); if (bzp) { var bzc = bizBy(bzp.dataset.bizpick); if (bzc) { SHOP.who = 'biz'; SHOP.biz = bzc.name; render(); } return; }
     var rt = t.closest('[data-rp-tab]'); if (rt) { RP.tab = rt.dataset.rpTab; rpSave(); rpInstant = true; render(); return; }
     var pd = t.closest('[data-ph-del]'); if (pd) { EDIT.photos.splice(+pd.dataset.phDel, 1); phRefresh(); return; }
     var pc = t.closest('[data-ph-cover]'); if (pc) { var ph = EDIT.photos.splice(+pc.dataset.phCover, 1)[0]; EDIT.photos.unshift(ph); phRefresh(); return; }
@@ -5334,7 +5952,7 @@
     if (act === 'stand-note') return actStandNote(ref || '');
     if (act === 'stand-note-del') {
       var sn = notesDB().filter(function (x) { return x.id === ref; })[0]; if (!sn) return;
-      if (sn.by !== ME.name && ME.role !== 'Owner' && ME.role !== 'Manager') { toast('Only the person who wrote it, or a manager, can remove a note'); return; }
+      if (sn.by !== ME.name && !can('stands')) { toast('Only the person who wrote it, or a manager, can remove a note'); return; }
       notesDB().splice(notesDB().indexOf(sn), 1); siteLog(sn.stand, 'Note removed: ' + sn.text.slice(0, 80)); save(); render(); toast('Note removed'); return;
     }
     if (act === 'site-log-csv') { csv('kyleu-site-work-log.csv', [['Date', 'Time', 'Who', 'Role', 'Stand', 'What']].concat((DB.siteLog || []).map(function (l) { return [l.at.slice(0, 10), l.at.slice(11, 16), l.by, l.role || '', l.stand === 'camp' ? 'Camp' : standById(l.stand).name, l.text]; }))); return; }
@@ -5374,6 +5992,10 @@
     if (act === 'stand-copy') return actStand(null, ref);
     if (act === 'stand-del') return actRemoveStand(ref);
     if (act === 'prod-add') return actProduct(null);
+    if (act === 'count-start') { CNT = { vals: {}, start: {} }; PROD.count = true; render(); window.scrollTo(0, 0); setTimeout(function () { var c1 = $('[data-cnt]'); if (c1) { c1.focus(); c1.select(); } }, 80); return; }
+    if (act === 'count-cancel') { var ccN = cntChanges().length; if (!ccN) { cntReset(); render(); return; } modal('Stop without saving?', '<p>' + ccN + (ccN === 1 ? ' count is' : ' counts are') + ' not saved yet. If you stop now, the stock stays as it was.</p>', 'Stop without saving', function () { cntReset(); render(); }, { danger: true, cancelLabel: 'Keep counting' }); return; }
+    if (act === 'count-save') { var csN = countSave(); render(); window.scrollTo(0, 0); toast(csN ? 'Count saved: ' + csN + ' product' + (csN === 1 ? '' : 's') + ' changed' : 'Nothing was different, so nothing changed'); return; }
+    if (act === 'stock-in') return actDelivery(ref);
     if (act === 'prod-dup') { closeModal(); return actProduct(null, ref); }
     if (act === 'prod-del') { closeModal(); return actRemoveProduct(ref); }
     if (act === 'cart-clear') { CART = {}; render(); return; }
@@ -5386,7 +6008,7 @@
     if (act === 'drive-set') return actDrive(ref);
     if (act === 'drive-del') { var bd2 = byRef(ref), was = drivePrice(bd2.extras.gd); bd2.extras.gd = 0; bd2.drive = null; bd2.eft -= was; bd2.card -= toCard(was); bd2.total = bd2.method === 'card' ? bd2.card : bd2.eft; log('Cancelled the game drive for ' + guestName(bd2), bd2.ref); save(); closeModal(); refresh(); toast('Game drive cancelled. ' + money(was) + ' taken off the booking.'); return; }
     if (act === 'rates-discard') { render(); return; }
-    if (act === 'csv-sales') { var rgs = simpleRange(SHOP.range); csv('kyleu-shop-sales-' + rgs[0] + '-to-' + rgs[1] + '.csv', [['Date', 'Time', 'Item', 'Qty', 'Paid by', 'Amount', 'Stand', 'Booking', 'Staff']].concat(DB.sales.filter(function (x) { return x.d >= rgs[0] && x.d <= rgs[1]; }).map(function (x) { return [x.d, x.t, x.item, x.qty, saleMethod(x.m), x.amt, x.stand, x.ref, x.by]; }))); return; }
+    if (act === 'csv-sales') { var rgs = simpleRange(SHOP.range); csv('kyleu-shop-sales-' + rgs[0] + '-to-' + rgs[1] + '.csv', [['Date', 'Time', 'Item', 'Qty', 'Paid by', 'Amount', 'Stand', 'Booking', 'Staff', 'Business', 'Account paid on']].concat(DB.sales.filter(function (x) { return x.d >= rgs[0] && x.d <= rgs[1]; }).map(function (x) { var xp = x.paid ? shopPaidBy(x.paid) : null; return [x.d, x.t, x.item, x.qty, saleMethod(x.m), x.amt, x.stand, x.ref, x.by, x.cust ? bizName(x.cust, x.custName) : '', xp ? xp.d : '']; }))); return; }
     if (act === 'csv-report') { var rr = rpRange(RP.range); csv('kyleu-report-' + RP.tab + '-' + rr.from + '-to-' + rr.to + '.csv', [['Figure', rpRangeText(rr.from, rr.to), 'Period before: ' + rpRangeText(rr.pf, rr.pt)]].concat(RP_FIG)); return; }
     if (act === 'checkin' || act === 'checkout') { var cb = byRef(ref), ccs = ensureCars(cb), nx = ccs.filter(function (c) { return c.st === (act === 'checkin' ? 'due' : 'in'); })[0]; if (!nx) return; return act === 'checkin' ? actCarIn(cb.ref + '|' + nx.id) : actCarOut(cb.ref + '|' + nx.id); }
     if (act === 'csv-bookings') { csv('kyleu-bookings.csv', [['Ref', 'Created', 'Source', 'Guest', 'Email', 'Phone', 'Stand', 'Area', 'Arrive', 'Depart', 'Nights', 'Adults', 'Pensioners', 'Kids', 'Pays by', 'EFT price', 'Card price', 'Total', 'Paid', 'Balance', 'Status']].concat(DB.bookings.map(function (b) { var st = standById(b.stand); return [b.ref, b.created, b.source, guestName(b), b.guest.email, b.guest.phone, st.name, AREA_SHORT[st.area], b.ci, b.co, diff(b.ci, b.co), b.adults, b.pens, b.kids, methodLabel(b.method), b.eft, b.card, b.total, paid(b), balance(b), stateOf(b).t]; }))); return; }
@@ -5399,10 +6021,23 @@
       log('Prices updated'); save(); render(); toast('Saved. The website shows it now.'); return;
     }
     if (act === 'enq-book') { var q = thrById(ref), nm = q.name.split(' '); actNew({ first: nm[0], last: nm.slice(1).join(' '), email: q.email, phone: q.phone }); return; }
-    if (act === 'invite') { modal('Invite a staff member', '<label class="fld"><span>Name</span><input name="n"></label><label class="fld"><span>Email</span><input name="e" type="email"></label><label class="fld"><span>Role</span><select name="r">' + Object.keys(ROLES).map(function (r) { return '<option>' + r + '</option>'; }).join('') + '</select></label>', 'Send invite', function () { toast('Invite sent (demo)'); }); return; }
+    if (act === 'biz-paid') return actBizPaid(ref);
+    if (act === 'biz-manage') return actBizManage();
+    if (act === 'biz-unpay') { var buE = bizUnpay(ref); closeModal(); render(); toast(buE ? esc(buE) : 'It is on account again, under "Owed by businesses"'); return; }
+    if (act === 'tpl-edit') return actTpl(ref);
+    if (act === 'tpl-std') return actTplStd(ref);
+    if (act === 'staff-add') return actStaff('');
+    if (act === 'staff-edit') return actStaff(ref);
+    if (act === 'staff-del') return actStaffDel(ref);
+    if (act === 'staff-pause') { var spE = staffPause(ref), spS = staffBy(ref); if (spE) { toast(esc(spE)); return; } render(); toast(spS.paused ? esc(spS.name) + ' is paused and cannot sign in' : esc(spS.name) + ' can sign in again'); return; }
+    if (act === 'role-new') return actRole('', '');
+    if (act === 'role-edit') return actRole(ref, '');
+    if (act === 'role-copy') return actRole('', ref);
+    if (act === 'role-del') return actRoleDel(ref);
+    if (act === 'role-std') return actRoleStd(ref);
     if (act === 'connect') { modal('Connect ' + esc(ref), '<p>In the live version you would sign in to your ' + esc(ref) + ' account here. Guests then pay on ' + esc(ref) + '\'s secure page and the booking is confirmed by itself the moment the payment goes through.</p><p class="muted small">Card numbers never touch the Kyleu website.</p>', null); return; }
     if (act === 'export-json') { var bl = document.createElement('a'); bl.href = URL.createObjectURL(new Blob([JSON.stringify(DB, null, 1)], { type: 'application/json' })); bl.download = 'kyleu-admin-backup.json'; bl.click(); return; }
-    if (act === 'reset') { modal('Reset demo data?', '<p>All demo bookings, payments and notes go back to the start. Bookings made on the website demo are removed too.</p>', 'Reset', function () { try { localStorage.removeItem(KEY); localStorage.removeItem(WEB); localStorage.removeItem('kyleu-web-news'); localStorage.removeItem(WEBK); localStorage.removeItem(POPK); localStorage.removeItem('kyleu-indemnities'); } catch (x) {} STANDS = CONTENT_STANDS.slice(); P.holidays = JSON.parse(ORIG_HOL); CART = {}; IN.id = null; DB = null; P.wkDays = [5, 6, 0]; DB = seed(); migrate(); save(); seedInd(true); paperInit(); render(); toast('Demo data reset'); }, { danger: true }); return; }
+    if (act === 'reset') { modal('Reset demo data?', '<p>All demo bookings, payments and notes go back to the start. Bookings made on the website demo are removed too.</p>', 'Reset', function () { try { localStorage.removeItem(KEY); localStorage.removeItem(WEB); localStorage.removeItem('kyleu-web-news'); localStorage.removeItem(WEBK); localStorage.removeItem(POPK); localStorage.removeItem('kyleu-indemnities'); } catch (x) {} STANDS = CONTENT_STANDS.slice(); P.holidays = JSON.parse(ORIG_HOL); CART = {}; IN.id = null; DB = null; P.wkDays = [5, 6, 0]; DB = seed(); migrate(); save(); seedInd(true); paperInit(); render(); toast('Demo data reset'); setTimeout(staffAfterReset, 0); }, { danger: true }); return; }
   }
   function onInput(e) {
     var t = e.target;
@@ -5414,6 +6049,14 @@
     if (t.matches('[data-q]')) { var qk = t.dataset.q, qp = qk.split(':'); FO(qp[0])[qp[1]] = t.value; resetPages(); var qpos = t.selectionStart; render(); var nq = $('[data-q="' + qk + '"]'); if (nq) { nq.focus(); nq.setSelectionRange(qpos, qpos); } return; }
     if (t.matches('[data-f=q],[data-gq],[data-inq],[data-payq],[data-shopq],[data-prodq]')) resetPages();
     if (t.matches('[data-inq],[data-payq],[data-shopq],[data-prodq]')) { var key = t.matches('[data-inq]') ? 'inq' : t.matches('[data-payq]') ? 'payq' : t.matches('[data-shopq]') ? 'shopq' : 'prodq'; if (key === 'inq') IN.q = t.value; if (key === 'payq') PAYF.q = t.value; if (key === 'shopq') SHOP.q = t.value; if (key === 'prodq') PROD.q = t.value; var ps = t.selectionStart; render(); var ni = $('[data-' + key + ']'); if (ni) { ni.focus(); ni.setSelectionRange(ps, ps); } return; }
+    if (t.matches('[data-cnt]')) { CNT.vals[t.dataset.cnt] = t.value; cntPaint(t.dataset.cnt); return; }
+    if (t.matches('[data-biz]')) { SHOP.biz = t.value; var bzHit = bizFind(t.value); $$('[data-bizpick]').forEach(function (x) { x.classList.toggle('on', !!bzHit && x.dataset.bizpick === bzHit.id); }); return; }
+    // the quantity typed for a line of the sale: 20 bags are typed, not tapped 20 times. Never more than is in stock.
+    if (t.matches('[data-qty]')) {
+      var qid = t.dataset.qty, qp = prodBy(qid), qn = parseInt(String(t.value).replace(/\D/g, ''), 10); if (!qp || !(qn > 0)) return;   // empty or 0 while typing: wait for the number
+      if (qp.stock != null && qn > qp.stock) { qn = qp.stock; toast('Only ' + qp.stock + ' in stock'); } if (!(qn > 0)) return;
+      CART[qid] = Math.min(qn, 9999); render(); var qi = $('[data-qty="' + qid + '"]'); if (qi) { qi.focus(); qi.setSelectionRange(qi.value.length, qi.value.length); } return;
+    }
     if (t.matches('[data-prod-price]')) { var pv = parseFloat(t.value.replace(/[^\d.]/g, '')), pcard = $('[data-prod-card]'); if (pcard) pcard.value = isNaN(pv) ? '' : money(toCard(pv)); return; }
     if (t.matches('[data-dgr-code]')) { var cc = carOf(t.dataset.dgrCode); if (cc.c && t.value.trim().toUpperCase() !== (cc.c.dgr || '')) { var tk = $('[data-dgr-tick="' + t.dataset.dgrCode + '"]'); if (tk && t.value.trim()) tk.checked = true; } return; }
     if (t.matches('[data-sig]')) { var sk = t.dataset.sig, sd = sk.indexOf('shared:') === 0 ? sigShared() : sigData(SIG_WHO || ME.id); sd[sk.replace('shared:', '')] = t.value.trim(); save(); var pv = $('[data-sig-prev]'); if (pv) pv.innerHTML = sigHTML(sigData(SIG_WHO || ME.id)); return; }
@@ -5444,12 +6087,14 @@
   }
   function onChange(e) {
     var wt = e.target;
-    // the Owner changes what someone may see by changing their role
+    if (wt.matches && wt.matches('[data-cnt-start]')) {
+      var csId = wt.dataset.cntStart; if (wt.checked) { CNT.start[csId] = 1; if (CNT.vals[csId] == null) CNT.vals[csId] = '0'; } else { delete CNT.start[csId]; delete CNT.vals[csId]; }
+      render(); if (wt.checked) setTimeout(function () { var cb = $('[data-cnt="' + csId + '"]'); if (cb) { cb.focus(); cb.select(); } }, 80); return;
+    }
+    // an Owner changes what someone may see by changing their role
     if (wt.matches && wt.matches('[data-staff-role]')) {
-      var su = STAFF.filter(function (x) { return x.id === wt.dataset.staffRole; })[0];
-      if (!su || ME.role !== 'Owner' || su.id === ME.id || !ROLES[wt.value]) { render(); return; }
-      var was = su.role; su.role = wt.value; DB.staffRoles = DB.staffRoles || {}; DB.staffRoles[su.id] = wt.value;
-      log('Role of ' + su.name + ' changed from ' + was + ' to ' + wt.value); save(); render(); toast(esc(su.name) + ' is now ' + esc(wt.value) + '. It applies the next time they sign in.'); return;
+      var su = staffBy(wt.dataset.staffRole), sErr = su ? staffRole(su.id, wt.value) : 'That person is no longer on the list';
+      render(); toast(sErr ? esc(sErr) : esc(su.name) + ' is now ' + esc(roleName(su.role)) + '. It applies the next time they sign in.'); return;
     }
     if (wt.matches && wt.matches('[data-wt]')) {
       var wx = webFind(wt.dataset.wt), ww = webDB(), wv = wt.value.replace(/\r/g, '').trim(); if (!wx) return;
@@ -5515,7 +6160,8 @@
     if (t.matches('[data-payr]')) { PAYF.range = t.value; PAYF.lim = 1e9; render(); }
     if (t.matches('[data-paym]')) { PAYF.m = t.value; render(); }
     if (t.matches('[data-shopr]')) { SHOP.range = t.value; render(); }
-    if (t.matches('[data-who]')) { SHOP.who = t.value; render(); }
+    if (t.matches('[data-who]')) { SHOP.who = t.value; render(); if (t.value === 'biz') { var bzI = $('[data-biz]'); if (bzI) bzI.focus(); } }
+    if (t.matches('[data-qty]')) { if (!(parseInt(String(t.value).replace(/\D/g, ''), 10) > 0)) { delete CART[t.dataset.qty]; render(); } return; }   // emptied or 0: the line goes
     if (t.matches('[data-quick]')) { var qi = QUICK[+t.value], ta = t.form && t.form.elements.r; if (qi && ta) { var txt = qi[1](); ta.value = ta.value.replace(/\s*$/, '') + (ta.value.trim() ? '\n\n' : '') + txt; ta.focus(); } t.value = ''; }
     if (t.matches('[data-cmp-file]')) { Array.prototype.slice.call(t.files || []).forEach(function (fl) { CMP_ATT.push({ name: fl.name, size: fl.size, type: fl.type }); }); t.value = ''; cmpRefresh(); }
     if (t.matches('[data-catsel]')) { var nc = $('[data-newcat]'); if (nc) nc.hidden = t.value !== '__new'; }
@@ -5561,8 +6207,10 @@
       if (ME && ((e.key === '/' && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) || ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')))) {
         var gs = $('[data-global]'); if (gs && $('#modal').hidden) { e.preventDefault(); if (drawerRef) closeDrawer(); gs.focus(); gs.select(); }
       }
+      if (e.key === 'Enter' && e.target.matches('[data-cnt]')) { e.preventDefault(); var cbx = $$('[data-cnt]'), cnx = cbx[cbx.indexOf(e.target) + (e.shiftKey ? -1 : 1)]; if (cnx) { cnx.focus(); cnx.select(); } else if (!e.shiftKey) { var csv2 = $('.page-h [data-act="count-save"]'); if (csv2) csv2.focus(); } return; }
       if (e.key === 'Enter' && e.target.matches('tr[data-open],tr[data-guest],tr[data-client],tr[data-post],tr[data-sale],tr[data-prod],tr[data-voucher],th.sortable')) e.target.click();
     });
+    document.addEventListener('focusin', function (e) { if (e.target.matches && e.target.matches('[data-cnt]')) e.target.select(); });
     document.addEventListener('focusout', function (e) { if (e.target.matches('[data-global]')) setTimeout(function () { var s = $('[data-sugg]'); if (s) s.hidden = true; }, 200); });
     window.addEventListener('scroll', function (e) { if (!(e.target && e.target.closest && e.target.closest('.row-menu'))) closeRowMenu(); }, true);   // the row menu is placed by hand, so it closes when the page moves
     var rsz; window.addEventListener('resize', function () { closeRowMenu(); clearTimeout(rsz); rsz = setTimeout(function () { if ($('[data-rpc]')) rpDrawCharts(true); }, 120); });
@@ -5573,7 +6221,7 @@
       P = r[0]; ORIG_HOL = JSON.stringify(P.holidays); CONTENT_STANDS = r[1]; STANDS = r[1].slice(); loadDB(); seedInd(); paperInit();
       var id = null; try { id = sessionStorage.getItem(SESS); } catch (e) {}
       var s = STAFF.filter(function (x) { return x.id === id; })[0];
-      if (s) start(s); else login();
+      if (s && !s.paused) start(s); else login();
     }).catch(function () { app.innerHTML = '<div class="login"><div class="login-card"><h1>Couldn\'t load</h1><p>The admin reads the content folder. Open it through the preview server (Preview website.bat).</p></div></div>'; });
   });
 })();
